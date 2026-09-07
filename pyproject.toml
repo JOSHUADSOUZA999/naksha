@@ -1,0 +1,49 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "naksha"
+version = "0.1.0"
+description = "AI floor-plan generation for Indian residential plots"
+requires-python = ">=3.11"
+dependencies = [
+    "pydantic>=2.7",
+    "pydantic-settings>=2.2",
+    # Imported directly in config.py to bridge .env into os.environ, where the
+    # provider SDKs look. Declared explicitly rather than leaned on as a
+    # pydantic-settings transitive.
+    "python-dotenv>=1.0",
+]
+
+[project.scripts]
+naksha-intent = "app.cli:main"
+
+[project.optional-dependencies]
+# Provider SDKs are extras: install only the one you actually call. The registry
+# imports them lazily, so a missing SDK is a clear ProviderNotInstalled rather than
+# an ImportError at startup.
+anthropic = ["anthropic>=0.69"]
+openai = ["openai>=1.100"]
+# Runs against a Claude subscription via a local Claude Code install — no API key.
+# Development only; it needs the `claude` CLI on the box and spawns a process per call.
+claude-code = ["claude-agent-sdk>=0.2"]
+all = ["anthropic>=0.69", "openai>=1.100", "claude-agent-sdk>=0.2"]
+dev = [
+    "anthropic>=0.69",
+    "openai>=1.100",
+    "claude-agent-sdk>=0.2",
+    "pytest>=8.0",
+    "hypothesis>=6.100",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["backend/app"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["backend"]
+markers = [
+    "live: hits the real Anthropic API; requires credentials. Deselected by default.",
+]
+addopts = "-m 'not live'"

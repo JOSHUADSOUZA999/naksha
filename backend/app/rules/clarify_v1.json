@@ -1,0 +1,70 @@
+{
+  "_comment": "Which assumptions earn a question. The budget is a ceiling, not a quota: the tier gate decides whether anything is asked at all, and a brief that states everything blocking asks nothing. Confidence only orders what the gate already let through.",
+
+  "version": "clarify_v1",
+
+  "_tiers": {
+    "blocking": "the brief means nothing without it and no default is defensible",
+    "consequential": "a wrong value moves the envelope or the setbacks — correctable, but not cheaply",
+    "defaultable": "a convention covers it; wrong is visible and correctable on the gallery screen without a re-solve",
+    "never": "not a value a user could answer, or not this stage's field"
+  },
+  "tiers": {
+    "plot size": "blocking",
+    "bedrooms": "blocking",
+    "facing": "consequential",
+    "road edges": "consequential",
+    "frontage": "consequential",
+    "road width": "consequential",
+    "floors": "consequential",
+    "city": "blocking",
+    "bathrooms": "defaultable",
+    "occupants": "defaultable",
+    "parking": "defaultable",
+    "vastu": "defaultable",
+    "parser": "never",
+    "setbacks": "never"
+  },
+  "default_tier": "defaultable",
+
+  "_city_is_blocking": "It was `defaultable` while nothing consumed it. Stage \u2461 cannot select a setback ruleset without it, and a wrong ruleset is a wrong envelope rather than a wrong label \u2014 so an unrecognised city is now worth a question.",
+  "_ask_below": "The gate. A tier's bar is the confidence under which it is worth interrupting for. 0.0 means never — no confidence can fall below it. `defaultable` sits there on purpose: parking at 0.65 and occupants at 0.7 are fine inferences, both visible in the assumption table and correctable later, and asking about them is how a clarifier turns into a form.",
+  "ask_below": {
+    "blocking": 0.7,
+    "consequential": 0.5,
+    "defaultable": 0.0,
+    "never": 0.0
+  },
+
+  "_rank": "Tier gates first, then confidence sorts within the tier. A blocking coin-flip outranks a consequential one however the numbers fall.",
+  "rank": { "blocking": 0, "consequential": 1, "defaultable": 2, "never": 3 },
+
+  "_depends_on": "F depends on P when F's value was read off P. Two uses, one graph. (1) Ceiling: no inference is more certain than its source, so F's confidence caps at the minimum over its assumed parents, transitively. (2) Collapse: if a parent is itself a guess, asking about F wastes a question the parent's answer would have settled. `floors` has two parents and caps by the lower of them.",
+  "_not_an_edge": "`road edges` does NOT depend on `facing`, tempting as it looks. Answering which way the frontage points does not tell you which *other* side carries a road, so collapsing it into `facing` would silently retire a question that has no other way of being asked.",
+  "depends_on": {
+    "frontage": ["plot size"],
+    "floors": ["plot size", "bedrooms"],
+    "parking": ["plot size"],
+    "bathrooms": ["bedrooms"],
+    "occupants": ["bedrooms"],
+    "setbacks": ["city"]
+  },
+
+  "_budget": "A ceiling on an already-gated set. Generous rather than tight, because ranking by root means one answer lifts everything derived from it — in practice the gate returns fewer than this.",
+  "budget": { "ask": 3 },
+
+  "questions": {
+    "plot size": "What size is the plot? Dimensions like 30x40 or an area like 1200 sqft both work.",
+    "bedrooms": "How many bedrooms do you need?",
+    "facing": "Which direction does the road-facing edge of the plot point?",
+    "road edges": "Which sides of the plot have a road? A corner plot has two.",
+    "frontage": "Which side of the plot faces the road — the shorter one or the longer one?",
+    "road width": "How wide is the road the plot faces? It sets both the FAR and how many floors you may build.",
+    "floors": "Ground floor only, or do you want an upper floor as well?",
+    "city": "Which city is the plot in? It decides which setback rules apply.",
+    "bathrooms": "How many bathrooms?",
+    "occupants": "How many people will be living here?",
+    "parking": "How many cars need parking?",
+    "vastu": "How closely should the plan follow Vastu?"
+  }
+}

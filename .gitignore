@@ -1,0 +1,37 @@
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+
+# Test and type-checker caches
+.pytest_cache/
+.hypothesis/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Secrets. `.env.example` is committed; anything real is not.
+.env
+.env.*
+!.env.example
+
+# Frontend. package.json and the lock file are committed; installed deps are not.
+node_modules/
+frontend/dist/
+*.tsbuildinfo
+
+# Editors and macOS
+.DS_Store
+.idea/
+.vscode/
+
+# Solver output. `naksha-intent -L FILE` writes wherever you point it, and
+# frontend/public/plan.json is a committed fixture rather than a dump — so
+# generated bundles are ignored by name at the root instead of by extension.
+/*.json
+!package.json
+/*.svg

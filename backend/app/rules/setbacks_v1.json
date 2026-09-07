@@ -1,0 +1,134 @@
+{
+  "_status": "UNVERIFIED. Every band carries \"verified\": false and a citation. `load_ruleset` warns while any band is unverified, and stage ② refuses to run against an unverified ruleset unless explicitly allowed. Do not ship an envelope from this file until a qualified reader has checked each band against the authority's own document. naksha produces schematic drawings, not sanction drawings — but a wrong setback is a wrong envelope, not a wrong label.",
+  "version": "setbacks_v1",
+  "authorities": {
+    "BBMP": {
+      "city": "Bengaluru",
+      "regulation": "Revised Master Plan 2015, Zoning Regulations (BDA, 2007)",
+      "effective": "2003-09-13",
+      "_setback_caveat": "Table 8 is a PERCENTAGE of the site's own dimensions above 9 m, not a lookup by plot area. The previous encoding — fixed metres banded by area, cited to Bye-laws 2003 — was the wrong shape *and* the wrong document: bye-law cl. 1(3) defers setbacks to the Master Plan. Read first-hand from the BDA PDF.",
+      "setback_bands": [
+        {
+          "max_side_m": 6.0,
+          "front_m": 1.0,
+          "rear_m": 0.0,
+          "sides_m": [
+            1.0,
+            0.0
+          ],
+          "source": "Bengaluru RMP-2015 Zoning Regulations (BDA, 2007), Table 8 — setbacks for building height up to 11.5 m and plot size up to 4000 sq.m",
+          "verified": false
+        },
+        {
+          "max_side_m": 9.0,
+          "front_m": 1.0,
+          "rear_m": 1.0,
+          "sides_m": [
+            1.0,
+            1.0
+          ],
+          "source": "Bengaluru RMP-2015 Zoning Regulations (BDA, 2007), Table 8 — setbacks for building height up to 11.5 m and plot size up to 4000 sq.m",
+          "verified": false
+        },
+        {
+          "max_side_m": null,
+          "front_pct_of_depth": 12.0,
+          "rear_pct_of_depth": 8.0,
+          "sides_pct_of_width": [
+            8.0,
+            8.0
+          ],
+          "source": "Bengaluru RMP-2015 Zoning Regulations (BDA, 2007), Table 8 — setbacks for building height up to 11.5 m and plot size up to 4000 sq.m",
+          "verified": false
+        }
+      ],
+      "_far_conflict": "RESOLVED against the primary source. RMP-2015 Zoning Regulations Table 10 gives residential (Main) plots up to 360 sq.m: ground coverage up to 75%, FAR 1.75, road width up to 12.0 m. That confirms the widely-reported 1.75 and rules out both 0.75 (Bye-laws 2003 Table 6) and 1.50 (RMP 2031, which is a DRAFT).",
+      "coverage_far_bands": [
+        {
+          "max_plot_sq_m": 360,
+          "coverage": 0.75,
+          "base_far": 1.75,
+          "total_far": 1.75,
+          "min_road_m": 0.0,
+          "source": "RMP-2015 Zoning Regulations Table 10, Residential (Main)",
+          "verified": false,
+          "read": "first-hand from the BDA PDF"
+        },
+        {
+          "max_plot_sq_m": 1000,
+          "coverage": 0.65,
+          "base_far": 2.25,
+          "total_far": 2.25,
+          "min_road_m": 12.0,
+          "source": "RMP-2015 Zoning Regulations Table 10, Residential (Main)",
+          "verified": false,
+          "read": "first-hand from the BDA PDF"
+        },
+        {
+          "max_plot_sq_m": 2000,
+          "coverage": 0.6,
+          "base_far": 2.5,
+          "total_far": 2.5,
+          "min_road_m": 18.0,
+          "source": "RMP-2015 Zoning Regulations Table 10, Residential (Main)",
+          "verified": false,
+          "read": "first-hand from the BDA PDF"
+        },
+        {
+          "max_plot_sq_m": 4000,
+          "coverage": 0.55,
+          "base_far": 3.0,
+          "total_far": 3.0,
+          "min_road_m": 24.0,
+          "source": "RMP-2015 Zoning Regulations Table 10, Residential (Main)",
+          "verified": false,
+          "read": "first-hand from the BDA PDF"
+        },
+        {
+          "max_plot_sq_m": 20000,
+          "coverage": 0.5,
+          "base_far": 3.25,
+          "total_far": 3.25,
+          "min_road_m": 30.0,
+          "source": "RMP-2015 Zoning Regulations Table 10, Residential (Main)",
+          "verified": false,
+          "read": "first-hand from the BDA PDF"
+        }
+      ],
+      "far_regulation": {
+        "document": "Revised Master Plan for Bengaluru - 2031, Volume 6: Zoning Regulations",
+        "tables": "Table 6 (Planning Zone A), Table 7 (Planning Zone B)",
+        "url": "https://data-opencity.sgp1.cdn.digitaloceanspaces.com/Documents/Recent/Bengaluru-BDA-RMP-2031-Volume_6_Zoning_Regulations.pdf",
+        "status": "DRAFT — every page is stamped '(Draft)'. Notification not established.",
+        "read": "first-hand from the PDF, not a secondary summary"
+      },
+      "_base_vs_total_far": "`base_far` is the entitlement that comes with the plot. `total_far` additionally requires buying TDR (Transfer of Development Rights) or another instrument, which a plot owner building one house will not have done. naksha budgets against `base_far`; `total_far` is recorded so the gap is visible rather than lost.",
+      "_road_width_rule": "RMP 2031 §5.2(iii), verbatim: 'If the road width is lower than the road width for a particular site size, the FAR of the lower road width shall be applicable. If the site is located on road width of higher configuration, the FAR for prescribed site area shall be applicable.' So the row is chosen by plot size, and a road narrower than that row's `min_road_m` demotes the FAR to the widest row the road does satisfy. Coverage stays with the plot-size row.",
+      "_height_rule": "RMP-2015 Table 10 note (b), verbatim: 'If the road width is less than 9.0 m, then the maximum height is restricted to 11.5 meters or Stilt +GF+2 floors (whichever is less) irrespective of the FAR permissible.'",
+      "height_bands": [
+        {
+          "max_road_m": 9.0,
+          "max_floors": 3,
+          "note": "11.5 m or Stilt+GF+2, whichever is less, irrespective of FAR",
+          "source": "RMP-2015 Zoning Regulations Table 10 note (b)",
+          "verified": false
+        },
+        {
+          "max_road_m": null,
+          "max_floors": 4,
+          "note": "v1 scope caps at 4 floors regardless",
+          "source": "RMP-2015 Zoning Regulations Table 10 note (b)",
+          "verified": false
+        }
+      ],
+      "default_road_width_m": 9.0,
+      "_axis_reading": "CONFIRMED. The draft 2025 amendment restates Table 8 row 3 explicitly as '12% of the depth of site' (front), '8% of the depth of site' (rear), '8% of the width of site' (left and right). Our reading — sides off the width, front and rear off the depth — matches. Read first-hand from the gazette scan.",
+      "_amendment_2026": "READ FIRST-HAND, AND IT IS A DRAFT. Notification No. UDD 235 MNJ 2025(E), Vikasa Soudha, dated 11.11.2025, headed 'DRAFT REGULATIONS': the Government 'proposes to make' the amendments, invites public objections within thirty days, and states 'They shall come into force from the date of their final publication in the official Gazette.' Secondary sources report a final notification dated 05.01.2026, which we have NOT seen. NOT APPLIED — the RMP 2031 trap, twice.\n\nIf it is in force, the draft substitutes Table 8 entirely and bands by SITE AREA rather than site dimension: up to 60 sq.m -> 0.75 front / no rear / 0.60 one side; 60-150 -> 0.90 / 0.70 / 0.70 one side; 150-4000 -> the percentages above. A 30x40 (111.5 sq.m) moves from the percentage row to the 0.90/0.70/0.70 row, which is a large relaxation for exactly the commonest plot size.\n\nOther provisions worth knowing, same draft: note 1 caps plots up to 150 sq.m at 12.0 m excluding stilt; note 3 allows an open staircase in the setback area up to 750 sq.m; note 4 says coverage in Tables 10 & 11 shall NOT be referred for plots in Table 8; note 6 forbids paving the setback area."
+    }
+  },
+  "_city_to_authority": "Moved here from fallback.py, where it existed only to write a nicer assumption string. A city absent from this map has no ruleset: stage ② must say so rather than substitute one, because a neighbouring city's bye-laws are not a conservative default, just a different answer.",
+  "city_to_authority": {
+    "Bengaluru": "BBMP",
+    "Bangalore": "BBMP"
+  }
+}

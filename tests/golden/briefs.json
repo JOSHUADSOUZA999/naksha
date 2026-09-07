@@ -1,0 +1,325 @@
+{
+  "_comment": "Briefs in the shape people actually type them. `expected` is what the deterministic fallback parser must produce — it is checked on every commit with no network. The live-model test (marked `live`) asserts the looser `model_expected` bounds, because a model may legitimately read more nuance out of the same sentence than a regex can.",
+  "cases": [
+    {
+      "id": "bengaluru_30x40_east",
+      "text": "30x40 east facing site in Whitefield, Bengaluru. 3BHK with pooja room and car parking.",
+      "expected": {
+        "plot": {
+          "width_m": 9.144,
+          "depth_m": 12.192,
+          "facing": "east",
+          "corner_plot": false
+        },
+        "program": {
+          "bedrooms": 3,
+          "extra_rooms": [
+            "pooja",
+            "car_parking"
+          ]
+        },
+        "locale": {
+          "city": "Bengaluru"
+        },
+        "vastu": "moderate"
+      }
+    },
+    {
+      "id": "pune_area_only_strict_vastu",
+      "text": "1200 sqft north facing corner plot in Pune, 2BHK, strict vastu please",
+      "expected": {
+        "plot": {
+          "width_m": 8.622,
+          "depth_m": 12.933,
+          "facing": "north",
+          "corner_plot": true,
+          "road_edges": [
+            "north",
+            "east"
+          ]
+        },
+        "program": {
+          "bedrooms": 2,
+          "extra_rooms": []
+        },
+        "locale": {
+          "city": "Pune"
+        },
+        "vastu": "strict"
+      },
+      "must_assume": [
+        "road edges"
+      ]
+    },
+    {
+      "id": "gurugram_gaj_no_vastu",
+      "text": "200 gaj plot Gurugram, west facing, 4 bedroom with study and two balconies, no vastu",
+      "expected": {
+        "plot": {
+          "width_m": 10.559,
+          "depth_m": 15.839,
+          "facing": "west",
+          "corner_plot": false
+        },
+        "program": {
+          "bedrooms": 4,
+          "extra_rooms": [
+            "study",
+            "balcony"
+          ]
+        },
+        "locale": {
+          "city": "Gurugram"
+        },
+        "vastu": "ignore"
+      }
+    },
+    {
+      "id": "kochi_cents_ne",
+      "text": "4 cents north-east facing land at Kochi, want 3bhk with 3 bathrooms, servant room and sit out",
+      "expected": {
+        "plot": {
+          "width_m": 10.386,
+          "depth_m": 15.579,
+          "facing": "north_east",
+          "corner_plot": false
+        },
+        "program": {
+          "bedrooms": 3,
+          "bathrooms": 3,
+          "extra_rooms": [
+            "servant_room",
+            "veranda"
+          ]
+        },
+        "locale": {
+          "city": "Kochi"
+        },
+        "vastu": "moderate"
+      }
+    },
+    {
+      "id": "explicit_metres_hyderabad",
+      "text": "Plot is 12m x 18m, south facing, Hyderabad. Need 3 BHK, home office, utility and store room.",
+      "expected": {
+        "plot": {
+          "width_m": 12.0,
+          "depth_m": 18.0,
+          "facing": "south",
+          "corner_plot": false
+        },
+        "program": {
+          "bedrooms": 3,
+          "extra_rooms": [
+            "store",
+            "utility",
+            "office"
+          ]
+        },
+        "locale": {
+          "city": "Hyderabad"
+        },
+        "vastu": "moderate"
+      }
+    },
+    {
+      "id": "feet_suffix_with_road",
+      "text": "40 x 60 ft site facing west on a 30 feet road, Mysuru, 4bhk g+1 with car porch",
+      "expected": {
+        "plot": {
+          "width_m": 12.192,
+          "depth_m": 18.288,
+          "facing": "west",
+          "corner_plot": false,
+          "road_width_m": 9.144
+        },
+        "program": {
+          "bedrooms": 4,
+          "extra_rooms": [
+            "car_parking"
+          ],
+          "floors": 2
+        },
+        "locale": {
+          "city": "Mysuru"
+        },
+        "vastu": "moderate"
+      }
+    },
+    {
+      "id": "no_size_no_city",
+      "text": "I want a simple two bedroom house with a prayer room",
+      "expected": {
+        "plot": {
+          "width_m": 9.144,
+          "depth_m": 12.192,
+          "facing": "north",
+          "corner_plot": false
+        },
+        "program": {
+          "bedrooms": 2,
+          "extra_rooms": [
+            "pooja"
+          ]
+        },
+        "locale": {
+          "city": null
+        },
+        "vastu": "moderate"
+      },
+      "must_assume": [
+        "plot size",
+        "facing",
+        "city"
+      ]
+    },
+    {
+      "id": "whitefield_locality_names_the_city",
+      "text": "30x40 east facing site in Whitefield, 3BHK with pooja room",
+      "expected": {
+        "plot": {
+          "width_m": 9.144,
+          "depth_m": 12.192,
+          "facing": "east",
+          "corner_plot": false
+        },
+        "program": {
+          "bedrooms": 3,
+          "bathrooms": 2,
+          "floors": 1,
+          "extra_rooms": [
+            "pooja"
+          ]
+        },
+        "locale": {
+          "city": "Bengaluru",
+          "locality": "Whitefield"
+        },
+        "vastu": "moderate"
+      },
+      "must_assume": [
+        "city",
+        "bathrooms",
+        "occupants",
+        "parking",
+        "floors"
+      ]
+    },
+    {
+      "id": "bare_ask_nothing_to_go_on",
+      "text": "make me a house",
+      "expected": {
+        "plot": {
+          "width_m": 9.144,
+          "depth_m": 12.192,
+          "facing": "north",
+          "corner_plot": false
+        },
+        "program": {
+          "bedrooms": 2,
+          "extra_rooms": []
+        },
+        "locale": {
+          "city": null
+        },
+        "vastu": "moderate"
+      },
+      "must_assume": [
+        "plot size",
+        "facing",
+        "bedrooms"
+      ]
+    },
+    {
+      "id": "joint_family_is_a_program_not_a_phrase",
+      "text": "40x60 for a joint family",
+      "expected": {
+        "plot": {
+          "width_m": 12.192,
+          "depth_m": 18.288,
+          "facing": "north",
+          "corner_plot": false
+        },
+        "program": {
+          "bedrooms": 2,
+          "extra_rooms": []
+        },
+        "locale": {
+          "city": null
+        },
+        "vastu": "moderate"
+      },
+      "model_expected": {
+        "_why": "The regex provably cannot read this: 'joint family' names a household of two-plus couples and their elders, which is more bedrooms, more floors and more sanitary provision than the words 40x60 supply. The deterministic parser is right to say 2BHK — it is the honest floor. A model that also says 2BHK has read nothing.",
+        "program": {
+          "bedrooms_min": 3,
+          "floors_min": 2,
+          "bathrooms_min": 3,
+          "occupants_min": 6
+        }
+      },
+      "must_assume": [
+        "bedrooms",
+        "bathrooms",
+        "floors",
+        "facing"
+      ]
+    },
+    {
+      "id": "elderly_occupant_is_a_constraint_not_a_room",
+      "text": "3BHK, my mother lives with us",
+      "expected": {
+        "plot": {
+          "width_m": 9.144,
+          "depth_m": 12.192,
+          "facing": "north",
+          "corner_plot": false
+        },
+        "program": {
+          "bedrooms": 3,
+          "extra_rooms": []
+        },
+        "locale": {
+          "city": null
+        },
+        "vastu": "moderate"
+      },
+      "model_expected": {
+        "_why": "An elderly occupant implies a ground-floor bedroom near the entry — but that is an adjacency, and stage ① has no schema for one. The correct stage ① behaviour is to raise the occupant count and hand the sentence to stage ③ untouched, which is what `must_keep` pins.",
+        "program": {
+          "occupants_min": 5
+        }
+      },
+      "must_assume": [
+        "plot size",
+        "facing",
+        "occupants"
+      ],
+      "must_keep": [
+        "mother"
+      ]
+    },
+    {
+      "id": "by_separator_chennai",
+      "text": "site 30 by 50 in Chennai south east facing, 3bhk, guest room, strict vastu compliant",
+      "expected": {
+        "plot": {
+          "width_m": 9.144,
+          "depth_m": 15.24,
+          "facing": "south_east",
+          "corner_plot": false
+        },
+        "program": {
+          "bedrooms": 3,
+          "extra_rooms": [
+            "guest_room"
+          ]
+        },
+        "locale": {
+          "city": "Chennai"
+        },
+        "vastu": "strict"
+      }
+    }
+  ]
+}
