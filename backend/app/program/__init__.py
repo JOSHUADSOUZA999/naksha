@@ -185,6 +185,7 @@ def _spec(kind: SpaceKind, room_id: str, rules: dict[str, Any], *, floor: int) -
         sector=Sector(sector) if sector else None,
         needs_exterior_wall=rule["exterior_wall"],
         needs_road_access=rule["road_access"],
+        needs_door=rule["walk_in"],
         floor=floor,
     )
 

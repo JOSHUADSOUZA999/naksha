@@ -67,6 +67,13 @@ class RoomSpec(BaseModel):
         description="True where NBC requires light and ventilation — habitable rooms "
         "and kitchens. A constraint on the tiling, not a preference.",
     )
+    needs_door: bool = Field(
+        default=True,
+        description="True where a person reaches this space through the house. Stage "
+        "⑥ guarantees a door to it and stage ⑦ reports it stranded without one — the "
+        "same flag, so the two cannot disagree. False for a car porch, entered from "
+        "the street.",
+    )
     needs_road_access: bool = Field(
         default=False,
         description="True where the room must touch a road-facing boundary — the car "

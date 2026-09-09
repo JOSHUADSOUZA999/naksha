@@ -16,30 +16,13 @@ from __future__ import annotations
 
 from collections import defaultdict, deque
 
-from app.ir.enums import OpeningKind, Severity, SpaceKind
+from app.ir.enums import OpeningKind, Severity
 from app.ir.layout import Layout
 from app.ir.plan import Program
 from app.ir.refined import RefinedFloor
 from app.ir.validation import Finding, Report
 
 CHECKS = ["circulation", "light", "legality"]
-
-# Spaces a person is expected to walk into. A shaft or a duct would not be; everything
-# here is somewhere someone stands.
-_REACHABLE_KINDS = {
-    SpaceKind.HALL, SpaceKind.DINING, SpaceKind.KITCHEN, SpaceKind.BEDROOM,
-    SpaceKind.MASTER_BEDROOM, SpaceKind.GUEST_ROOM, SpaceKind.SERVANT_ROOM,
-    SpaceKind.BATHROOM, SpaceKind.WC, SpaceKind.POOJA, SpaceKind.STUDY,
-    SpaceKind.OFFICE, SpaceKind.STORE, SpaceKind.UTILITY, SpaceKind.CORRIDOR,
-    SpaceKind.FOYER, SpaceKind.STAIRCASE,
-}
-
-# Rooms the bye-laws want lit and ventilated — the same set `spaces_v1` marks
-# `exterior_wall`, asked here of the drawing rather than of the tiling.
-_NEEDS_LIGHT = {
-    SpaceKind.HALL, SpaceKind.DINING, SpaceKind.KITCHEN, SpaceKind.BEDROOM,
-    SpaceKind.MASTER_BEDROOM, SpaceKind.GUEST_ROOM, SpaceKind.STUDY, SpaceKind.OFFICE,
-}
 
 
 def validate(layout: Layout, program: Program, floor: RefinedFloor) -> Report:
@@ -60,7 +43,7 @@ def _circulation(layout: Layout, program: Program, floor: RefinedFloor) -> list[
     starts at the entrance because a house is entered from the street — starting
     anywhere else would call a perfectly sealed cluster of rooms connected.
     """
-    kinds = {room.id: room.kind for room in program.rooms}
+    walk_in = {room.id for room in program.rooms if room.needs_door}
     entrance = next(
         (o for o in floor.openings if o.kind is OpeningKind.ENTRANCE), None
     )
@@ -93,8 +76,7 @@ def _circulation(layout: Layout, program: Program, floor: RefinedFloor) -> list[
     stranded = sorted(
         placed.room_id
         for placed in layout.rooms
-        if placed.room_id not in seen
-        and kinds.get(placed.room_id) in _REACHABLE_KINDS
+        if placed.room_id not in seen and placed.room_id in walk_in
     )
     if not stranded:
         return []
@@ -122,7 +104,10 @@ def _light(program: Program, floor: RefinedFloor) -> list[Finding]:
     question: the wall may exist and still be too short to hold an opening, in which
     case the tiling passed and the drawing has a bedroom with no daylight.
     """
-    kinds = {room.id: room.kind for room in program.rooms}
+    # `needs_exterior_wall` from the ruleset, the same flag `score` penalises a room
+    # for missing and `refine` places windows from. A second opinion written out here
+    # said a dining room needs daylight while `spaces_v1` says it does not — one of
+    # them was going to be wrong, and it is not the module's call to make.
     lit = {
         room
         for opening in floor.openings
@@ -130,9 +115,9 @@ def _light(program: Program, floor: RefinedFloor) -> list[Finding]:
         for room in opening.connects
     }
     dark = sorted(
-        room_id
-        for room_id, kind in kinds.items()
-        if kind in _NEEDS_LIGHT and room_id not in lit and room_id in floor.clear
+        room.id
+        for room in program.rooms
+        if room.needs_exterior_wall and room.id not in lit and room.id in floor.clear
     )
     return [
         Finding(

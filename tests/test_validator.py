@@ -190,3 +190,53 @@ class TestDoorsAddedForCirculationRespectTheProgramme:
                 1 for w in floor.walls if len(w.rooms) == 2
             )
             assert doors < partitions, name
+
+
+class TestOneJudgmentInOnePlace:
+    """Which rooms need a door, and which need daylight, are rule data.
+
+    Both were hardcoded sets in code, and one of them existed *twice* — an identical
+    list of kinds in `refine` and in `validator`. Two copies of the same judgment drift,
+    and this pair would have drifted silently: stage ⑥ guaranteeing a door to one set
+    while stage ⑦ checked another reads as a clean plan.
+    """
+
+    def test_which_rooms_need_a_door_comes_from_the_ruleset(self):
+        from app.rules import load_ruleset
+
+        spaces = load_ruleset("spaces_v1").data["spaces"]
+        assert spaces["bedroom"]["walk_in"] is True
+        assert spaces["car_parking"]["walk_in"] is False, "entered from the street"
+
+    def test_the_two_stages_read_the_same_flag(self, plans):
+        """Not the same *value* — the same field. Stage ⑥ connects `needs_door` rooms
+        and stage ⑦ strands them, so a room can never be one stage's business and not
+        the other's."""
+        _, program, floor, report = plans["50x80"]
+        walk_in = {room.id for room in program.rooms if room.needs_door}
+        assert walk_in, "the fixture must have rooms to walk into"
+
+        stranded = {r for f in report.by_check("circulation") for r in f.rooms}
+        assert stranded <= walk_in
+
+    def test_daylight_follows_the_ruleset_not_a_second_opinion(self, plans):
+        """The validator carried its own list of habitable rooms and it disagreed with
+        `spaces_v1`: it wanted a window in every dining room, the ruleset does not
+        require one. `score` and `refine` were already reading the ruleset, so the
+        outlier was the check."""
+        _, program, _, report = plans["30x50"]
+        needs_light = {r.id for r in program.rooms if r.needs_exterior_wall}
+        flagged = {f.rooms[0] for f in report.by_check("light")}
+        assert flagged <= needs_light
+
+        dining = [r for r in program.rooms if r.kind is SpaceKind.DINING]
+        assert dining and not dining[0].needs_exterior_wall
+        assert dining[0].id not in flagged
+
+    def test_a_hall_with_no_exterior_wall_is_still_flagged(self, plans):
+        """The rule did not become lax — a hall does need daylight, and where stage ⑤
+        puts one in the interior the drawing says so."""
+        _, program, _, report = plans["40x60"]
+        hall = next(r for r in program.rooms if r.kind is SpaceKind.HALL)
+        assert hall.needs_exterior_wall
+        assert any(hall.id in f.rooms for f in report.by_check("light"))

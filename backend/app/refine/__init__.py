@@ -603,10 +603,12 @@ def _connect(
 
     flood(entrance.connects[0])
 
-    wanted = {
-        placed.room_id for placed in layout.rooms
-        if kinds.get(placed.room_id) in _WALKED_INTO
-    }
+    # From the ruleset, via the programme — not a set of kinds written out here. The
+    # identical list lived in this module and in `validator`, and two copies of the
+    # same judgment is a drift waiting to happen: ⑥ connecting one set of rooms while
+    # ⑦ checks another would read as a clean plan.
+    walk_in = {room.id for room in program.rooms if room.needs_door}
+    wanted = {placed.room_id for placed in layout.rooms if placed.room_id in walk_in}
     added: list[Opening] = []
 
     # Grow outwards from what is already reachable, one room at a time. Circulation
@@ -666,14 +668,3 @@ def _connect(
             break
 
     return added
-
-
-# Spaces a person walks into, and therefore needs a door to. A car porch is entered
-# from the street, so it is not stranded by having no internal door.
-_WALKED_INTO = {
-    SpaceKind.HALL, SpaceKind.DINING, SpaceKind.KITCHEN, SpaceKind.BEDROOM,
-    SpaceKind.MASTER_BEDROOM, SpaceKind.GUEST_ROOM, SpaceKind.SERVANT_ROOM,
-    SpaceKind.BATHROOM, SpaceKind.WC, SpaceKind.POOJA, SpaceKind.STUDY,
-    SpaceKind.OFFICE, SpaceKind.STORE, SpaceKind.UTILITY, SpaceKind.CORRIDOR,
-    SpaceKind.FOYER, SpaceKind.STAIRCASE,
-}
