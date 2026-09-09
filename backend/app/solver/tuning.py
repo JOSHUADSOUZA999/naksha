@@ -23,7 +23,6 @@ import math
 
 from ortools.sat.python import cp_model
 
-from app.ir.envelope import Envelope
 from app.ir.layout import PlacedRoom
 from app.ir.plan import RoomSpec
 
@@ -36,7 +35,7 @@ _PER_M = 100
 
 def tune(
     tree: Node,
-    envelope: Envelope,
+    bounds: tuple[float, float, float, float],
     targets: dict[str, float],
     *,
     time_limit_s: float = 2.0,
@@ -47,13 +46,14 @@ def tune(
     pulls towards it, the constraints refuse to break the law for it.
     """
     model = cp_model.CpModel()
-    # Inwards, not nearest. The grid must sit *inside* the envelope so that snapping a
+    # Inwards, not nearest. The grid must sit *inside* the bounds so that snapping a
     # boundary edge back out to the true bound only ever grows a room — rounding to
     # nearest can shrink one below the minimum the model just proved it met.
-    x0 = math.ceil(envelope.x_min_m * _PER_M)
-    x1 = math.floor(envelope.x_max_m * _PER_M)
-    y0 = math.ceil(envelope.y_min_m * _PER_M)
-    y1 = math.floor(envelope.y_max_m * _PER_M)
+    x_min_m, y_min_m, x_max_m, y_max_m = bounds
+    x0 = math.ceil(x_min_m * _PER_M)
+    x1 = math.floor(x_max_m * _PER_M)
+    y0 = math.ceil(y_min_m * _PER_M)
+    y1 = math.floor(y_max_m * _PER_M)
 
     leaves: list[tuple[RoomSpec, cp_model.IntVar, cp_model.IntVar, cp_model.IntVar]] = []
     _build(model, tree, x0, x1, y0, y1, leaves)
@@ -99,9 +99,9 @@ def tune(
         return expr if isinstance(expr, int) else solver.Value(expr)
 
     def snap(value: int, lo: int, hi: int, lo_m: float, hi_m: float) -> float:
-        """Put the outermost edges back on the envelope, exactly.
+        """Put the outermost edges back on the given bounds, exactly.
 
-        The model runs on a 1 cm integer grid; an envelope derived from feet does not
+        The model runs on a 1 cm integer grid; bounds derived from feet do not
         land on it — 30 ft is 9.144 m. So every tuned layout stopped a fraction of a
         centimetre short of the wall, `Layout`'s exact-tiling validator rejected it as
         a gap, and `solve` swallowed the rejection and fell through to its Stage A
@@ -121,13 +121,13 @@ def tune(
     return [
         PlacedRoom(
             room_id=spec.id,
-            x_min_m=snap(at(left), x0, x1, envelope.x_min_m, envelope.x_max_m),
-            y_min_m=snap(at(bottom), y0, y1, envelope.y_min_m, envelope.y_max_m),
+            x_min_m=snap(at(left), x0, x1, x_min_m, x_max_m),
+            y_min_m=snap(at(bottom), y0, y1, y_min_m, y_max_m),
             x_max_m=snap(
-                at(left) + solver.Value(width), x0, x1, envelope.x_min_m, envelope.x_max_m
+                at(left) + solver.Value(width), x0, x1, x_min_m, x_max_m
             ),
             y_max_m=snap(
-                at(bottom) + solver.Value(depth), y0, y1, envelope.y_min_m, envelope.y_max_m
+                at(bottom) + solver.Value(depth), y0, y1, y_min_m, y_max_m
             ),
         )
         for spec, left, bottom, _, width, depth in leaves

@@ -21,11 +21,18 @@ from typing import Callable
 from app.ir.envelope import Envelope
 from app.ir.enums import SpaceKind
 from app.ir.plan import AdjacencySpec, Program, RoomSpec
-from app.solver import TUNE_SHORTLIST, slicing, tuning
+from app.ir.layout import Layout
+from app.solver import TUNE_SHORTLIST, footprint, slicing, tuning
+from app.solver.score import score
 
 # Enough to tell "some topologies work" from "none do" without paying for precision
 # nobody reads. The published number is a ratio, not an estimate of the true rate.
 _PROBES = 60
+
+# Topologies generated before ranking, matching `solve`'s DEFAULT_CANDIDATES. The probe
+# has to sample from the same pool the real search does, or its rate describes a
+# different procedure.
+_GENERATED = 900
 
 # A raw hit rate is the wrong thing to threshold. What a user cares about is whether
 # stage ⑤ will actually return a plan, and ⑤ tries `TUNE_SHORTLIST` topologies — so a
@@ -108,11 +115,19 @@ def assess(program: Program, envelope: Envelope, *, floor: int = 1) -> Verdict:
 
 
 def _probe(rooms: list[RoomSpec], envelope: Envelope) -> int:
-    """How many of `_PROBES` random topologies CP-SAT can dimension legally.
+    """How many of `_PROBES` topologies CP-SAT can dimension legally.
 
     The *rate* is the useful quantity, not just whether it is zero. A floor at 1/60 is
     possible and undependable; one at 40/60 the solver will find first time. Both
     report "feasible" to a boolean and they are not the same product.
+
+    **The probe must run the procedure stage ⑤ runs, or it measures the wrong thing.**
+    This tuned *unranked* random trees while `solve` generates several hundred, ranks
+    them and tunes the best — and a raw random tree is usually undimensionable, so the
+    probe was reporting the feasibility of a search nobody performs. It went unnoticed
+    while the envelope was generous enough that random trees dimensioned anyway; the
+    moment the tiled rectangle shrank to the programme's own size it began calling
+    plots infeasible that stage ⑤ then solved with zero unbuildable rooms.
 
     One advancing generator, not a fresh `Random(i)` per candidate — seeding afresh
     each time samples a far narrower set of trees, which is how an earlier measurement
@@ -120,12 +135,41 @@ def _probe(rooms: list[RoomSpec], envelope: Envelope) -> int:
     """
     if not rooms:
         return 0
-    weights = slicing.effective_areas(rooms, envelope.max_footprint_sq_m)
+    # The same rectangle stage ⑤ will actually tile, or the probe measures a floor
+    # nobody is going to build — a programme can be undimensionable in its envelope
+    # and perfectly comfortable in the smaller footprint it asked for.
+    bounds = footprint(envelope, rooms)
+    x_min_m, y_min_m, x_max_m, y_max_m = bounds
+    weights = slicing.effective_areas(
+        rooms, (x_max_m - x_min_m) * (y_max_m - y_min_m)
+    )
     rng = random.Random(0)
+
+    # Generation is microseconds and tuning is milliseconds, so ranking first costs
+    # almost nothing and is what makes the number comparable to stage ⑤'s.
+    ranked: list[tuple[tuple[int, float], int, object]] = []
+    for index in range(_GENERATED):
+        tree = slicing.random_tree(rooms, rng, weights)
+        placed = slicing.place(tree, x_min_m, y_min_m, x_max_m, y_max_m)
+        try:
+            layout = Layout(
+                rooms=placed, x_min_m=x_min_m, y_min_m=y_min_m,
+                x_max_m=x_max_m, y_max_m=y_max_m, floor=rooms[0].floor,
+                road_edges=envelope.road_edges,
+            )
+        except ValueError:
+            continue
+        # Rooms only, no adjacency graph. Whether CP-SAT can *dimension* a tree is a
+        # question about areas, widths and aspects; adjacency decides how good the
+        # result is, not whether one exists. Building a Program from a reduced room
+        # list would also have to drop edges naming rooms that are no longer there.
+        hard, penalty, _ = score(layout, Program(rooms=rooms))
+        ranked.append(((hard, penalty), index, tree))
+    ranked.sort(key=lambda row: (row[0], row[1]))
+
     return sum(
-        tuning.tune(slicing.random_tree(rooms, rng, weights), envelope, weights,
-                    time_limit_s=0.15) is not None
-        for _ in range(_PROBES)
+        tuning.tune(tree, bounds, weights, time_limit_s=0.15) is not None
+        for _, _, tree in ranked[:_PROBES]
     )
 
 

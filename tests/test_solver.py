@@ -295,28 +295,32 @@ class TestStageBActuallyReachesTheEnvelope:
         a test built on them fails for a reason that has nothing to do with the bug.
         """
         from app.ir.layout import Layout
-        from app.solver import tuning
+        from app.solver import footprint, tuning
 
         brief = fallback.parse(brief_text)
         envelope = build_envelope(brief, allow_unverified=True)
         program = expand(brief, envelope)
         rooms = program.on_floor(1)
-        weights = slicing.effective_areas(rooms, envelope.max_footprint_sq_m)
+        # The footprint, not the envelope — `solve` tiles the house, and the grid bug
+        # this fixture exists to catch lives in whatever rectangle Stage B is handed.
+        bounds = footprint(envelope, rooms)
+        x_min_m, y_min_m, x_max_m, y_max_m = bounds
+        weights = slicing.effective_areas(
+            rooms, (x_max_m - x_min_m) * (y_max_m - y_min_m)
+        )
 
         rng = random.Random(0)
         ranked = []
         for index in range(400):
             tree = slicing.random_tree(rooms, rng, weights)
-            placed = slicing.place(
-                tree, envelope.x_min_m, envelope.y_min_m, envelope.x_max_m, envelope.y_max_m
-            )
+            placed = slicing.place(tree, x_min_m, y_min_m, x_max_m, y_max_m)
             try:
                 layout = Layout(
                     rooms=placed,
-                    x_min_m=envelope.x_min_m,
-                    y_min_m=envelope.y_min_m,
-                    x_max_m=envelope.x_max_m,
-                    y_max_m=envelope.y_max_m,
+                    x_min_m=x_min_m,
+                    y_min_m=y_min_m,
+                    x_max_m=x_max_m,
+                    y_max_m=y_max_m,
                     floor=1,
                 )
             except ValueError:
@@ -329,43 +333,45 @@ class TestStageBActuallyReachesTheEnvelope:
 
         out = []
         for _, _, tree in ranked[:60]:
-            dimensioned = tuning.tune(tree, envelope, weights, time_limit_s=2.0)
+            dimensioned = tuning.tune(tree, bounds, weights, time_limit_s=2.0)
             if dimensioned is not None:
                 out.append(dimensioned)
             if len(out) >= limit:
                 break
-        return envelope, program, out
+        return envelope, program, out, bounds
 
     @pytest.mark.parametrize("brief_text", [FEET, METRES])
     def test_a_tuned_layout_survives_the_tiling_validator(self, brief_text):
         from app.ir.layout import Layout
 
-        envelope, _, tuned = self._tuned(brief_text)
+        _, _, tuned, bounds = self._tuned(brief_text)
+        x_min_m, y_min_m, x_max_m, y_max_m = bounds
         assert tuned, "no topology could be dimensioned at all — the fixture is wrong"
         for dimensioned in tuned:
             Layout(  # the assertion is that this does not raise
                 rooms=dimensioned,
-                x_min_m=envelope.x_min_m,
-                y_min_m=envelope.y_min_m,
-                x_max_m=envelope.x_max_m,
-                y_max_m=envelope.y_max_m,
+                x_min_m=x_min_m,
+                y_min_m=y_min_m,
+                x_max_m=x_max_m,
+                y_max_m=y_max_m,
                 floor=1,
             )
 
-    def test_tuning_reaches_the_envelope_bounds_exactly(self):
-        """Not "within a tolerance" — the outer edges must be the envelope's own floats.
+    def test_tuning_reaches_its_bounds_exactly(self):
+        """Not "within a tolerance" — the outer edges must be the given floats.
 
         A tolerance here would re-admit the bug: `Layout` compares the *total* covered
         area, so a 3 mm shortfall on each of a dozen rooms passes every per-room
         tolerance and still fails as a gap.
         """
-        envelope, _, tuned = self._tuned(self.FEET)
+        _, _, tuned, bounds = self._tuned(self.FEET)
+        x_min_m, y_min_m, x_max_m, y_max_m = bounds
         assert tuned
         for dimensioned in tuned:
-            assert min(r.x_min_m for r in dimensioned) == envelope.x_min_m
-            assert max(r.x_max_m for r in dimensioned) == envelope.x_max_m
-            assert min(r.y_min_m for r in dimensioned) == envelope.y_min_m
-            assert max(r.y_max_m for r in dimensioned) == envelope.y_max_m
+            assert min(r.x_min_m for r in dimensioned) == x_min_m
+            assert max(r.x_max_m for r in dimensioned) == x_max_m
+            assert min(r.y_min_m for r in dimensioned) == y_min_m
+            assert max(r.y_max_m for r in dimensioned) == y_max_m
 
     def test_snapping_outward_never_shrinks_a_room(self):
         """The grid is floored inwards so a snapped edge only ever grows a room.
@@ -374,7 +380,7 @@ class TestStageBActuallyReachesTheEnvelope:
         envelope, and snapping back would shave a room the model had just proved met
         its minimum — trading a visible gap for an invisible illegality.
         """
-        _, program, tuned = self._tuned(self.FEET)
+        _, program, tuned, _bounds = self._tuned(self.FEET)
         specs = {r.id: r for r in program.on_floor(1)}
         assert tuned
         for dimensioned in tuned:
@@ -572,3 +578,78 @@ class TestTheHouseMeetsTheStreet:
         by_kind = {room.kind.value: room for room in program.rooms}
         assert by_kind["car_parking"].needs_road_access
         assert not by_kind["master_bedroom"].needs_road_access
+
+
+class TestTheHouseIsNotTheEnvelope:
+    """Max coverage is a ceiling, not a requirement.
+
+    `Layout` tiles its bounds exactly, so tiling the *envelope* forced every square
+    metre the programme never asked for into some room — a 33 m² bathroom and a 36 m²
+    foyer on a 50x80, legal and gap-free and not a house.
+    """
+
+    ROOMY = "50x80 4bhk in Bengaluru with study"
+    PACKED = "30x40 east facing site in Whitefield, Bengaluru, 3BHK with pooja room"
+
+    @staticmethod
+    def _case(text):
+        from app.solver import footprint
+
+        brief = fallback.parse(text)
+        envelope = build_envelope(brief, allow_unverified=True)
+        program = expand(brief, envelope)
+        rooms = program.on_floor(1)
+        return envelope, program, rooms, footprint(envelope, rooms)
+
+    def test_a_packed_plot_keeps_its_whole_envelope(self):
+        """Nothing to give back, so nothing changes — and no plot loses area to a
+        refactor that was only ever meant to help the roomy ones."""
+        envelope, _, _, bounds = self._case(self.PACKED)
+        assert bounds == (
+            envelope.x_min_m, envelope.y_min_m, envelope.x_max_m, envelope.y_max_m
+        )
+
+    def test_a_roomy_plot_builds_what_the_programme_asked_for(self):
+        envelope, _, rooms, bounds = self._case(self.ROOMY)
+        area = (bounds[2] - bounds[0]) * (bounds[3] - bounds[1])
+        wanted = sum(room.target_area_sq_m for room in rooms)
+
+        assert area < envelope.max_footprint_sq_m
+        assert wanted <= area <= wanted * 1.10
+
+    def test_the_coverage_cap_binds_and_used_to_be_ignored(self):
+        """`max_footprint_sq_m` is the lesser of the rectangle and the coverage cap.
+
+        The solver only ever saw the rectangle, so a 50x80 tiled 249.7 m² against a
+        241.5 m² cap — an over-covered plan that nothing in the pipeline reported.
+        """
+        envelope, program, rooms, _ = self._case(self.ROOMY)
+        assert envelope.max_footprint_sq_m < envelope.area_sq_m, "fixture must be capped"
+
+        layout = solve(program, envelope, seed=7)[0]
+        tiled = sum(placed.area_sq_m for placed in layout.rooms)
+        assert tiled <= envelope.max_footprint_sq_m + TOLERANCE_M
+
+    def test_the_house_sits_at_the_rear_so_the_leftover_is_out_front(self):
+        """The strip has to fall in one usable piece on the street side — that is where
+        the approach, the porch and the garden go. Centring would leave two useless
+        ones."""
+        from app.ir.enums import Facing
+
+        envelope, _, _, bounds = self._case(self.ROOMY)
+        assert envelope.road_edges[0] is Facing.NORTH, "fixture assumes a north road"
+
+        x_min_m, y_min_m, x_max_m, y_max_m = bounds
+        assert y_min_m == envelope.y_min_m            # flush against the rear
+        assert y_max_m < envelope.y_max_m             # gives back depth at the front
+        assert (x_min_m, x_max_m) == (envelope.x_min_m, envelope.x_max_m)
+
+    def test_the_layout_still_tiles_exactly_what_it_was_given(self):
+        """The invariant survives — the rectangle shrank, the guarantee did not."""
+        envelope, program, _, bounds = self._case(self.ROOMY)
+        layout = solve(program, envelope, seed=7)[0]
+
+        assert (layout.x_min_m, layout.y_min_m, layout.x_max_m, layout.y_max_m) == bounds
+        tiled = sum(placed.area_sq_m for placed in layout.rooms)
+        expected = (bounds[2] - bounds[0]) * (bounds[3] - bounds[1])
+        assert abs(tiled - expected) < 0.01

@@ -56,6 +56,76 @@ TUNE_SECONDS = 0.15
 TUNE_KEEP = 6
 
 
+# How much more than the programme asks for the house may spread into, where the
+# envelope allows it.
+#
+# This is not a comfort margin, and treating it as one is a mistake worth naming: the
+# tiling is *exact*, so whatever fraction is granted here is surplus that must land in
+# some room. The oversize defect is therefore a direct function of this number, not a
+# side effect of it. Measured on the two briefs with room to shrink, at 1.00 / 1.05 /
+# 1.15 / 1.30: the 40x60 carries 0 / 0 / 2 / 3 grossly oversized rooms and the 50x80
+# 1 / 1 / 3 / 3. Above about 1.05 the slack stops buying anything and starts showing
+# up as a 14 m² corridor.
+#
+# Not 1.00, though: the 50x80 scores 290 at 1.00 against 250 at 1.05, because a little
+# room lets Stage B meet a minimum width without taking it out of a neighbour.
+GENEROSITY = 1.05
+
+
+def footprint(
+    envelope: Envelope, rooms: list, *, generosity: float = GENEROSITY
+) -> tuple[float, float, float, float]:
+    """The rectangle the house occupies — which is **not** the envelope.
+
+    Max coverage is a ceiling, not a requirement: a house does not have to fill its
+    setback lines. `Layout` tiles its bounds exactly, so tiling the envelope forced
+    every square metre the programme never asked for into some room. On a 50x80,
+    where 48% of the permitted footprint was surplus, that produced a 33 m² bathroom
+    and a 36 m² foyer — legal, gap-free, zero unbuildable, and not a house.
+
+    Two ceilings bind, and the second was being ignored entirely. `max_footprint_sq_m`
+    is the smaller of the setback rectangle and the coverage cap, and the solver only
+    ever saw the rectangle — so a 50x80 tiled 249.7 m² against a 241.5 m² cap and
+    produced an over-covered plan that nothing in the pipeline reported.
+
+    Shape and position are one choice, not two. The house keeps its full extent along
+    the road and gives up depth, because side setbacks are what pin an Indian plot's
+    width; and it sits at the **rear**, so the leftover falls in front, where the
+    approach, the porch and the garden belong. A house centred in its envelope leaves
+    two useless strips instead of one usable one.
+    """
+    east_west = envelope.x_max_m - envelope.x_min_m
+    north_south = envelope.y_max_m - envelope.y_min_m
+    unchanged = (envelope.x_min_m, envelope.y_min_m, envelope.x_max_m, envelope.y_max_m)
+
+    wanted = sum(room.target_area_sq_m for room in rooms) * generosity
+    # Never below what feasibility already cleared the programme at, never above what
+    # the bye-laws permit. If the floor exceeds the ceiling the programme does not fit
+    # at all — stage ④'s finding, not something to paper over here.
+    area = min(max(wanted, sum(room.min_area_sq_m for room in rooms)),
+               envelope.max_footprint_sq_m)
+
+    # The depth axis runs perpendicular to the primary frontage.
+    from app.ir.enums import Facing
+
+    road = envelope.road_edges[0]
+    along = east_west if road in (Facing.NORTH, Facing.SOUTH) else north_south
+    if along <= 0:
+        return unchanged
+    depth = area / along
+    span = north_south if road in (Facing.NORTH, Facing.SOUTH) else east_west
+    if depth >= span:
+        return unchanged            # the programme fills it; nothing to give back
+
+    if road is Facing.NORTH:        # rear is south
+        return (envelope.x_min_m, envelope.y_min_m, envelope.x_max_m, envelope.y_min_m + depth)
+    if road is Facing.SOUTH:
+        return (envelope.x_min_m, envelope.y_max_m - depth, envelope.x_max_m, envelope.y_max_m)
+    if road is Facing.EAST:         # rear is west
+        return (envelope.x_min_m, envelope.y_min_m, envelope.x_min_m + depth, envelope.y_max_m)
+    return (envelope.x_max_m - depth, envelope.y_min_m, envelope.x_max_m, envelope.y_max_m)
+
+
 def _interleave(primary: list, secondary: list) -> list:
     """Merge two ranked shortlists, best-first, alternating, without duplicates.
 
@@ -147,25 +217,29 @@ def solve(
     if not rooms:
         return []
 
+    # The house, not the envelope. Everything below tiles *this* rectangle — the
+    # allocation budget included, or the rooms would be sized for a footprint the
+    # plan no longer occupies.
+    x_min_m, y_min_m, x_max_m, y_max_m = footprint(envelope, rooms)
+    area = (x_max_m - x_min_m) * (y_max_m - y_min_m)
+
     # Shrink towards minimums rather than scaling targets, so a tight budget cannot
     # push a room below the floor feasibility already cleared it at.
-    weights = slicing.effective_areas(rooms, envelope.max_footprint_sq_m)
+    weights = slicing.effective_areas(rooms, area)
 
     rng = random.Random(seed)
     scored: list[tuple[tuple[int, float], int, Layout, slicing.Node]] = []
 
     for index in range(candidates):
         tree = slicing.random_tree(rooms, rng, weights)
-        placed = slicing.place(
-            tree, envelope.x_min_m, envelope.y_min_m, envelope.x_max_m, envelope.y_max_m
-        )
+        placed = slicing.place(tree, x_min_m, y_min_m, x_max_m, y_max_m)
         try:
             layout = Layout(
                 rooms=placed,
-                x_min_m=envelope.x_min_m,
-                y_min_m=envelope.y_min_m,
-                x_max_m=envelope.x_max_m,
-                y_max_m=envelope.y_max_m,
+                x_min_m=x_min_m,
+                y_min_m=y_min_m,
+                x_max_m=x_max_m,
+                y_max_m=y_max_m,
                 floor=floor,
                 road_edges=envelope.road_edges,
             )
@@ -217,16 +291,19 @@ def solve(
     # broke a minimum width.
     tuned: list[tuple[tuple[int, float], int, Layout]] = []
     for _, index, _, tree in shortlist:
-        dimensioned = tuning.tune(tree, envelope, weights, time_limit_s=tune_seconds)
+        dimensioned = tuning.tune(
+            tree, (x_min_m, y_min_m, x_max_m, y_max_m), weights,
+            time_limit_s=tune_seconds,
+        )
         if dimensioned is None:
             continue  # this topology cannot be dimensioned legally; try the next
         try:
             layout = Layout(
                 rooms=dimensioned,
-                x_min_m=envelope.x_min_m,
-                y_min_m=envelope.y_min_m,
-                x_max_m=envelope.x_max_m,
-                y_max_m=envelope.y_max_m,
+                x_min_m=x_min_m,
+                y_min_m=y_min_m,
+                x_max_m=x_max_m,
+                y_max_m=y_max_m,
                 floor=floor,
                 road_edges=envelope.road_edges,
             )
