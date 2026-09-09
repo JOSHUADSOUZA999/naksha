@@ -1,0 +1,33 @@
+{
+  "_status": "UNVERIFIED. Same discipline as spaces_v1 and setbacks_v1: every block cites a source and carries \"verified\": false until someone reads it against the document. These are construction dimensions rather than legal minimums for the most part, but a door narrower than the bye-law floor is still an unbuildable plan.",
+  "version": "refine_v1",
+  "_frames": "All figures metres, the IR-wide unit. Wall thickness is the FINISHED thickness including plaster, because that is what the drawing shows and what a room's clear internal dimension is measured against.",
+  "_zero_thickness": "Stage ⑤ tiles exactly, which means its walls have no thickness — two rooms share a line. Stage ⑥ gives that line a width and takes it out of BOTH rooms, half each, so the tiling stays symmetric and no room is silently favoured. A room's clear area is therefore always smaller than the area stage ⑤ scored it at; that is the drawing being honest, not a regression.",
+
+  "walls": {
+    "exterior_thickness_m": 0.23,
+    "interior_thickness_m": 0.115,
+    "source": "Practice, not code. 230 mm is one brick and 115 mm is half a brick in the 230x110x75 modular size used across south India; the Karnataka Municipalities Model Building Bye-Laws 2017 set no general wall thickness for a load-bearing dwelling of this scale.",
+    "verified": false
+  },
+
+  "doors": {
+    "entrance_width_m": 1.0,
+    "internal_width_m": 0.9,
+    "service_width_m": 0.75,
+    "narrow_kinds": ["bathroom", "wc", "store", "utility"],
+    "clearance_m": 0.15,
+    "_clearance": "Kept between a door reveal and the end of its wall, so a door never opens flush into a return wall. Also what makes a wall too short to hold a door: anything under width + 2x clearance cannot take one.",
+    "source": "Practice. NBC 2016 Part 3 gives 0.75 m as the floor for a bathroom or WC door and 0.9 m for a habitable room; the 1.0 m entrance is convention, not code. Neither figure has been read first-hand — see VERIFY.md.",
+    "verified": false
+  },
+
+  "windows": {
+    "width_m": 1.2,
+    "min_wall_m": 1.5,
+    "sill_height_m": 0.9,
+    "_min_wall": "An exterior wall shorter than this gets no window rather than a token one — a 1.2 m opening in a 1.4 m wall leaves two 100 mm piers, which is not something anyone builds.",
+    "source": "Practice. The bye-laws regulate window AREA as a fraction of floor area for light and ventilation (cl. 5.1.2.5 territory) rather than a single width, so this is a drawing convention standing in for a calculation stage ⑧ should eventually do properly.",
+    "verified": false
+  }
+}

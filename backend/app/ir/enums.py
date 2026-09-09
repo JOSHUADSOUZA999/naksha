@@ -158,3 +158,28 @@ class Relation(StrEnum):
     ADJACENT = "adjacent"
     CONNECTED = "connected"
     SEPARATED = "separated"
+
+
+class WallKind(StrEnum):
+    """Which side of the house a wall is on.
+
+    It decides thickness — one brick outside, half a brick inside — and it decides
+    what openings are allowed: a window goes in an exterior wall, a door between two
+    rooms goes in an interior one.
+    """
+
+    EXTERIOR = "exterior"
+    INTERIOR = "interior"
+
+
+class OpeningKind(StrEnum):
+    """A hole in a wall, by what it is for.
+
+    `ENTRANCE` is distinct from `DOOR` because it is the one opening whose position is
+    not a convenience: it is where the street meets the house, so it belongs on the
+    road-facing wall of the foyer and is drawn wider.
+    """
+
+    DOOR = "door"
+    ENTRANCE = "entrance"
+    WINDOW = "window"

@@ -411,9 +411,14 @@ def _write_svg(bundle, path: str) -> None:
 
     from app.export.svg import render
 
+    from app.refine import refine
+
     kinds = {room.id: room.kind.value for room in bundle.program.rooms}
     target = Path(path)
     for layout in bundle.layouts:
+        # Stage ⑥. Refining is deterministic and cheap, so the drawing always gets
+        # walls — a room outline is what stage ⑤ produces, not what a person asked for.
+        floor = refine(layout, bundle.program)
         # Single-storey keeps the name the user typed; only a stack needs qualifying.
         out = (
             target
@@ -421,9 +426,17 @@ def _write_svg(bundle, path: str) -> None:
             else target.with_name(f"{target.stem}-floor{layout.floor}{target.suffix}")
         )
         title = f"{bundle.brief_text} \u2014 floor {layout.floor}"
-        out.write_text(render(layout, kinds, title=title), encoding="utf-8")
+        out.write_text(
+            render(layout, kinds, title=title, refined=floor), encoding="utf-8"
+        )
         flags = f", {layout.unbuildable} unbuildable" if layout.unbuildable else ""
-        print(f"[svg] {out} \u2014 score {layout.score:.0f}{flags}", file=sys.stderr)
+        doors = sum(1 for o in floor.openings if o.kind.value != "window")
+        windows = len(floor.openings) - doors
+        print(
+            f"[svg] {out} \u2014 score {layout.score:.0f}{flags} \u00b7 "
+            f"{len(floor.walls)} walls, {doors} doors, {windows} windows",
+            file=sys.stderr,
+        )
 
 
 def _build_program(brief, envelope, args: argparse.Namespace, settings):
