@@ -11,16 +11,16 @@ the tiling identically, so the distinction has to survive ⑤ rather than being 
 into it." This is the stage that spends it. A door is not guessed from geometry; it is
 the edge stage ③ asked for, drawn where stage ⑤ put the wall.
 
-What this does not do: fixtures, furniture, dimension lines, stairs. Those are the rest
-of ⑥ and they need a plan that reads as a house first.
+What this does not do: dimension lines, stair treads, furniture beyond the fixtures a
+room needs to read as that kind of room. Those are the rest of ⑥.
 """
 
 from __future__ import annotations
 
-from app.ir.enums import OpeningKind, Relation, SpaceKind, WallKind
+from app.ir.enums import Facing, FixtureKind, OpeningKind, Relation, SpaceKind, WallKind
 from app.ir.layout import TOLERANCE_M, Layout, PlacedRoom
 from app.ir.plan import Program
-from app.ir.refined import Opening, RefinedFloor, Wall
+from app.ir.refined import Fixture, Opening, RefinedFloor, Wall
 from app.rules import load_ruleset
 
 REFINE_RULES = "refine_v1"
@@ -32,7 +32,15 @@ def refine(layout: Layout, program: Program) -> RefinedFloor:
     walls = _walls(layout, rules["walls"])
     openings = _doors(walls, layout, program, rules["doors"])
     openings += _windows(walls, program, rules["windows"], taken=openings)
-    return RefinedFloor(floor=layout.floor, walls=walls, openings=openings)
+    fixtures = _fixtures(layout, program, walls, openings, rules)
+    clear = {
+        placed.room_id: _clear_rect(placed, layout, rules["walls"])
+        for placed in layout.rooms
+    }
+    return RefinedFloor(
+        floor=layout.floor, walls=walls, openings=openings,
+        fixtures=fixtures, clear=clear,
+    )
 
 
 def _walls(layout: Layout, rules: dict) -> list[Wall]:
@@ -301,3 +309,236 @@ def _fit(
         if abs(other.offset_m - centre) < (other.width_m + width) / 2:
             return None                 # already occupied; one opening per wall is enough
     return centre, width
+
+
+def _fixtures(
+    layout: Layout, program: Program, walls: list[Wall], openings: list[Opening], rules: dict
+) -> list[Fixture]:
+    """Furnish the rooms whose kind has a schedule.
+
+    Deterministic and modest on purpose. This is what makes a 3.5 m² blue rectangle
+    read as a bathroom, and nothing more — CLAUDE.md's v1 editor is "adjustment, not
+    authoring", so the job here is to put a defensible arrangement on the page for the
+    user to push around, not to solve furniture layout.
+
+    **Nothing is placed where a door swings.** That is the one rule that cannot be
+    left to the user: a WC drawn under the door is not a starting point, it is a
+    mistake they have to notice before they can fix it. A fixture that does not fit
+    clear of the doors is dropped instead — a bathroom holding only a WC and a basin
+    is a real bathroom.
+    """
+    sizes = rules["fixtures"]
+    schedules = rules["schedules"]
+    kinds = {room.id: room.kind for room in program.rooms}
+
+    out: list[Fixture] = []
+    for placed in layout.rooms:
+        schedule = schedules.get(kinds.get(placed.room_id, SpaceKind.HALL).value)
+        if not schedule:
+            continue
+
+        clear = _clear_rect(placed, layout, rules["walls"])
+        blocked = _door_swings(placed, walls, openings)
+        taken: list[tuple[float, float, float, float]] = []
+
+        counter: tuple[tuple[float, float, float, float], "Facing"] | None = None
+        for name in schedule:
+            size = sizes[name]
+            if name in _ON_THE_COUNTER and counter is not None:
+                # A sink on one wall and the counter on another is a kitchen nobody
+                # cooks in. These two sit *in* the run, so they are positioned along it
+                # rather than sent looking for a wall of their own.
+                spot = _on_counter(counter, size["width_m"], name)
+            else:
+                spot = _against_a_wall(
+                    clear, size["width_m"], size["depth_m"], blocked + taken
+                )
+            if spot is None:
+                continue
+            rect, faces = spot
+            if name == "counter":
+                counter = (rect, faces)
+            # The counter is not an obstacle to what stands on it.
+            if name not in _ON_THE_COUNTER:
+                taken.append(rect)
+            out.append(
+                Fixture(
+                    kind=FixtureKind(name), room_id=placed.room_id,
+                    x_min_m=rect[0], y_min_m=rect[1], x_max_m=rect[2], y_max_m=rect[3],
+                    faces=faces,
+                )
+            )
+    return out
+
+
+def _clear_rect(
+    placed: PlacedRoom, layout: Layout, rules: dict
+) -> tuple[float, float, float, float]:
+    """The room inside its walls, side by side.
+
+    Stage ⑤'s rectangle runs to the wall *centrelines*, so it overstates the room by
+    half a wall on every side — furnishing against it pushes everything into the
+    masonry, and labelling with it tells a person their bathroom is bigger than it is.
+
+    Each side is inset by half of whatever wall is on it, and which wall that is
+    follows from position alone: a side on the plan's boundary is exterior, everything
+    else is a partition. That holds because there are exactly two thicknesses.
+    """
+    outer = rules["exterior_thickness_m"] / 2
+    inner = rules["interior_thickness_m"] / 2
+
+    def inset(coordinate: float, edge: float) -> float:
+        return outer if abs(coordinate - edge) <= TOLERANCE_M else inner
+
+    return (
+        placed.x_min_m + inset(placed.x_min_m, layout.x_min_m),
+        placed.y_min_m + inset(placed.y_min_m, layout.y_min_m),
+        placed.x_max_m - inset(placed.x_max_m, layout.x_max_m),
+        placed.y_max_m - inset(placed.y_max_m, layout.y_max_m),
+    )
+
+
+def _door_swings(
+    placed: PlacedRoom, walls: list[Wall], openings: list[Opening]
+) -> list[tuple[float, float, float, float]]:
+    """A square of keep-out for every door opening into this room.
+
+    Square rather than the quarter-disc the drawing shows: the leaf sweeps a quarter
+    circle, and a rectangle bounding it is both easier to test against and the more
+    conservative answer. Erring towards fewer fixtures is right — a dropped shower is
+    a smaller wrong than one drawn through a door.
+    """
+    by_id = {wall.id: wall for wall in walls}
+    zones = []
+    for opening in openings:
+        if opening.kind is OpeningKind.WINDOW:
+            continue
+        if placed.room_id not in opening.connects:
+            continue
+        wall = by_id.get(opening.wall_id)
+        if wall is None:
+            continue
+        hx, hy = wall.point_at(opening.offset_m)
+        reach = opening.width_m
+        zones.append((hx - reach, hy - reach, hx + reach, hy + reach))
+    return zones
+
+
+def _against_a_wall(
+    clear: tuple[float, float, float, float],
+    width: float,
+    depth: float,
+    blocked: list[tuple[float, float, float, float]],
+) -> tuple[tuple[float, float, float, float], "Facing"] | None:
+    """Back the fixture onto whichever wall it fits against, trying corners first.
+
+    Corners first because that is where furniture goes: a bed in the middle of a wall
+    and a bed in the corner both fit, and only one of them leaves a usable room. The
+    order of the sides is fixed rather than clever, so the same plan furnishes the same
+    way twice — a drawing that reshuffles itself between runs is one nobody can discuss.
+    """
+    from app.ir.enums import Facing
+
+    x_min, y_min, x_max, y_max = clear
+    if x_max - x_min <= 0 or y_max - y_min <= 0:
+        return None
+
+    # (side the fixture backs onto, the way it then faces, its footprint there)
+    plans = [
+        (Facing.NORTH, (x_min, y_max - depth, x_min + width, y_max)),
+        (Facing.NORTH, (x_max - width, y_max - depth, x_max, y_max)),
+        (Facing.SOUTH, (x_min, y_min, x_min + width, y_min + depth)),
+        (Facing.SOUTH, (x_max - width, y_min, x_max, y_min + depth)),
+        (Facing.EAST, (x_min, y_min, x_min + depth, y_min + width)),
+        (Facing.EAST, (x_min, y_max - width, x_min + depth, y_max)),
+        (Facing.WEST, (x_max - depth, y_min, x_max, y_min + width)),
+        (Facing.WEST, (x_max - depth, y_max - width, x_max, y_max)),
+    ]
+    for faces, rect in plans:
+        if rect[0] < x_min - 1e-9 or rect[1] < y_min - 1e-9:
+            continue
+        if rect[2] > x_max + 1e-9 or rect[3] > y_max + 1e-9:
+            continue
+        if any(_hits(rect, other) for other in blocked):
+            continue
+        return rect, faces
+    return None
+
+
+def _hits(a: tuple[float, ...], b: tuple[float, ...]) -> bool:
+    """Do two rectangles share any area? Touching edges do not count."""
+    return not (a[2] <= b[0] or b[2] <= a[0] or a[3] <= b[1] or b[3] <= a[1])
+
+
+# Fixtures that are set into a worktop rather than standing on the floor.
+_ON_THE_COUNTER = {"sink", "stove"}
+
+# Where along the run each one sits, as a fraction of its length. A sink under the
+# window end and the hob away from it is the ordinary arrangement; the point is that
+# they are apart and both on the counter, not that these exact fractions are right.
+_COUNTER_POSITION = {"sink": 0.3, "stove": 0.75}
+
+
+def _on_counter(
+    counter: tuple[tuple[float, float, float, float], "Facing"], width: float, name: str
+) -> tuple[tuple[float, float, float, float], "Facing"] | None:
+    """Place a sink or hob within the counter run, inset from its front edge."""
+    (x_min, y_min, x_max, y_max), faces = counter
+    from app.ir.enums import Facing
+
+    along = _COUNTER_POSITION.get(name, 0.5)
+    inset = 0.06                       # a lip of worktop in front and behind
+
+    if faces in (Facing.NORTH, Facing.SOUTH):
+        span = x_max - x_min
+        if span < width:
+            return None
+        cx = x_min + span * along
+        left = min(max(cx - width / 2, x_min), x_max - width)
+        return (left, y_min + inset, left + width, y_max - inset), faces
+
+    span = y_max - y_min
+    if span < width:
+        return None
+    cy = y_min + span * along
+    low = min(max(cy - width / 2, y_min), y_max - width)
+    return (x_min + inset, low, x_max - inset, low + width), faces
+
+
+def breaches(floor: RefinedFloor, program: Program) -> list[str]:
+    """Rooms that are legal by the tiling and illegal once the walls are real.
+
+    **Stage ⑤ checks minimums against centreline areas, and the bye-laws mean clear
+    ones.** A 2.1 m minimum bedroom width is 2.1 m of floor, not 2.1 m between wall
+    centres — so every legality check in the pipeline is optimistic by half a wall on
+    each side, and systematically so. Measured on the four reference briefs: 36 rooms
+    that stage ⑤ passed are below an area or width minimum once ⑥ gives the walls their
+    thickness, including on plots reporting zero unbuildable rooms.
+
+    This function does not fix that. Fixing it means solving against gross minimums —
+    clear figure plus a wall allowance — which tightens every brief and would swing
+    feasibility on plots that are already 98% packed, so it is a change to measure
+    rather than to slip in. Until then the discrepancy is *reported*, because a wrong
+    number nobody can see is the failure mode this codebase keeps finding.
+
+    See DECISIONS.md.
+    """
+    specs = {room.id: room for room in program.rooms}
+    found: list[str] = []
+    for room_id, (x_min, y_min, x_max, y_max) in sorted(floor.clear.items()):
+        spec = specs.get(room_id)
+        if spec is None:
+            continue
+        area = max(0.0, x_max - x_min) * max(0.0, y_max - y_min)
+        width = min(max(0.0, x_max - x_min), max(0.0, y_max - y_min))
+        if area < spec.min_area_sq_m - TOLERANCE_M:
+            found.append(
+                f"{room_id} has {area:.1f} m² of floor inside its walls, below the "
+                f"{spec.min_area_sq_m:.1f} m² minimum"
+            )
+        if width < spec.min_width_m - TOLERANCE_M:
+            found.append(
+                f"{room_id} is {width:.2f} m clear across, below the "
+                f"{spec.min_width_m:.2f} m minimum width"
+            )
+    return found

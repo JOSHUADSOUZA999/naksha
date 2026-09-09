@@ -10,7 +10,7 @@ from __future__ import annotations
 from xml.sax.saxutils import escape
 
 from app.ir.layout import Layout
-from app.ir.enums import OpeningKind
+from app.ir.enums import Facing, OpeningKind
 from app.ir.refined import RefinedFloor
 
 _SCALE = 44          # px per metre
@@ -80,6 +80,12 @@ def render(
             f'height="{room.depth_m * _SCALE:.1f}" fill="{fill}"{edge}/>'
         )
         cx, cy = px(*room.centroid)
+        # The area inside the plaster, once walls exist. Stage ⑤'s figure runs to the
+        # centrelines and is the right number for the tiling and the wrong one to show
+        # a person — it credits every room with half a wall on each side.
+        area = room.area_sq_m
+        if refined is not None:
+            area = refined.clear_area_sq_m(room.room_id) or area
         label = escape(kind.replace("_", " ") or room.room_id)
         # Labels are dropped rather than overflowed on rooms too small to hold them —
         # a bathroom with its name spilling across the kitchen is worse than unlabelled.
@@ -88,10 +94,14 @@ def render(
                 f'<text x="{cx:.1f}" y="{cy - 3:.1f}" font-size="11" text-anchor="middle" '
                 f'fill="#111">{label}</text>'
                 f'<text x="{cx:.1f}" y="{cy + 11:.1f}" font-size="9.5" '
-                f'text-anchor="middle" fill="#666">{room.area_sq_m:.1f} m²</text>'
+                f'text-anchor="middle" fill="#666">{area:.1f} m²</text>'
             )
 
     if refined is not None:
+        # Under the walls: a fixture is inside a room and the wall is the room's edge,
+        # so masonry drawn over a bed reads correctly and a bed drawn over masonry does
+        # not. Under the labels too — the room's name is the thing to read first.
+        out.extend(_fixtures(refined, px))
         out.extend(_walls_and_openings(refined, layout, px))
 
     out.append(
@@ -204,3 +214,57 @@ def _swing(
         f'<path d="M{lx:.1f} {ly:.1f} A{radius:.1f} {radius:.1f} 0 0 {sweep} '
         f'{bx:.1f} {by:.1f}" stroke-dasharray="3 3"/></g>'
     )
+
+
+def _fixtures(refined: RefinedFloor, px) -> list[str]:
+    """Draw each fixture as the glyph that names it.
+
+    A plain rectangle is not enough: a 0.4 x 0.7 box and a 0.55 x 0.45 box are a WC and
+    a basin to the person who placed them and two boxes to everyone else. These are the
+    conventional marks — a bowl, a hob's four burners, a bed's pillow band — drawn thin
+    and grey so they sit under the plan rather than competing with it.
+    """
+    out = ['<g fill="none" stroke="#8a8a8a" stroke-width="1">']
+    for fixture in refined.fixtures:
+        x1, y1 = px(fixture.x_min_m, fixture.y_max_m)     # SVG anchors top-left
+        x2, y2 = px(fixture.x_max_m, fixture.y_min_m)
+        w, h = x2 - x1, y2 - y1
+        cx, cy = x1 + w / 2, y1 + h / 2
+        kind = fixture.kind.value
+
+        out.append(f'<rect x="{x1:.1f}" y="{y1:.1f}" width="{w:.1f}" height="{h:.1f}" '
+                   f'fill="#ffffff" fill-opacity="0.55"/>')
+
+        if kind in ("wc", "basin", "sink"):
+            out.append(
+                f'<ellipse cx="{cx:.1f}" cy="{cy:.1f}" rx="{w * 0.34:.1f}" '
+                f'ry="{h * 0.34:.1f}"/>'
+            )
+        elif kind == "shower":
+            out.append(
+                f'<path d="M{x1:.1f} {y1:.1f} L{x2:.1f} {y2:.1f} '
+                f'M{x2:.1f} {y1:.1f} L{x1:.1f} {y2:.1f}"/>'
+            )
+        elif kind == "stove":
+            r = min(w, h) * 0.16
+            for fx in (0.3, 0.7):
+                for fy in (0.3, 0.7):
+                    out.append(
+                        f'<circle cx="{x1 + w * fx:.1f}" cy="{y1 + h * fy:.1f}" '
+                        f'r="{r:.1f}"/>'
+                    )
+        elif kind in ("bed", "single_bed"):
+            # A band across the head end. Which end is the head is `faces` reversed —
+            # you get out of a bed the way it faces, so the pillows are at the back.
+            band = 0.22
+            if fixture.faces in (Facing.NORTH, Facing.SOUTH):
+                yy = y2 - h * band if fixture.faces is Facing.NORTH else y1 + h * band
+                out.append(f'<path d="M{x1:.1f} {yy:.1f} H{x2:.1f}"/>')
+            else:
+                xx = x1 + w * band if fixture.faces is Facing.WEST else x2 - w * band
+                out.append(f'<path d="M{xx:.1f} {y1:.1f} V{y2:.1f}"/>')
+        elif kind == "wardrobe":
+            out.append(f'<path d="M{x1:.1f} {y1:.1f} L{x2:.1f} {y2:.1f}"/>')
+
+    out.append("</g>")
+    return out

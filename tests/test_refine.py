@@ -253,3 +253,184 @@ class TestTheDrawingCanBeRendered:
         ]) == 0
         assert "walls" in capsys.readouterr().err
         assert "stroke-dasharray" in out.read_text(encoding="utf-8")
+
+
+class TestFixturesMakeARoomReadAsItsKind:
+    """A 3.5 m² blue rectangle is a bathroom only to whoever placed it.
+
+    These are the conventional marks — a bowl, four burners, a pillow band — and the
+    job is a defensible arrangement for the user to push around, not solved furniture
+    layout. CLAUDE.md's v1 editor is "adjustment, not authoring".
+    """
+
+    @pytest.mark.parametrize("name", list(BRIEFS))
+    def test_no_fixture_escapes_its_room(self, floors, name):
+        layout, _, floor = floors[name]
+        for fixture in floor.fixtures:
+            room = layout.by_id(fixture.room_id)
+            assert room is not None
+            assert room.x_min_m - TOLERANCE_M <= fixture.x_min_m
+            assert fixture.x_max_m <= room.x_max_m + TOLERANCE_M
+            assert room.y_min_m - TOLERANCE_M <= fixture.y_min_m
+            assert fixture.y_max_m <= room.y_max_m + TOLERANCE_M
+
+    @pytest.mark.parametrize("name", list(BRIEFS))
+    def test_nothing_stands_where_a_door_swings(self, floors, name):
+        """The one rule that cannot be left to the user.
+
+        A WC drawn under the door is not a starting point, it is a mistake they have to
+        notice before they can fix it. A fixture that will not fit clear is dropped.
+        """
+        from app.refine import _door_swings, _hits
+
+        layout, _, floor = floors[name]
+        for fixture in floor.fixtures:
+            room = layout.by_id(fixture.room_id)
+            box = (fixture.x_min_m, fixture.y_min_m, fixture.x_max_m, fixture.y_max_m)
+            for zone in _door_swings(room, floor.walls, floor.openings):
+                assert not _hits(box, zone), f"{fixture.kind.value} in {room.room_id}"
+
+    @pytest.mark.parametrize("name", list(BRIEFS))
+    def test_free_standing_fixtures_do_not_overlap_each_other(self, floors, name):
+        """A bed through a wardrobe is not a small drawing error, it is two fixtures
+        in the same cubic metre."""
+        from app.ir.enums import FixtureKind
+        from app.refine import _hits
+
+        _, _, floor = floors[name]
+        standing = [
+            f for f in floor.fixtures
+            if f.kind not in (FixtureKind.SINK, FixtureKind.STOVE)
+        ]
+        for i, a in enumerate(standing):
+            for b in standing[i + 1:]:
+                if a.room_id != b.room_id:
+                    continue
+                assert not _hits(
+                    (a.x_min_m, a.y_min_m, a.x_max_m, a.y_max_m),
+                    (b.x_min_m, b.y_min_m, b.x_max_m, b.y_max_m),
+                ), f"{a.kind.value} clashes with {b.kind.value} in {a.room_id}"
+
+    def test_a_bathroom_gets_sanitaryware_and_a_bedroom_gets_a_bed(self, floors):
+        from app.ir.enums import FixtureKind
+
+        _, program, floor = floors["50x80"]
+        kinds = {room.id: room.kind for room in program.rooms}
+        by_room: dict[str, set] = {}
+        for fixture in floor.fixtures:
+            by_room.setdefault(fixture.room_id, set()).add(fixture.kind)
+
+        baths = [r for r, k in kinds.items() if k is SpaceKind.BATHROOM]
+        beds = [r for r, k in kinds.items()
+                if k in (SpaceKind.BEDROOM, SpaceKind.MASTER_BEDROOM)]
+        assert any(FixtureKind.WC in by_room.get(r, set()) for r in baths)
+        assert any(
+            by_room.get(r, set()) & {FixtureKind.BED, FixtureKind.SINGLE_BED}
+            for r in beds
+        )
+
+    def test_the_sink_and_hob_sit_in_the_counter(self, floors):
+        """A sink on one wall and the counter on another is a kitchen nobody cooks in."""
+        from app.ir.enums import FixtureKind
+        from app.refine import _hits
+
+        _, _, floor = floors["40x60"]
+        counter = next(
+            (f for f in floor.fixtures if f.kind is FixtureKind.COUNTER), None
+        )
+        assert counter is not None, "the fixture must have a counter to sit in"
+        for fixture in floor.fixtures:
+            if fixture.kind in (FixtureKind.SINK, FixtureKind.STOVE):
+                assert fixture.room_id == counter.room_id
+                assert _hits(
+                    (fixture.x_min_m, fixture.y_min_m, fixture.x_max_m, fixture.y_max_m),
+                    (counter.x_min_m, counter.y_min_m, counter.x_max_m, counter.y_max_m),
+                )
+
+    def test_the_schedule_is_rule_data(self):
+        """Which fixtures a room gets is a judgment that changes without the code."""
+        from app.rules import load_ruleset
+
+        rules = load_ruleset("refine_v1").data
+        assert "wc" in rules["schedules"]["bathroom"]
+        assert rules["fixtures"]["bed"]["width_m"] > rules["fixtures"]["single_bed"]["width_m"]
+
+    def test_furnishing_is_deterministic(self, floors):
+        """A drawing that reshuffles itself between runs is one nobody can discuss."""
+        layout, program, floor = floors["30x50"]
+        again = refine(layout, program)
+        assert [f.model_dump() for f in again.fixtures] == [
+            f.model_dump() for f in floor.fixtures
+        ]
+
+    def test_the_drawing_carries_them(self, floors):
+        from app.export.svg import render
+
+        layout, program, floor = floors["40x60"]
+        kinds = {room.id: room.kind.value for room in program.rooms}
+        drawing = render(layout, kinds, title="t", refined=floor)
+        assert "<ellipse" in drawing, "a WC and a basin need bowls to read as fixtures"
+        assert drawing.count("<circle") >= 4, "the hob needs its burners"
+
+
+class TestWallsChangeWhatALegalRoomIs:
+    """Stage ⑤ measures to wall centrelines; the bye-laws mean clear internal size.
+
+    DECISIONS question 8. Not fixed here — fixing it tightens every brief and may make
+    a 30x40 3BHK infeasible outright, which is a product decision. What is fixed is the
+    silence: the discrepancy is reported and the labels show the honest number.
+    """
+
+    def test_the_clear_area_is_smaller_than_the_tiled_one(self, floors):
+        layout, _, floor = floors["40x60"]
+        for room in layout.rooms:
+            clear = floor.clear_area_sq_m(room.room_id)
+            assert clear is not None
+            assert clear < room.area_sq_m
+
+    def test_each_side_is_inset_by_its_own_wall(self, floors):
+        """A boundary side loses half of 230 mm, an internal one half of 115 mm.
+        Using one figure for both would misreport every room on the perimeter."""
+        from app.rules import load_ruleset
+
+        walls = load_ruleset("refine_v1").data["walls"]
+        outer, inner = walls["exterior_thickness_m"] / 2, walls["interior_thickness_m"] / 2
+        layout, _, floor = floors["40x60"]
+
+        for room in layout.rooms:
+            x_min, _, _, _ = floor.clear[room.room_id]
+            on_boundary = abs(room.x_min_m - layout.x_min_m) <= TOLERANCE_M
+            expected = room.x_min_m + (outer if on_boundary else inner)
+            assert abs(x_min - expected) < 1e-9
+
+    def test_the_breach_is_reported_rather_than_hidden(self, floors):
+        """Three of the four reference briefs report zero unbuildable rooms and are
+        not clean once the walls are real. A wrong number nobody can see is the exact
+        failure mode this codebase keeps finding."""
+        from app.refine import breaches
+
+        layout, program, floor = floors["30x50"]
+        assert layout.unbuildable == 0, "fixture must be a plan the solver calls clean"
+        assert breaches(floor, program), "and it must still breach a minimum"
+
+    def test_fixtures_stand_on_the_clear_floor_not_the_tiled_one(self, floors):
+        """Furnishing against stage ⑤'s rectangle pushes everything into the masonry."""
+        layout, _, floor = floors["50x80"]
+        for fixture in floor.fixtures:
+            x_min, y_min, x_max, y_max = floor.clear[fixture.room_id]
+            assert fixture.x_min_m >= x_min - 1e-9
+            assert fixture.y_min_m >= y_min - 1e-9
+            assert fixture.x_max_m <= x_max + 1e-9
+            assert fixture.y_max_m <= y_max + 1e-9
+
+    def test_the_label_shows_the_clear_area(self, floors):
+        from app.export.svg import render
+
+        layout, program, floor = floors["40x60"]
+        kinds = {room.id: room.kind.value for room in program.rooms}
+        drawing = render(layout, kinds, title="t", refined=floor)
+
+        big = max(layout.rooms, key=lambda r: r.area_sq_m)
+        clear = floor.clear_area_sq_m(big.room_id)
+        assert f"{clear:.1f} m²" in drawing
+        assert f"{big.area_sq_m:.1f} m²" not in drawing

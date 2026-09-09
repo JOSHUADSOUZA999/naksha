@@ -3,25 +3,27 @@
   "version": "refine_v1",
   "_frames": "All figures metres, the IR-wide unit. Wall thickness is the FINISHED thickness including plaster, because that is what the drawing shows and what a room's clear internal dimension is measured against.",
   "_zero_thickness": "Stage ⑤ tiles exactly, which means its walls have no thickness — two rooms share a line. Stage ⑥ gives that line a width and takes it out of BOTH rooms, half each, so the tiling stays symmetric and no room is silently favoured. A room's clear area is therefore always smaller than the area stage ⑤ scored it at; that is the drawing being honest, not a regression.",
-
   "walls": {
     "exterior_thickness_m": 0.23,
     "interior_thickness_m": 0.115,
     "source": "Practice, not code. 230 mm is one brick and 115 mm is half a brick in the 230x110x75 modular size used across south India; the Karnataka Municipalities Model Building Bye-Laws 2017 set no general wall thickness for a load-bearing dwelling of this scale.",
     "verified": false
   },
-
   "doors": {
     "entrance_width_m": 1.0,
     "internal_width_m": 0.9,
     "service_width_m": 0.75,
-    "narrow_kinds": ["bathroom", "wc", "store", "utility"],
+    "narrow_kinds": [
+      "bathroom",
+      "wc",
+      "store",
+      "utility"
+    ],
     "clearance_m": 0.15,
     "_clearance": "Kept between a door reveal and the end of its wall, so a door never opens flush into a return wall. Also what makes a wall too short to hold a door: anything under width + 2x clearance cannot take one.",
     "source": "Practice. NBC 2016 Part 3 gives 0.75 m as the floor for a bathroom or WC door and 0.9 m for a habitable room; the 1.0 m entrance is convention, not code. Neither figure has been read first-hand — see VERIFY.md.",
     "verified": false
   },
-
   "windows": {
     "width_m": 1.2,
     "min_wall_m": 1.5,
@@ -29,5 +31,78 @@
     "_min_wall": "An exterior wall shorter than this gets no window rather than a token one — a 1.2 m opening in a 1.4 m wall leaves two 100 mm piers, which is not something anyone builds.",
     "source": "Practice. The bye-laws regulate window AREA as a fraction of floor area for light and ventilation (cl. 5.1.2.5 territory) rather than a single width, so this is a drawing convention standing in for a calculation stage ⑧ should eventually do properly.",
     "verified": false
+  },
+  "_fixtures": "Sizes are the ones an Indian sanitaryware or modular-kitchen catalogue quotes, which is what a draughtsman reaches for at concept stage. They are drawing conventions, not code: the bye-laws regulate a bathroom's AREA and ventilation, not the model of WC in it. `depth_m` is measured out from the wall the fixture backs onto and `width_m` along it.",
+  "fixtures": {
+    "wc": {
+      "width_m": 0.4,
+      "depth_m": 0.7
+    },
+    "basin": {
+      "width_m": 0.55,
+      "depth_m": 0.45
+    },
+    "shower": {
+      "width_m": 0.9,
+      "depth_m": 0.9
+    },
+    "sink": {
+      "width_m": 0.6,
+      "depth_m": 0.55
+    },
+    "stove": {
+      "width_m": 0.6,
+      "depth_m": 0.6
+    },
+    "counter": {
+      "width_m": 1.8,
+      "depth_m": 0.6
+    },
+    "bed": {
+      "width_m": 1.5,
+      "depth_m": 2.0
+    },
+    "single_bed": {
+      "width_m": 0.9,
+      "depth_m": 1.9
+    },
+    "wardrobe": {
+      "width_m": 1.2,
+      "depth_m": 0.6
+    },
+    "source": "Practice. Standard catalogue sizes: a 1.5 x 2.0 m queen bed, a 600 mm modular counter depth, a 900 mm shower tray. Nothing here is a legal minimum and nothing has been read against a document.",
+    "verified": false
+  },
+  "schedules": {
+    "_note": "Which fixtures a room gets, in the order they are placed. Order is priority: the first fixture takes the best wall, and anything that no longer fits is dropped rather than overlapped. A bathroom that can only hold a WC and a basin is a real bathroom; one with a shower drawn through the door is not.",
+    "bathroom": [
+      "wc",
+      "basin",
+      "shower"
+    ],
+    "wc": [
+      "wc",
+      "basin"
+    ],
+    "kitchen": [
+      "counter",
+      "sink",
+      "stove"
+    ],
+    "master_bedroom": [
+      "bed",
+      "wardrobe"
+    ],
+    "bedroom": [
+      "single_bed",
+      "wardrobe"
+    ],
+    "guest_room": [
+      "single_bed",
+      "wardrobe"
+    ],
+    "servant_room": [
+      "single_bed"
+    ]
   }
 }

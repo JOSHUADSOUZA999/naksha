@@ -26,7 +26,7 @@ from typing import Self
 from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
 
 from app.ir.base import DerivedFieldsAreOutputOnly
-from app.ir.enums import OpeningKind, WallKind
+from app.ir.enums import Facing, FixtureKind, OpeningKind, WallKind
 
 # Walls run on cardinal axes only — v1 is rectangular plots and a slicing tree, so a
 # wall is horizontal or vertical and never anything else. Curved walls are out of
@@ -115,6 +115,42 @@ class Opening(BaseModel):
     )
 
 
+class Fixture(BaseModel):
+    """A WC, a bed, a kitchen counter — placed, as a rectangle.
+
+    Carries its own geometry rather than an offset along a wall, unlike `Opening`. A
+    door is a hole *in* a wall and cannot exist apart from it; a bed stands in a room
+    and merely happens to be against one. Storing a rectangle is what lets stage ⑦ ask
+    the question that matters — does the door swing into it — without first
+    reconstructing where it is.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: FixtureKind
+    room_id: str = Field(min_length=1)
+    x_min_m: float
+    y_min_m: float
+    x_max_m: float
+    y_max_m: float
+    faces: Facing = Field(
+        description="The way the fixture is used from — out into the room, away from "
+        "the wall it backs onto. A WC drawn the right size and the wrong way round is "
+        "a plan nobody can read."
+    )
+
+    @model_validator(mode="after")
+    def _has_area(self) -> Self:
+        if self.x_max_m - self.x_min_m <= 0 or self.y_max_m - self.y_min_m <= 0:
+            raise ValueError(f"{self.kind.value} in {self.room_id}: zero extent")
+        return self
+
+    @computed_field
+    @property
+    def area_sq_m(self) -> float:
+        return (self.x_max_m - self.x_min_m) * (self.y_max_m - self.y_min_m)
+
+
 class RefinedFloor(DerivedFieldsAreOutputOnly):
     """One storey, drawn: every wall and every opening in it."""
 
@@ -123,6 +159,22 @@ class RefinedFloor(DerivedFieldsAreOutputOnly):
     floor: int = Field(default=1, ge=1, le=4)
     walls: list[Wall] = Field(min_length=1)
     openings: list[Opening] = Field(default_factory=list)
+    fixtures: list[Fixture] = Field(default_factory=list)
+    clear: dict[str, tuple[float, float, float, float]] = Field(
+        default_factory=dict,
+        description="Each room inside its walls, as (x_min, y_min, x_max, y_max). "
+        "Stage ⑤'s rectangles run to the wall *centrelines*, so they overstate every "
+        "room by half a wall on each side — a 3.5 m² bathroom is nearer 2.9 m² of "
+        "floor. Computed once here because two things need it and must agree: the "
+        "fixtures stand in it, and it is the area a person should be shown.",
+    )
+
+    def clear_area_sq_m(self, room_id: str) -> float | None:
+        """Floor area inside the plaster, or None if this room was never refined."""
+        rect = self.clear.get(room_id)
+        if rect is None:
+            return None
+        return max(0.0, rect[2] - rect[0]) * max(0.0, rect[3] - rect[1])
 
     @model_validator(mode="after")
     def _openings_sit_in_walls_that_exist(self) -> Self:

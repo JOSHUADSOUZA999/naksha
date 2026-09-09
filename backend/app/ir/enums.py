@@ -183,3 +183,22 @@ class OpeningKind(StrEnum):
     DOOR = "door"
     ENTRANCE = "entrance"
     WINDOW = "window"
+
+
+class FixtureKind(StrEnum):
+    """The things in a room that make it that kind of room.
+
+    Deliberately a closed vocabulary rather than free text. A renderer has to know how
+    to draw each one — a WC is not a rectangle, it is a rectangle with a bowl — and a
+    schedule that could name anything would produce fixtures nothing can draw.
+    """
+
+    WC = "wc"
+    BASIN = "basin"
+    SHOWER = "shower"
+    SINK = "sink"
+    STOVE = "stove"
+    COUNTER = "counter"
+    BED = "bed"
+    SINGLE_BED = "single_bed"
+    WARDROBE = "wardrobe"

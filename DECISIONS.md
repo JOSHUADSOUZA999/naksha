@@ -7,6 +7,46 @@ Append-only. Why the code is shaped the way it is, what broke, and what is still
 
 ## Open questions — these need you, not me
 
+**8. Every plan we call legal has rooms below their statutory minimums.** Found by
+building stage ⑥, and it is the most consequential thing in this file.
+
+Stage ⑤ checks `min_area_sq_m` and `min_width_m` against its own rectangles, and those
+run to **wall centrelines**. The bye-laws mean **clear internal** size: a 2.1 m minimum
+bedroom width is 2.1 m of floor, not 2.1 m between wall centres. So the legality check
+is optimistic by half a wall on each side, on every room, systematically.
+
+Measured across the four reference briefs, at 230 mm exterior and 115 mm interior:
+
+| brief | unbuildable by tiling | below a minimum once walls are real |
+|---|---|---|
+| 30x40 3BHK | 3 | **16** |
+| 30x50 3BHK | **0** | **7** |
+| 40x60 3BHK | **0** | **6** |
+| 50x80 4BHK | **0** | **7** |
+
+Walls take about 10% of the floor area on a 40x60 — 112.9 m² tiled against 102.1 m²
+clear. Three of the four briefs report a clean plan and are not one.
+
+**The fix is not subtle, it is just expensive.** Stage ⑤ has to solve against *gross*
+minimums: the clear figure plus a wall allowance, ~0.115 m per dimension for an interior
+room and ~0.23 m where it meets the boundary. The difficulty is that the allowance
+depends on which walls a room ends up against, which is not known until it is placed —
+so it is either a conservative constant (tightening every room, including the ones that
+did not need it) or a second pass.
+
+**Why it is yours and not mine.** It tightens every brief at once, and the plots that
+matter most are already the tightest: a 30x40 is 98% packed before this, and adding
+115 mm to every room's minimum may make it infeasible outright. That is a product
+decision — whether naksha refuses a 30x40 3BHK honestly, or keeps producing plans that
+need a draughtsman to fix. Both are defensible; the current behaviour, which is to claim
+legality it does not have, is not.
+
+**Not silently changed.** `refine.breaches()` reports every one and the CLI prints them
+under `[walls]`, so the discrepancy is visible while the decision is open. Room labels
+in the SVG now show clear area rather than the tiled figure, which is the number a
+person should be reading anyway.
+
+
 **1. FAR for Bengaluru. Blocks stage ③'s room budget.**
 Three candidates for the same 30×40 plot, none confirmed operative:
 

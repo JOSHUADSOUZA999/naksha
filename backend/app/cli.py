@@ -411,7 +411,7 @@ def _write_svg(bundle, path: str) -> None:
 
     from app.export.svg import render
 
-    from app.refine import refine
+    from app.refine import breaches, refine
 
     kinds = {room.id: room.kind.value for room in bundle.program.rooms}
     target = Path(path)
@@ -430,6 +430,20 @@ def _write_svg(bundle, path: str) -> None:
             render(layout, kinds, title=title, refined=floor), encoding="utf-8"
         )
         flags = f", {layout.unbuildable} unbuildable" if layout.unbuildable else ""
+        # Legality once the walls are real, which is not what stage ⑤ measured.
+        clear_breaches = breaches(floor, bundle.program)
+        if clear_breaches:
+            print(
+                f"\n[walls] floor {layout.floor}: {len(clear_breaches)} room(s) fall "
+                f"below a minimum once wall thickness is counted \u2014 stage \u2464 "
+                f"measures to wall centrelines, the bye-laws mean clear internal size",
+                file=sys.stderr,
+            )
+            for breach in clear_breaches[:4]:
+                print(f"        \u00b7 {breach}", file=sys.stderr)
+            if len(clear_breaches) > 4:
+                print(f"        \u00b7 \u2026and {len(clear_breaches) - 4} more", file=sys.stderr)
+
         doors = sum(1 for o in floor.openings if o.kind.value != "window")
         windows = len(floor.openings) - doors
         print(
