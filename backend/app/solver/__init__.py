@@ -49,6 +49,33 @@ IMPROVE_SHORTLIST = 24
 TUNE_SHORTLIST = 24
 TUNE_SECONDS = 0.15
 
+# Tuned candidates to collect before choosing. Was 3, and 3 is too few now that the
+# shortlist interleaves two groups: the first three successes came from whichever
+# group led, so the other never got compared. Six is enough for both to land and still
+# well inside the interactive budget — the four reference briefs run in 0.3-0.9 s.
+TUNE_KEEP = 6
+
+
+def _interleave(primary: list, secondary: list) -> list:
+    """Merge two ranked shortlists, best-first, alternating, without duplicates.
+
+    Alternating rather than concatenating because the tuning loop stops as soon as it
+    has enough dimensioned candidates — appending the second group would mean it was
+    only ever reached when the first group failed outright.
+    """
+    merged: list = []
+    seen: set[int] = set()
+    for pair in zip(primary, secondary):
+        for row in pair:
+            if row[1] not in seen:          # row[1] is the generation index
+                seen.add(row[1])
+                merged.append(row)
+    for row in [*primary, *secondary]:
+        if row[1] not in seen:
+            seen.add(row[1])
+            merged.append(row)
+    return merged
+
 
 def improve(layout: Layout, program: Program, rounds: int = 4) -> Layout:
     """Hill-climb by swapping which room occupies which rectangle.
@@ -140,6 +167,7 @@ def solve(
                 x_max_m=envelope.x_max_m,
                 y_max_m=envelope.y_max_m,
                 floor=floor,
+                road_edges=envelope.road_edges,
             )
         except ValueError:
             # A room collapsed to nothing — a tree deep enough that a leaf got a
@@ -161,12 +189,34 @@ def solve(
 
     scored.sort(key=lambda row: (row[0], row[1]))
 
+    # Stage A's rank is a poor predictor of post-tuning quality in one specific way,
+    # and the road constraint is where it bites. A topology that puts the car bay on
+    # the street tends to split the boundary early, which leaves narrow leaves — and
+    # narrow leaves are exactly what Stage B fixes. So road-legal topologies rank badly
+    # on a score that counts a defect the next stage removes, never reach the tuning
+    # shortlist, and the pipeline returns a plan with an unreachable garage while a
+    # better one sits at rank 200. Measured: 143 of 900 topologies on a 30x50 put both
+    # road rooms on the street, and the best of them tuned to a *lower* penalty than
+    # the plan actually returned.
+    #
+    # They are *added* to the shortlist, never promoted above it. Ordering the whole
+    # shortlist by road-legality first was tried and is wrong: it puts a preference
+    # ahead of the lexicographic key, and 30x40 went from 3 unbuildable rooms to 5 —
+    # the precise trade CLAUDE.md forbids. Both groups get tuned and the post-tuning
+    # re-rank, which is still lexicographic, decides. A road-legal candidate wins only
+    # by being better.
+    def unreachable(row) -> bool:
+        return any("road" in reason for reason in row[2].violations)
+
+    reachable = [row for row in scored if not unreachable(row)]
+    shortlist = _interleave(scored[:TUNE_SHORTLIST], reachable[:TUNE_SHORTLIST])
+
     # Stage B. Stage A chose *which rooms neighbour which*; CP-SAT now chooses *how
     # wide*, which is the one thing a slicing tree structurally cannot: across 200
     # generated topologies on a tight ground floor, 0% broke a minimum area and 100%
     # broke a minimum width.
     tuned: list[tuple[tuple[int, float], int, Layout]] = []
-    for _, index, _, tree in scored[: max(keep, TUNE_SHORTLIST)]:
+    for _, index, _, tree in shortlist:
         dimensioned = tuning.tune(tree, envelope, weights, time_limit_s=tune_seconds)
         if dimensioned is None:
             continue  # this topology cannot be dimensioned legally; try the next
@@ -178,6 +228,7 @@ def solve(
                 x_max_m=envelope.x_max_m,
                 y_max_m=envelope.y_max_m,
                 floor=floor,
+                road_edges=envelope.road_edges,
             )
         except ValueError:
             continue
@@ -195,7 +246,7 @@ def solve(
         tuned.append(((layout.unbuildable, layout.score), index, layout))
         # Enough to choose between. Every further attempt costs a full solve, and the
         # marginal candidate rarely wins.
-        if len(tuned) >= max(keep, 3):
+        if len(tuned) >= max(keep, TUNE_KEEP):
             break
 
     if tuned:

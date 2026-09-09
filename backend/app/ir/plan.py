@@ -67,6 +67,12 @@ class RoomSpec(BaseModel):
         description="True where NBC requires light and ventilation — habitable rooms "
         "and kitchens. A constraint on the tiling, not a preference.",
     )
+    needs_road_access: bool = Field(
+        default=False,
+        description="True where the room must touch a road-facing boundary — the car "
+        "bay and the entrance. Distinct from `needs_exterior_wall`: a window can face "
+        "the neighbour, a driveway cannot.",
+    )
     floor: int = Field(default=1, description="Ground counted as 1.", ge=1, le=4)
 
     @model_validator(mode="after")

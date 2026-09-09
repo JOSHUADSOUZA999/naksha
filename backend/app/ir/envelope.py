@@ -57,6 +57,13 @@ class Envelope(DerivedFieldsAreOutputOnly):
         le=4,
     )
     road_width_m: float = Field(description="Abutting road width the caps were read from.", gt=0)
+    road_edges: list[Facing] = Field(
+        min_length=1,
+        description="Which compass edges front a road, largest setback first. Required "
+        "rather than defaulted: the setbacks above were computed from these, so an "
+        "envelope that cannot say where the street is was never buildable in the first "
+        "place. Stage \u2464 needs them to keep the car bay and the entrance reachable.",
+    )
 
     ruleset: str = Field(description="Which rule revision produced this, as 'name@hash'.")
     authority: str = Field(description="Whose bye-laws, e.g. 'BBMP'.")

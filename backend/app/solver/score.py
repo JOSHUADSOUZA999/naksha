@@ -24,6 +24,18 @@ from app.ir.plan import Program
 EPSILON = 1e-6
 
 ILLEGAL = 100.0
+# Just under ILLEGAL, and deliberately not a round fraction of it. A car bay the
+# driveway cannot reach does not satisfy the parking requirement that put it in the
+# programme, so it is much worse than an awkward aspect ratio — but it does not make
+# the *room* unlawful, and `unbuildable` means "below a statutory minimum". Keeping it
+# below 100 keeps that counter honest while still outranking everything soft.
+#
+# Measured across the four reference briefs at 40 / 90 / 200. At 40 the road defect
+# survives on two briefs, outvoted by sector and adjacency terms. At 90 the 40x60 goes
+# to zero road violations *and* its other penalties fall 240 → 120, so it is not a
+# trade. At 200 the 30x50 also clears, but pays 195 → 270 for it — buying the last
+# case with plans that are worse everywhere else.
+INACCESSIBLE = 90.0
 STRUCTURAL = 40.0
 PREFERENCE = 5.0
 
@@ -102,6 +114,23 @@ def score(layout: Layout, program: Program) -> tuple[int, float, list[str]]:
                 STRUCTURAL,
                 f"{spec.id} has no external wall, so no window",
             )
+        # The plan has to meet the street. Nothing measured this until now: stage ②
+        # reads `road_edges` carefully enough to set a different setback per edge, and
+        # then stage ⑤ placed the car bay wherever the tree happened to leave a gap —
+        # on a 30x50 that put an 18 m² garage in the interior south-west, with no
+        # route to it. Gap-free, legal, correctly scored, and a car cannot get in.
+        #
+        # INACCESSIBLE rather than ILLEGAL: the bye-laws size a garage, they do not
+        # say which wall it touches, and `unbuildable` is reserved for a room below a
+        # statutory floor. Nowhere near a PREFERENCE either — a driveway through the
+        # neighbour's plot is not a matter of taste.
+        if spec.needs_road_access and layout.road_edges:
+            if not _on_a_road_edge(placed, layout):
+                fail(
+                    INACCESSIBLE,
+                    f"{spec.id} does not reach the "
+                    f"{'/'.join(e.value for e in layout.road_edges)} road",
+                )
         if spec.sector is not None:
             actual = layout.sector_of(placed)
             if actual is not spec.sector:
@@ -124,6 +153,25 @@ def score(layout: Layout, program: Program) -> tuple[int, float, list[str]]:
             fail(weight, f"{edge.a} does not reach {edge.b}")
 
     return unbuildable, total, reasons
+
+
+def _on_a_road_edge(placed, layout: Layout) -> bool:
+    """Does the room touch one of the boundaries that fronts a road?
+
+    Stricter than `_on_the_boundary`, and the difference is the whole point: a room on
+    the rear wall has an external wall and no street. A corner plot has two road edges
+    and touching either one is enough.
+    """
+    from app.ir.enums import Facing
+    from app.ir.layout import TOLERANCE_M
+
+    reaches = {
+        Facing.NORTH: abs(placed.y_max_m - layout.y_max_m) <= TOLERANCE_M,
+        Facing.SOUTH: abs(placed.y_min_m - layout.y_min_m) <= TOLERANCE_M,
+        Facing.EAST: abs(placed.x_max_m - layout.x_max_m) <= TOLERANCE_M,
+        Facing.WEST: abs(placed.x_min_m - layout.x_min_m) <= TOLERANCE_M,
+    }
+    return any(reaches.get(edge, False) for edge in layout.road_edges)
 
 
 def _on_the_boundary(placed, layout: Layout) -> bool:

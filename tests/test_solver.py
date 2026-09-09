@@ -485,3 +485,90 @@ class TestOversizeIsADefect:
         )
         _, _, reasons = _s.score(layout, program)
         assert not any("x the" in r for r in reasons), reasons
+
+
+class TestTheHouseMeetsTheStreet:
+    """A car bay the driveway cannot reach is not a bay.
+
+    Stage ② reads `road_edges` carefully enough to set a different setback per edge,
+    and until this existed stage ⑤ then placed the garage wherever the tree left a
+    gap. The defect is invisible in every aggregate — gap-free, legal, correctly
+    scored — and obvious the moment anyone looks at the drawing.
+    """
+
+    def test_solve_tells_the_layout_where_the_street_is(self, case):
+        """The check is skipped when `road_edges` is empty, so the wiring is the risk.
+
+        This is the shape of the bug that killed Stage B for months: a constraint that
+        silently does nothing because nobody passed it the data it needs.
+        """
+        program, envelope = case
+        layout = solve(program, envelope, seed=3)[0]
+        assert layout.road_edges == envelope.road_edges
+        assert layout.road_edges, "the envelope itself must know its road edges"
+
+    def test_a_room_on_the_wrong_boundary_is_not_road_access(self, case):
+        """`needs_exterior_wall` and `needs_road_access` are different questions.
+
+        A room on the rear wall has a window and no street, and conflating the two
+        would score that as reachable.
+        """
+        from app.ir.enums import Facing
+        from app.solver.score import _on_a_road_edge, _on_the_boundary
+
+        program, envelope = case
+        layout = solve(program, envelope, seed=3)[0]
+        rear = layout.model_copy(update={"road_edges": [Facing.WEST]})
+        front = layout.model_copy(update={"road_edges": [Facing.EAST]})
+
+        on_east = [r for r in layout.rooms if abs(r.x_max_m - layout.x_max_m) <= TOLERANCE_M]
+        assert on_east, "the fixture should place something on the east wall"
+        probe = on_east[0]
+
+        assert _on_the_boundary(probe, layout)
+        assert _on_a_road_edge(probe, front)
+        assert not _on_a_road_edge(probe, rear)
+
+    def test_a_corner_plot_accepts_either_road(self, case):
+        from app.ir.enums import Facing
+        from app.solver.score import _on_a_road_edge
+
+        program, envelope = case
+        layout = solve(program, envelope, seed=3)[0]
+        corner = layout.model_copy(update={"road_edges": [Facing.EAST, Facing.NORTH]})
+        on_north = [r for r in layout.rooms if abs(r.y_max_m - layout.y_max_m) <= TOLERANCE_M]
+        assert on_north
+        assert _on_a_road_edge(on_north[0], corner)
+
+    def test_being_unreachable_never_counts_as_unbuildable(self, case):
+        """`unbuildable` means "below a statutory minimum" and must keep meaning it.
+
+        `INACCESSIBLE` sits under `ILLEGAL` for exactly this reason — a weight bump
+        that crossed 100 would quietly inflate the counter the CLI reports and stage
+        ④ explains.
+        """
+        from app.solver.score import ILLEGAL, INACCESSIBLE, PREFERENCE, STRUCTURAL
+
+        assert STRUCTURAL < INACCESSIBLE < ILLEGAL
+        assert PREFERENCE < STRUCTURAL
+
+        program, envelope = case
+        layout = solve(program, envelope, seed=3)[0]
+        road_defects = [v for v in layout.violations if "does not reach the" in v and "road" in v]
+        below_minimum = [v for v in layout.violations if "below the" in v]
+        assert layout.unbuildable == len(below_minimum)
+        assert all(defect not in below_minimum for defect in road_defects)
+
+    def test_the_rule_names_which_spaces_need_a_street(self, case):
+        """Decision 4 — which rooms front the road is data, not a constant in code."""
+        from app.rules import load_ruleset
+
+        spaces = load_ruleset("spaces_v1").data["spaces"]
+        assert spaces["car_parking"]["road_access"] is True
+        assert spaces["foyer"]["road_access"] is True
+        assert spaces["bedroom"]["road_access"] is False
+
+        program, _ = case
+        by_kind = {room.kind.value: room for room in program.rooms}
+        assert by_kind["car_parking"].needs_road_access
+        assert not by_kind["master_bedroom"].needs_road_access

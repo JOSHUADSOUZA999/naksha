@@ -108,6 +108,11 @@ def build_envelope(
         x_max_m=x_max,
         y_max_m=y_max,
         setbacks=setbacks,
+        # Carried, not recomputed. The setbacks above were derived from these edges,
+        # and stage ⑤ needs the same list to keep the driveway and the front door on
+        # the street — inferring it back from the setback dict would guess wrong the
+        # moment two bands happen to be equal.
+        road_edges=[geometry.snap_to_cardinal(edge) for edge in plot.road_edges],
         plot_area_sq_m=area,
         max_coverage=coverage_band["coverage"],
         # `base_far`, not `total_far`: the excess requires buying TDR, which a plot

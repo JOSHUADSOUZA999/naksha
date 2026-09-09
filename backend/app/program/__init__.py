@@ -182,6 +182,7 @@ def _spec(kind: SpaceKind, room_id: str, rules: dict[str, Any], *, floor: int) -
         max_aspect=rule["max_aspect"],
         sector=Sector(sector) if sector else None,
         needs_exterior_wall=rule["exterior_wall"],
+        needs_road_access=rule["road_access"],
         floor=floor,
     )
 

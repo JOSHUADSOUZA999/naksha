@@ -18,7 +18,7 @@ from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validat
 
 from app.ir.base import DerivedFieldsAreOutputOnly
 
-from app.ir.enums import Sector
+from app.ir.enums import Facing, Sector
 
 # Millimetre. Slicing arithmetic is float division, so exact equality is the wrong
 # test; a gap this size is not a gap, and one larger is a real defect.
@@ -118,6 +118,13 @@ class Layout(DerivedFieldsAreOutputOnly):
     x_max_m: float
     y_max_m: float
     floor: int = Field(default=1, ge=1, le=4)
+    road_edges: list[Facing] = Field(
+        default_factory=list,
+        description="Which compass edges front a road, copied from the Envelope. The "
+        "layout is the compass-aligned object, so this is where a scorer can ask "
+        "whether the car bay is reachable. Empty means the street is unknown and the "
+        "check is skipped — `solve` always populates it.",
+    )
     score: float = Field(
         default=0.0,
         description="Total penalty. Lower is better; 0.0 means every constraint met.",
