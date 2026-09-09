@@ -653,3 +653,130 @@ class TestTheHouseIsNotTheEnvelope:
         tiled = sum(placed.area_sq_m for placed in layout.rooms)
         expected = (bounds[2] - bounds[0]) * (bounds[3] - bounds[1])
         assert abs(tiled - expected) < 0.01
+
+
+class TestOneShaftThroughTheBuilding:
+    """A staircase is not a room each floor places for itself.
+
+    `plan`'s docstring used to say that by the time geometry is fixed the floors no
+    longer interact. The staircase is the counter-example: solved independently, a
+    30x40 G+1 put it at (0.73, 7.30) downstairs and (0.73, 0.98) up — two floors with
+    no way between them, and nothing in the pipeline said so.
+    """
+
+    @staticmethod
+    def _two_storeys():
+        """A G+1 with slack in it.
+
+        Deliberately not the 30x40 that *forces* G+1: that plot is 98% packed, so
+        hill-climbing cannot move anything without pushing a room below its minimum,
+        and it would test the packing problem rather than the stacking one.
+        """
+        from app.ir.enums import SpaceKind
+        from app.ir.plan import Program, RoomSpec
+        from app.rules import load_ruleset
+
+        brief = fallback.parse("40x60 4bhk in Bengaluru with study")
+        envelope = build_envelope(brief, allow_unverified=True)
+        program = expand(brief, envelope)
+
+        upstairs, moved = [], 0
+        for room in program.rooms:
+            if room.kind is SpaceKind.BEDROOM and moved < 2:
+                upstairs.append(room.model_copy(update={"floor": 2}))
+                moved += 1
+            else:
+                upstairs.append(room)
+
+        spec = load_ruleset("spaces_v1").data["spaces"]["staircase"]
+        upstairs += [
+            RoomSpec(
+                id=f"stair{floor}", kind=SpaceKind.STAIRCASE, floor=floor,
+                min_area_sq_m=spec["min_area_sq_m"],
+                target_area_sq_m=spec["target_area_sq_m"],
+                min_width_m=spec["min_width_m"], max_aspect=spec["max_aspect"],
+            )
+            for floor in (1, 2)
+        ]
+        ids = {room.id for room in upstairs}
+        stacked = Program(
+            rooms=upstairs,
+            adjacencies=[e for e in program.adjacencies if {e.a, e.b} <= ids],
+        )
+        return brief, envelope, stacked
+
+    @staticmethod
+    def _stairs(bundle):
+        return {
+            layout.floor: placed
+            for layout in bundle.layouts
+            for placed in layout.rooms
+            if placed.room_id.startswith("stair")
+        }
+
+    def test_the_staircase_lands_on_the_one_below(self):
+        from app.solver import plan
+        from app.solver.score import _overlap
+
+        brief, envelope, program = self._two_storeys()
+        stairs = self._stairs(plan(brief, envelope, program, seed=7))
+
+        assert set(stairs) == {1, 2}, "the fixture must produce two storeys"
+        assert _overlap(stairs[1], stairs[2]) >= 0.75
+
+    def test_a_misaligned_shaft_is_reported_rather_than_drawn_silently(self):
+        """The 30x40 that forces G+1 cannot satisfy this, and must say so.
+
+        It is 98% packed, so there is no swap that moves the stair without breaking a
+        minimum. That is the packing problem, and the right behaviour is a violation a
+        person can read — not a plan that looks fine and has no way upstairs.
+        """
+        from app.solver import plan
+
+        brief = fallback.parse("30x40 4bhk g+1 in Bengaluru with study and car parking")
+        envelope = build_envelope(brief, allow_unverified=True)
+        program = expand(brief, envelope)
+        bundle = plan(brief, envelope, program, seed=7)
+
+        assert len(bundle.layouts) == 2, "this brief must force a second storey"
+        complaints = [
+            v for layout in bundle.layouts for v in layout.violations
+            if "floor below" in v or "no floor above" in v
+        ]
+        assert complaints
+
+    def test_the_shaft_is_keyed_by_kind_because_ids_differ_per_floor(self):
+        """Stage ③ names it `stair1` downstairs and `stair2` up.
+
+        The first version keyed the carried-forward rectangle by room id, matched
+        nothing, and reported a perfectly aligned building that was not one.
+        """
+        from app.ir.enums import SpaceKind
+
+        _, _, program = self._two_storeys()
+        ids = {room.id for room in program.rooms if room.kind is SpaceKind.STAIRCASE}
+        assert len(ids) == 2, "the two storeys' staircases are different rooms"
+
+    def test_a_shaft_may_not_rise_where_there_is_no_floor_above(self):
+        """Each storey is sized to its own programme, so the upper one is usually the
+        smaller rectangle. The stair cannot live in the difference — under it is sky."""
+        from app.solver import _shaft_zone, footprint
+
+        _, envelope, program = self._two_storeys()
+        zone = _shaft_zone(program, envelope, [1, 2])
+        assert zone is not None
+
+        for floor in (1, 2):
+            x_min, y_min, x_max, y_max = footprint(envelope, program.on_floor(floor))
+            assert zone[0] >= x_min - TOLERANCE_M and zone[1] >= y_min - TOLERANCE_M
+            assert zone[2] <= x_max + TOLERANCE_M and zone[3] <= y_max + TOLERANCE_M
+
+    def test_a_single_storey_house_has_no_zone_to_honour(self):
+        """No constraint where there is nothing to stack — a bungalow's stair, if it
+        somehow had one, is not confined to anything."""
+        from app.solver import _shaft_zone
+
+        brief = fallback.parse("30x50 3bhk in Bengaluru")
+        envelope = build_envelope(brief, allow_unverified=True)
+        program = expand(brief, envelope)
+        assert _shaft_zone(program, envelope, [1]) is None

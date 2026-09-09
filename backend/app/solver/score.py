@@ -11,7 +11,7 @@ of a room with an awkward aspect ratio, it is a different kind of failure.
 
 from __future__ import annotations
 
-from app.ir.enums import Relation
+from app.ir.enums import Relation, SpaceKind
 from app.ir.layout import Layout
 from app.ir.plan import Program
 
@@ -36,6 +36,12 @@ ILLEGAL = 100.0
 # trade. At 200 the 30x50 also clears, but pays 195 → 270 for it — buying the last
 # case with plans that are worse everywhere else.
 INACCESSIBLE = 90.0
+
+# How much of the smaller footprint two stacked rooms must share to count as the same
+# shaft. Not 1.0: the floors tile independently, so the rectangles are never identical
+# to the centimetre, and demanding that would reject every candidate. Not much lower
+# either — at half, a "staircase" whose flights miss each other by a metre passes.
+ALIGNMENT = 0.75
 STRUCTURAL = 40.0
 PREFERENCE = 5.0
 
@@ -131,6 +137,37 @@ def score(layout: Layout, program: Program) -> tuple[int, float, list[str]]:
                     f"{spec.id} does not reach the "
                     f"{'/'.join(e.value for e in layout.road_edges)} road",
                 )
+        # A staircase that does not sit above the one below is not a staircase, it is
+        # two holes in two floors. `plan` fixes the shaft on the ground floor and every
+        # storey above is scored against it — the same weight as an unreachable car
+        # bay, because it is the same kind of defect: a thing that cannot be got to.
+        #
+        # Keyed by kind. Stage ③ names the staircase `stair1` downstairs and `stair2`
+        # up, so the first version keyed on room id, matched nothing, and reported a
+        # perfectly aligned building that was not one.
+        #
+        # Hill-climbing is what actually fixes it. `improve` swaps which room occupies
+        # which rectangle without touching the geometry, so a scored misalignment lets
+        # it move the staircase onto the shaft whenever the tiling has a rectangle
+        # there — which is why this is a penalty rather than a constraint on the tree.
+        # And it has to rise somewhere the building actually is. A 30x40 G+1 put the
+        # ground-floor stair at y 7.30-8.70 while the upper storey's footprint stopped
+        # at 6.99 — under the shaft was open sky, so no arrangement upstairs could ever
+        # have aligned with it. Scoring alignment alone chased a placement that did not
+        # exist; the zone is what makes one possible.
+        if spec.kind is SpaceKind.STAIRCASE and layout.shaft_zone is not None:
+            if not _inside(placed, layout.shaft_zone):
+                fail(
+                    INACCESSIBLE,
+                    f"{spec.id} rises through part of the plan that has no floor above",
+                )
+        target = layout.shafts.get(spec.kind)
+        if target is not None and _overlap(placed, target) < ALIGNMENT:
+            fail(
+                INACCESSIBLE,
+                f"{spec.id} does not land on the {spec.kind.value.replace('_', ' ')} "
+                f"on the floor below",
+            )
         if spec.sector is not None:
             actual = layout.sector_of(placed)
             if actual is not spec.sector:
@@ -153,6 +190,26 @@ def score(layout: Layout, program: Program) -> tuple[int, float, list[str]]:
             fail(weight, f"{edge.a} does not reach {edge.b}")
 
     return unbuildable, total, reasons
+
+
+def _inside(placed, zone: tuple[float, float, float, float]) -> bool:
+    """Is the room wholly within the zone? Whole, not mostly — half a stair is none."""
+    x_min, y_min, x_max, y_max = zone
+    return (
+        placed.x_min_m >= x_min - EPSILON
+        and placed.y_min_m >= y_min - EPSILON
+        and placed.x_max_m <= x_max + EPSILON
+        and placed.y_max_m <= y_max + EPSILON
+    )
+
+
+def _overlap(a, b) -> float:
+    """Shared area as a fraction of the smaller room. 0.0 when they miss entirely."""
+    wide = min(a.x_max_m, b.x_max_m) - max(a.x_min_m, b.x_min_m)
+    tall = min(a.y_max_m, b.y_max_m) - max(a.y_min_m, b.y_min_m)
+    if wide <= 0 or tall <= 0:
+        return 0.0
+    return (wide * tall) / min(a.area_sq_m, b.area_sq_m)
 
 
 def _on_a_road_edge(placed, layout: Layout) -> bool:

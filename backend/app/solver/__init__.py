@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import random
 
+from app.ir.enums import SpaceKind
 from app.ir.envelope import Envelope
 from app.ir.layout import Layout
 from app.ir.plan import Program
@@ -126,6 +127,35 @@ def footprint(
     return (envelope.x_max_m - depth, envelope.y_min_m, envelope.x_max_m, envelope.y_max_m)
 
 
+def _shaft_zone(
+    program: Program, envelope: Envelope, floors: list[int]
+) -> tuple[float, float, float, float] | None:
+    """The intersection of every storey's footprint, or None for a single-storey house.
+
+    Each floor is sized to its own programme, so an upper storey is usually the smaller
+    rectangle — which is right, and is what leaves a terrace. The staircase is the one
+    space that cannot live in the difference.
+    """
+    if len(floors) < 2:
+        return None
+
+    rects = [footprint(envelope, program.on_floor(floor)) for floor in floors]
+    zone = (
+        max(r[0] for r in rects), max(r[1] for r in rects),
+        min(r[2] for r in rects), min(r[3] for r in rects),
+    )
+    # Degenerate means the storeys barely overlap, which is a stacking problem stage ③
+    # owns. Returning None declines to add an unsatisfiable constraint on top of it.
+    if zone[2] - zone[0] <= 0 or zone[3] - zone[1] <= 0:
+        return None
+    return zone
+
+
+def _kinds(program: Program) -> dict:
+    """Room id to `SpaceKind`. Which rooms stack is a property of the kind, not the id."""
+    return {room.id: room.kind for room in program.rooms}
+
+
 def _interleave(primary: list, secondary: list) -> list:
     """Merge two ranked shortlists, best-first, alternating, without duplicates.
 
@@ -201,6 +231,8 @@ def solve(
     envelope: Envelope,
     *,
     floor: int = 1,
+    shafts: dict | None = None,
+    shaft_zone: tuple | None = None,
     candidates: int = DEFAULT_CANDIDATES,
     seed: int = 0,
     keep: int = 1,
@@ -242,6 +274,8 @@ def solve(
                 y_max_m=y_max_m,
                 floor=floor,
                 road_edges=envelope.road_edges,
+                shafts=shafts or {},
+                shaft_zone=shaft_zone,
             )
         except ValueError:
             # A room collapsed to nothing — a tree deep enough that a leaf got a
@@ -306,6 +340,8 @@ def solve(
                 y_max_m=y_max_m,
                 floor=floor,
                 road_edges=envelope.road_edges,
+                shafts=shafts or {},
+                shaft_zone=shaft_zone,
             )
         except ValueError:
             continue
@@ -352,18 +388,44 @@ def plan(
     """Solve every floor and bundle the result for a viewer.
 
     One `solve` per floor because each storey is its own rectangle — stacking is
-    stage ③'s decision, and by the time geometry is being fixed the floors no longer
-    interact. Floors that produced nothing are dropped rather than represented by an
-    empty layout, which would draw as a blank page rather than as an absence.
+    stage ③'s decision. Floors that produced nothing are dropped rather than
+    represented by an empty layout, which would draw as a blank page rather than as an
+    absence.
+
+    **They do interact, in exactly one place.** This docstring used to say that by the
+    time geometry is fixed the floors no longer do, and the staircase is the
+    counter-example: it is one shaft through both storeys, not a room each floor places
+    for itself. Solved independently, a 30x40 G+1 put it at (0.73, 7.30) downstairs and
+    (0.73, 0.98) upstairs — two floors with no way between them. So the floors are
+    solved bottom-up and each one hands the shaft to the next.
     """
     from app.ir.layout import PlanBundle
 
     floors = sorted({room.floor for room in program.rooms})
+    # Where a shaft may rise: the rectangle every storey has in common. Computed before
+    # anything is solved, because the ground floor has to honour it too — it is the
+    # floor that decides where the stair goes, and it cannot decide well without
+    # knowing how far the storey above reaches.
+    zone = _shaft_zone(program, envelope, floors)
+
     layouts = []
+    fixed: dict = {}
     for floor in floors:
-        best = solve(program, envelope, floor=floor, candidates=candidates, seed=seed)
-        if best:
-            layouts.append(best[0])
+        best = solve(
+            program, envelope, floor=floor, candidates=candidates, seed=seed,
+            shafts=fixed, shaft_zone=zone,
+        )
+        if not best:
+            continue
+        layouts.append(best[0])
+        # Carry the shaft upward. Whatever this storey decided about the staircase is
+        # no longer negotiable — the floor above is scored against it.
+        kinds = _kinds(program)
+        fixed = {
+            kinds[placed.room_id]: placed
+            for placed in best[0].rooms
+            if kinds.get(placed.room_id) is SpaceKind.STAIRCASE
+        }
 
     return PlanBundle(
         brief_text=brief.raw_text,

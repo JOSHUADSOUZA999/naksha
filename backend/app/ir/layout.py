@@ -18,7 +18,7 @@ from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validat
 
 from app.ir.base import DerivedFieldsAreOutputOnly
 
-from app.ir.enums import Facing, Sector
+from app.ir.enums import Facing, Sector, SpaceKind
 
 # Millimetre. Slicing arithmetic is float division, so exact equality is the wrong
 # test; a gap this size is not a gap, and one larger is a real defect.
@@ -118,6 +118,21 @@ class Layout(DerivedFieldsAreOutputOnly):
     x_max_m: float
     y_max_m: float
     floor: int = Field(default=1, ge=1, le=4)
+    shafts: dict[SpaceKind, PlacedRoom] = Field(
+        default_factory=dict,
+        description="Spaces the storey below already fixed, keyed by **kind**, not by "
+        "id. A staircase is the one space that cannot be re-placed per floor — it is "
+        "one shaft through the building — and stage ③ gives it a different id on every "
+        "storey (`stair1`, `stair2`), so an id is exactly the wrong key. Empty on the "
+        "ground floor and on any floor solved alone.",
+    )
+    shaft_zone: tuple[float, float, float, float] | None = Field(
+        default=None,
+        description="The rectangle every storey has in common, as (x_min, y_min, "
+        "x_max, y_max). A staircase must sit inside it — a shaft can only rise through "
+        "the part of the building that exists on each floor above. None when the "
+        "building has one storey, or when a floor is solved alone.",
+    )
     road_edges: list[Facing] = Field(
         default_factory=list,
         description="Which compass edges front a road, copied from the Envelope. The "
