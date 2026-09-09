@@ -127,6 +127,90 @@ def footprint(
     return (envelope.x_max_m - depth, envelope.y_min_m, envelope.x_max_m, envelope.y_max_m)
 
 
+def shortlist_for(
+    program: Program,
+    rooms: list,
+    bounds: tuple[float, float, float, float],
+    weights: dict,
+    envelope: Envelope,
+    *,
+    floor: int = 1,
+    seed: int = 0,
+    candidates: int = DEFAULT_CANDIDATES,
+    shafts: dict | None = None,
+    shaft_zone: tuple | None = None,
+) -> list:
+    """Generate topologies, rank them, and return the ones worth tuning.
+
+    Shared by `solve` and stage ④'s feasibility probe, and shared deliberately. They
+    had drifted apart twice: the probe first tuned *unranked* trees, and then ranked
+    without the adjacency graph or the road-legal interleave. Both times it measured a
+    search nobody performs and reported plots infeasible that `solve` then solved with
+    zero unbuildable rooms. One function is the only way they stay honest about each
+    other.
+    """
+    rng = random.Random(seed)
+    scored: list[tuple[tuple[int, float], int, Layout, slicing.Node]] = []
+
+    for index in range(candidates):
+        tree = slicing.random_tree(rooms, rng, weights)
+        placed = slicing.place(tree, *bounds)
+        try:
+            layout = Layout(
+                rooms=placed,
+                x_min_m=bounds[0],
+                y_min_m=bounds[1],
+                x_max_m=bounds[2],
+                y_max_m=bounds[3],
+                floor=floor,
+                road_edges=envelope.road_edges,
+                shafts=shafts or {},
+                shaft_zone=shaft_zone,
+            )
+        except ValueError:
+            # A room collapsed to nothing — a tree deep enough that a leaf got a
+            # sliver. Cheaper to discard the candidate than to constrain the
+            # generator, since generating another costs microseconds.
+            continue
+
+        hard, penalty, reasons = _score.score(layout, program)
+        scored.append(
+            (
+                (hard, penalty),
+                index,
+                layout.model_copy(
+                    update={"score": penalty, "unbuildable": hard, "violations": reasons}
+                ),
+                tree,
+            )
+        )
+
+    scored.sort(key=lambda row: (row[0], row[1]))
+
+    # Stage A's rank is a poor predictor of post-tuning quality in one specific way,
+    # and the road constraint is where it bites. A topology that puts the car bay on
+    # the street tends to split the boundary early, which leaves narrow leaves — and
+    # narrow leaves are exactly what Stage B fixes. So road-legal topologies rank badly
+    # on a score that counts a defect the next stage removes, never reach the tuning
+    # shortlist, and the pipeline returns a plan with an unreachable garage while a
+    # better one sits at rank 200. Measured: 143 of 900 topologies on a 30x50 put both
+    # road rooms on the street, and the best of them tuned to a *lower* penalty than
+    # the plan actually returned.
+    #
+    # They are *added* to the shortlist, never promoted above it. Ordering the whole
+    # shortlist by road-legality first was tried and is wrong: it puts a preference
+    # ahead of the lexicographic key, and 30x40 went from 3 unbuildable rooms to 5 —
+    # the precise trade CLAUDE.md forbids. Both groups get tuned and the post-tuning
+    # re-rank, which is still lexicographic, decides. A road-legal candidate wins only
+    # by being better.
+    def unreachable(row) -> bool:
+        return any("road" in reason for reason in row[2].violations)
+
+    reachable = [row for row in scored if not unreachable(row)]
+    shortlist = _interleave(scored[:TUNE_SHORTLIST], reachable[:TUNE_SHORTLIST])
+    return shortlist
+
+
 def _shaft_zone(
     program: Program, envelope: Envelope, floors: list[int]
 ) -> tuple[float, float, float, float] | None:
@@ -259,65 +343,11 @@ def solve(
     # push a room below the floor feasibility already cleared it at.
     weights = slicing.effective_areas(rooms, area)
 
-    rng = random.Random(seed)
-    scored: list[tuple[tuple[int, float], int, Layout, slicing.Node]] = []
-
-    for index in range(candidates):
-        tree = slicing.random_tree(rooms, rng, weights)
-        placed = slicing.place(tree, x_min_m, y_min_m, x_max_m, y_max_m)
-        try:
-            layout = Layout(
-                rooms=placed,
-                x_min_m=x_min_m,
-                y_min_m=y_min_m,
-                x_max_m=x_max_m,
-                y_max_m=y_max_m,
-                floor=floor,
-                road_edges=envelope.road_edges,
-                shafts=shafts or {},
-                shaft_zone=shaft_zone,
-            )
-        except ValueError:
-            # A room collapsed to nothing — a tree deep enough that a leaf got a
-            # sliver. Cheaper to discard the candidate than to constrain the
-            # generator, since generating another costs microseconds.
-            continue
-
-        hard, penalty, reasons = _score.score(layout, program)
-        scored.append(
-            (
-                (hard, penalty),
-                index,
-                layout.model_copy(
-                    update={"score": penalty, "unbuildable": hard, "violations": reasons}
-                ),
-                tree,
-            )
-        )
-
-    scored.sort(key=lambda row: (row[0], row[1]))
-
-    # Stage A's rank is a poor predictor of post-tuning quality in one specific way,
-    # and the road constraint is where it bites. A topology that puts the car bay on
-    # the street tends to split the boundary early, which leaves narrow leaves — and
-    # narrow leaves are exactly what Stage B fixes. So road-legal topologies rank badly
-    # on a score that counts a defect the next stage removes, never reach the tuning
-    # shortlist, and the pipeline returns a plan with an unreachable garage while a
-    # better one sits at rank 200. Measured: 143 of 900 topologies on a 30x50 put both
-    # road rooms on the street, and the best of them tuned to a *lower* penalty than
-    # the plan actually returned.
-    #
-    # They are *added* to the shortlist, never promoted above it. Ordering the whole
-    # shortlist by road-legality first was tried and is wrong: it puts a preference
-    # ahead of the lexicographic key, and 30x40 went from 3 unbuildable rooms to 5 —
-    # the precise trade CLAUDE.md forbids. Both groups get tuned and the post-tuning
-    # re-rank, which is still lexicographic, decides. A road-legal candidate wins only
-    # by being better.
-    def unreachable(row) -> bool:
-        return any("road" in reason for reason in row[2].violations)
-
-    reachable = [row for row in scored if not unreachable(row)]
-    shortlist = _interleave(scored[:TUNE_SHORTLIST], reachable[:TUNE_SHORTLIST])
+    shortlist = shortlist_for(
+        program, rooms, (x_min_m, y_min_m, x_max_m, y_max_m), weights, envelope,
+        floor=floor, seed=seed, candidates=candidates,
+        shafts=shafts, shaft_zone=shaft_zone,
+    )
 
     # Stage B. Stage A chose *which rooms neighbour which*; CP-SAT now chooses *how
     # wide*, which is the one thing a slicing tree structurally cannot: across 200
@@ -371,7 +401,8 @@ def solve(
     # its violations intact rather than nothing: a plan the user can see is wrong
     # beats a blank screen that does not say why.
     polished = [
-        (improve(layout, program), index) for _, index, layout, _ in scored[: max(keep, IMPROVE_SHORTLIST)]
+        (improve(layout, program), index)
+        for _, index, layout, _ in shortlist[: max(keep, IMPROVE_SHORTLIST)]
     ]
     polished.sort(key=lambda row: (row[0].unbuildable, row[0].score, row[1]))
     return [layout for layout, _ in polished[:keep]]

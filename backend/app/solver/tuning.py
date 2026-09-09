@@ -19,18 +19,31 @@ Stage A should not have proposed, and the caller tries the next.
 
 from __future__ import annotations
 
+import functools
 import math
 
 from ortools.sat.python import cp_model
 
 from app.ir.layout import PlacedRoom
 from app.ir.plan import RoomSpec
+from app.rules import load_ruleset
 
 from .slicing import Cut, Leaf, Node
 
 # Centimetres. Millimetres would make the area products needlessly large for a
 # precision nobody can build to, and metres cannot be integers.
 _PER_M = 100
+
+
+@functools.lru_cache(maxsize=1)
+def _exterior_half() -> float:
+    """Half the exterior wall thickness, from the ruleset stage ⑥ draws with.
+
+    Loaded lazily: `load_ruleset` warns while a ruleset carries unchecked figures, and
+    a module-level call fires that warning on import — before any caller has decided
+    whether it cares.
+    """
+    return load_ruleset("refine_v1").data["walls"]["exterior_thickness_m"] / 2
 
 
 def tune(
@@ -144,7 +157,14 @@ def _build(model, node: Node, x0, x1, y0, y1, leaves: list) -> None:
     """
     if isinstance(node, Leaf):
         spec = node.room
-        floor_cm = max(1, round(spec.min_width_m * _PER_M))
+        # Gross, not clear. The model dimensions rectangles that run to wall
+        # centrelines while the minimums are internal, so every leaf carries an
+        # allowance for the walls around it. Conservative — the exterior thickness on
+        # every side — because which sides land on the boundary is not known until the
+        # tree is placed, and over-allowing costs a few centimetres while under-
+        # allowing produces a room that is illegal and says it is not.
+        allow = 2 * _exterior_half()
+        floor_cm = max(1, round((spec.min_width_m + allow) * _PER_M))
         width = model.NewIntVar(floor_cm, 10_000, f"w_{spec.id}")
         depth = model.NewIntVar(floor_cm, 10_000, f"d_{spec.id}")
         model.Add(width == x1 - x0)
@@ -152,7 +172,13 @@ def _build(model, node: Node, x0, x1, y0, y1, leaves: list) -> None:
 
         area = model.NewIntVar(0, 100_000_000, f"a_{spec.id}")
         model.AddMultiplicationEquality(area, [width, depth])
-        model.Add(area >= round(spec.min_area_sq_m * _PER_M * _PER_M))
+        # The clear area of a w x d room is (w - allow)(d - allow). Bounding the gross
+        # area alone cannot express that, so the floor is the minimum grown by the
+        # allowance on the squarest room that could satisfy it — enough to keep CP-SAT
+        # honest, with `score` doing the exact per-side check afterwards.
+        side = math.sqrt(spec.min_area_sq_m)
+        gross_min = (side + allow) * (side + allow)
+        model.Add(area >= round(gross_min * _PER_M * _PER_M))
 
         # Aspect both ways, scaled to stay integral. Linear, unlike area.
         ratio = max(1, round(spec.max_aspect * 100))

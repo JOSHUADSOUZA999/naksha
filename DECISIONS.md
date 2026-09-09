@@ -7,45 +7,52 @@ Append-only. Why the code is shaped the way it is, what broke, and what is still
 
 ## Open questions — these need you, not me
 
-**8. Every plan we call legal has rooms below their statutory minimums.** Found by
-building stage ⑥, and it is the most consequential thing in this file.
+**8. ~~Every plan we call legal has rooms below their statutory minimums.~~ Fixed —
+and it did not need the decision I asked for.**
 
-Stage ⑤ checks `min_area_sq_m` and `min_width_m` against its own rectangles, and those
-run to **wall centrelines**. The bye-laws mean **clear internal** size: a 2.1 m minimum
-bedroom width is 2.1 m of floor, not 2.1 m between wall centres. So the legality check
-is optimistic by half a wall on each side, on every room, systematically.
+Stage ⑤ checked `min_area_sq_m` and `min_width_m` against rectangles that run to **wall
+centrelines**, while the bye-laws mean **clear internal** size. Every legality check was
+optimistic by half a wall on each side, systematically. Three of the four reference
+briefs reported a clean plan and carried six or seven rooms below a minimum.
 
-Measured across the four reference briefs, at 230 mm exterior and 115 mm interior:
+I wrote this up as a product decision on the grounds that tightening the minimums might
+make a 30x40 3BHK infeasible outright. **That was speculation, and this file's own rule
+is that options are measured, not guessed.** Measured:
 
-| brief | unbuildable by tiling | below a minimum once walls are real |
-|---|---|---|
-| 30x40 3BHK | 3 | **16** |
-| 30x50 3BHK | **0** | **7** |
-| 40x60 3BHK | **0** | **6** |
-| 50x80 4BHK | **0** | **7** |
+| brief | before | after | clean solves, 6 seeds |
+|---|---|---|---|
+| 30x40 3BHK | 3 unbuildable, 16 breaches | 8 unbuildable, 8 breaches | 0 / 6 |
+| 30x50 3BHK | 0 unbuildable, **7 breaches** | 0, **0** | 1 / 6 |
+| 40x60 3BHK | 0 unbuildable, **6 breaches** | 0, **0** | 6 / 6 |
+| 50x80 4BHK | 0 unbuildable, **7 breaches** | 0, **0** | 6 / 6 |
 
-Walls take about 10% of the floor area on a 40x60 — 112.9 m² tiled against 102.1 m²
-clear. Three of the four briefs report a clean plan and are not one.
+There was no trade to make. Two of the three plots that mattered were always legally
+buildable — the solver simply did not know what it was solving for. `score` now measures
+each side inside its own wall (exterior on the boundary, partition elsewhere, the same
+rule `refine._clear_rect` uses) and Stage B carries a conservative allowance because it
+cannot know which sides land on the boundary until the tree is placed.
 
-**The fix is not subtle, it is just expensive.** Stage ⑤ has to solve against *gross*
-minimums: the clear figure plus a wall allowance, ~0.115 m per dimension for an interior
-room and ~0.23 m where it meets the boundary. The difficulty is that the allowance
-depends on which walls a room ends up against, which is not known until it is placed —
-so it is either a conservative constant (tightening every room, including the ones that
-did not need it) or a second pass.
+**Only the 30x40 got worse, and honestly so:** it now reports eight rooms it cannot
+build rather than three. The plot was never solvable; the old number was just a smaller
+lie. That returns the question to where it belongs — the car porch, VERIFY.md Q1.
 
-**Why it is yours and not mine.** It tightens every brief at once, and the plots that
-matter most are already the tightest: a 30x40 is 98% packed before this, and adding
-115 mm to every room's minimum may make it infeasible outright. That is a product
-decision — whether naksha refuses a 30x40 3BHK honestly, or keeps producing plans that
-need a draughtsman to fix. Both are defensible; the current behaviour, which is to claim
-legality it does not have, is not.
+**Two things fell out of it.**
 
-**Not silently changed.** `refine.breaches()` reports every one and the CLI prints them
-under `[walls]`, so the discrepancy is visible while the decision is open. Room labels
-in the SVG now show clear area rather than the tiled figure, which is the number a
-person should be reading anyway.
+*The 30x50 is marginal, not comfortable.* It solves cleanly on 1 seed in 6. That was
+invisible while the check was wrong.
 
+*The feasibility verdict was compounding a probability it no longer had.* "5 in 60, and
+⑤ tries 24, so 88%" needs those 24 to be independent draws, and they stopped being draws
+when the shortlist became ranked. Stage ④ now runs the same ranked shortlist stage ⑤
+does and counts how many of *those* come out legal. The counts separate the briefs
+where the compounded rate did not — 0 / 0 / 4 / 1 against clean solves of 0 / 1 / 6 / 6.
+The old formula called the 50x80 undependable at 71% while it laid out cleanly every
+time.
+
+*And the probe and the solver had drifted apart twice* — first tuning unranked trees,
+then ranking without the adjacency graph or the road interleave. `solver.shortlist_for`
+is now the single function both call, which is the only thing that keeps them honest
+about each other.
 
 **1. FAR for Bengaluru. Blocks stage ③'s room budget.**
 Three candidates for the same 30×40 plot, none confirmed operative:

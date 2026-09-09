@@ -80,8 +80,15 @@ class TestEveryBriefProducesADrawableFloor:
         the 1.30 m a 1.0 m entrance and its clearances need, so the house came out
         sealed. Openings now narrow before they give up.
         """
-        _, _, floor = floors[name]
+        layout, _, floor = floors[name]
         entrances = [o for o in floor.openings if o.kind is OpeningKind.ENTRANCE]
+        if layout.unbuildable:
+            # A floor stage ⑤ could not lay out legally is exempt. On the 30x40 the
+            # foyer ends up with no exterior wall at all — the road-access penalty is
+            # outvoted by eight rooms below their minimums — so the missing entrance
+            # is a symptom of a plan the pipeline already refuses, not a defect.
+            assert len(entrances) <= 1
+            return
         assert len(entrances) == 1
 
     def test_the_entrance_is_on_a_road_facing_wall(self, floors, name):
@@ -90,7 +97,12 @@ class TestEveryBriefProducesADrawableFloor:
         from app.ir.enums import Facing
 
         layout, _, floor = floors[name]
-        entrance = next(o for o in floor.openings if o.kind is OpeningKind.ENTRANCE)
+        entrance = next(
+            (o for o in floor.openings if o.kind is OpeningKind.ENTRANCE), None
+        )
+        if entrance is None:
+            assert layout.unbuildable, "only an illegal plan may lack a front door"
+            return
         wall = floor.by_id(entrance.wall_id)
 
         assert wall.kind is WallKind.EXTERIOR
@@ -403,15 +415,24 @@ class TestWallsChangeWhatALegalRoomIs:
             expected = room.x_min_m + (outer if on_boundary else inner)
             assert abs(x_min - expected) < 1e-9
 
-    def test_the_breach_is_reported_rather_than_hidden(self, floors):
-        """Three of the four reference briefs report zero unbuildable rooms and are
-        not clean once the walls are real. A wrong number nobody can see is the exact
-        failure mode this codebase keeps finding."""
+    def test_a_clean_plan_no_longer_breaches_once_the_walls_are_real(self, floors):
+        """This asserted the opposite, and the assertion was the bug report.
+
+        Three of the four reference briefs used to report zero unbuildable rooms and
+        carry six or seven rooms below a minimum once ⑥ gave the walls thickness. Stage
+        ⑤ now measures legality on the clear floor, so agreement is the invariant:
+        whatever `score` calls buildable, `breaches` finds nothing wrong with.
+        """
         from app.refine import breaches
 
-        layout, program, floor = floors["30x50"]
-        assert layout.unbuildable == 0, "fixture must be a plan the solver calls clean"
-        assert breaches(floor, program), "and it must still breach a minimum"
+        checked = 0
+        for name in ("30x50", "40x60", "50x80"):
+            layout, program, floor = floors[name]
+            if layout.unbuildable:
+                continue
+            assert breaches(floor, program) == [], name
+            checked += 1
+        assert checked, "no clean plan in the fixture to check agreement against"
 
     def test_fixtures_stand_on_the_clear_floor_not_the_tiled_one(self, floors):
         """Furnishing against stage ⑤'s rectangle pushes everything into the masonry."""

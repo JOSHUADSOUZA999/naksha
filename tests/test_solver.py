@@ -258,10 +258,18 @@ class TestFloatSlack:
             id="bay", kind=SpaceKind.CAR_PARKING,
             min_area_sq_m=18.0, target_area_sq_m=18.0, min_width_m=3.0, max_aspect=2.2,
         )
-        # 3.0 x 6.0 built the way float division would produce it.
-        width = 18.0 / 6.0
-        room = PlacedRoom(room_id="bay", x_min_m=0, y_min_m=0, x_max_m=width, y_max_m=6.0)
-        layout = Layout(rooms=[room], x_min_m=0, y_min_m=0, x_max_m=width, y_max_m=6.0)
+        # A 3.0 x 6.0 *clear* bay, built the way float division would produce it. The
+        # room is the whole layout, so all four sides are exterior wall and the gross
+        # rectangle carries a full thickness in each direction — minimums are measured
+        # inside the plaster, and a fixture that ignored that would be testing the wall
+        # allowance rather than the float slack it is named for.
+        from app.solver.score import wall_allowance
+
+        outer, _ = wall_allowance()
+        width = 18.0 / 6.0 + 2 * outer
+        depth = 6.0 + 2 * outer
+        room = PlacedRoom(room_id="bay", x_min_m=0, y_min_m=0, x_max_m=width, y_max_m=depth)
+        layout = Layout(rooms=[room], x_min_m=0, y_min_m=0, x_max_m=width, y_max_m=depth)
         hard, _, reasons = scoring.score(layout, Program(rooms=[spec]))
         assert hard == 0, reasons
 
@@ -724,26 +732,40 @@ class TestOneShaftThroughTheBuilding:
         assert set(stairs) == {1, 2}, "the fixture must produce two storeys"
         assert _overlap(stairs[1], stairs[2]) >= 0.75
 
-    def test_a_misaligned_shaft_is_reported_rather_than_drawn_silently(self):
-        """The 30x40 that forces G+1 cannot satisfy this, and must say so.
+    def test_a_shaft_that_misses_the_one_below_is_scored_as_a_defect(self):
+        """Tested on the rule, not on a brief that happens to fail.
 
-        It is 98% packed, so there is no swap that moves the stair without breaking a
-        minimum. That is the packing problem, and the right behaviour is a violation a
-        person can read — not a plan that looks fine and has no way upstairs.
+        This used to assert that a 30x40 G+1 reported a misaligned shaft, and that
+        brief now stacks at 100% — tightening the minimums changed its tiling. A test
+        that depends on a particular plan being broken stops testing anything the day
+        the plan improves, so this builds the misalignment directly.
         """
-        from app.solver import plan
+        from app.ir.enums import SpaceKind
+        from app.ir.layout import Layout, PlacedRoom
+        from app.ir.plan import Program, RoomSpec
+        from app.solver import score as scoring
 
-        brief = fallback.parse("30x40 4bhk g+1 in Bengaluru with study and car parking")
-        envelope = build_envelope(brief, allow_unverified=True)
-        program = expand(brief, envelope)
-        bundle = plan(brief, envelope, program, seed=7)
+        spec = RoomSpec(
+            id="stair2", kind=SpaceKind.STAIRCASE, floor=2,
+            min_area_sq_m=1.0, target_area_sq_m=4.0, min_width_m=0.5, max_aspect=4.0,
+        )
+        here = PlacedRoom(room_id="stair2", x_min_m=0, y_min_m=0, x_max_m=6, y_max_m=6)
+        below = PlacedRoom(room_id="stair1", x_min_m=8, y_min_m=8, x_max_m=11, y_max_m=11)
 
-        assert len(bundle.layouts) == 2, "this brief must force a second storey"
-        complaints = [
-            v for layout in bundle.layouts for v in layout.violations
-            if "floor below" in v or "no floor above" in v
+        aligned = Layout(
+            rooms=[here], x_min_m=0, y_min_m=0, x_max_m=6, y_max_m=6, floor=2,
+            shafts={SpaceKind.STAIRCASE: here},
+        )
+        adrift = aligned.model_copy(update={"shafts": {SpaceKind.STAIRCASE: below}})
+
+        program = Program(rooms=[spec])
+        assert not [
+            r for r in scoring.score(aligned, program)[2] if "floor below" in r
         ]
-        assert complaints
+        complaints = [
+            r for r in scoring.score(adrift, program)[2] if "floor below" in r
+        ]
+        assert complaints, "a shaft that misses the one below must be reported"
 
     def test_the_shaft_is_keyed_by_kind_because_ids_differ_per_floor(self):
         """Stage ③ names it `stair1` downstairs and `stair2` up.

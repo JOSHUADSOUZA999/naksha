@@ -11,9 +11,12 @@ of a room with an awkward aspect ratio, it is a different kind of failure.
 
 from __future__ import annotations
 
+import functools
+
 from app.ir.enums import Relation, SpaceKind
-from app.ir.layout import Layout
+from app.ir.layout import TOLERANCE_M, Layout
 from app.ir.plan import Program
+from app.rules import load_ruleset
 
 # Illegal beats unpleasant. A room under its NBC minimum cannot be built at all; a
 # kitchen in the wrong sector is a preference a user may not share.
@@ -22,6 +25,41 @@ from app.ir.plan import Program
 # not a violation of an 18.0 m² floor. Without this the scorer invents unbuildable
 # rooms on precisely the plans it should be judging most carefully.
 EPSILON = 1e-6
+
+
+@functools.lru_cache(maxsize=1)
+def wall_allowance() -> tuple[float, float]:
+    """`(exterior, interior)` half-thicknesses, from the same ruleset stage ⑥ draws with.
+
+    Stage ⑤ has to know how thick a wall is, and that is not a coupling to ⑥ — it is
+    shared rule data. The alternative is what this codebase did until now: measure
+    legality against lines of zero width and be wrong by half a wall on every side.
+    """
+    walls = load_ruleset("refine_v1").data["walls"]
+    return walls["exterior_thickness_m"] / 2, walls["interior_thickness_m"] / 2
+
+
+def clear_dims(placed, layout: Layout) -> tuple[float, float]:
+    """`(area, shortest side)` of the floor inside the plaster.
+
+    Each side is inset by half of whatever wall is on it, and which wall that is
+    follows from position: a side on the plan's boundary is exterior, anything else is
+    a partition. The same rule `refine._clear_rect` uses, and it has to stay the same
+    rule — a solver that clears a room its own refiner then reports as illegal is worse
+    than either alone.
+    """
+    outer, inner = wall_allowance()
+
+    def inset(coordinate: float, edge: float) -> float:
+        return outer if abs(coordinate - edge) <= TOLERANCE_M else inner
+
+    width = (placed.x_max_m - placed.x_min_m) - (
+        inset(placed.x_min_m, layout.x_min_m) + inset(placed.x_max_m, layout.x_max_m)
+    )
+    depth = (placed.y_max_m - placed.y_min_m) - (
+        inset(placed.y_min_m, layout.y_min_m) + inset(placed.y_max_m, layout.y_max_m)
+    )
+    return max(0.0, width) * max(0.0, depth), max(0.0, min(width, depth))
 
 ILLEGAL = 100.0
 # Just under ILLEGAL, and deliberately not a round fraction of it. A car bay the
@@ -79,16 +117,22 @@ def score(layout: Layout, program: Program) -> tuple[int, float, list[str]]:
         spec = specs.get(placed.room_id)
         if spec is None:
             continue
-        if placed.area_sq_m < spec.min_area_sq_m - EPSILON:
+        # Measured inside the walls, because that is what the bye-laws mean. A 2.1 m
+        # minimum bedroom width is 2.1 m of floor, not 2.1 m between wall centres —
+        # and this compared centreline rectangles until stage ⑥ made the gap visible.
+        # Three of the four reference briefs reported zero unbuildable rooms and had
+        # six or seven below a minimum once the walls were real. See DECISIONS q8.
+        clear_area, clear_side = clear_dims(placed, layout)
+        if clear_area < spec.min_area_sq_m - EPSILON:
             fail(
                 ILLEGAL,
-                f"{spec.id} is {placed.area_sq_m:.1f} m², below the "
-                f"{spec.min_area_sq_m:.1f} m² minimum",
+                f"{spec.id} has {clear_area:.1f} m² of floor inside its walls, below "
+                f"the {spec.min_area_sq_m:.1f} m² minimum",
             )
-        if placed.shortest_side_m < spec.min_width_m - EPSILON:
+        if clear_side < spec.min_width_m - EPSILON:
             fail(
                 ILLEGAL,
-                f"{spec.id} is {placed.shortest_side_m:.2f} m across, below the "
+                f"{spec.id} is {clear_side:.2f} m clear across, below the "
                 f"{spec.min_width_m:.2f} m minimum width",
             )
         # Grossly oversized is a defect too, and until this existed nothing measured

@@ -22,12 +22,17 @@ from app.ir.envelope import Envelope
 from app.ir.enums import SpaceKind
 from app.ir.plan import AdjacencySpec, Program, RoomSpec
 from app.ir.layout import Layout
-from app.solver import TUNE_SHORTLIST, footprint, slicing, tuning
+from app.solver import (
+    TUNE_SHORTLIST, footprint, improve, shortlist_for, slicing, tuning,
+)
 from app.solver.score import score
 
 # Enough to tell "some topologies work" from "none do" without paying for precision
 # nobody reads. The published number is a ratio, not an estimate of the true rate.
-_PROBES = 60
+# Legal arrangements in the shortlist above which the floor has real margin. Two is
+# not a margin — it is one bad swap from none — and the reference briefs sit at 0, 0,
+# 4 and 1, so the line falls between "solvable" and "solvable with room to spare".
+_COMFORTABLE = 3
 
 # Topologies generated before ranking, matching `solve`'s DEFAULT_CANDIDATES. The probe
 # has to sample from the same pool the real search does, or its rate describes a
@@ -83,39 +88,57 @@ def assess(program: Program, envelope: Envelope, *, floor: int = 1) -> Verdict:
     if not rooms:
         return Verdict(True, floor, "nothing on this floor", [])
 
-    legal = _probe(rooms, envelope)
+    legal = _probe(rooms, envelope, program)
     needed = sum(room.min_area_sq_m for room in rooms)
     packed = needed / envelope.max_footprint_sq_m if envelope.max_footprint_sq_m else 0
 
-    rate = legal / _PROBES
-    chance = 1.0 - (1.0 - rate) ** TUNE_SHORTLIST
-    if chance >= _DEPENDABLE:
+    # **Not a probability any more, and the change is a correction.** The old verdict
+    # sampled a hit rate and compounded it — "5 in 60, and ⑤ tries 24, so 88%". That
+    # reasoning needs the 24 to be independent draws, and they stopped being draws when
+    # the shortlist became *ranked*: stage ⑤ tries the best 24, and this probe now runs
+    # that same ranked shortlist. One legal arrangement among the ones ⑤ will actually
+    # try means ⑤ finds it, deterministically, not 88% of the time.
+    #
+    # Measured against six seeds a brief, the count in the shortlist separates cleanly
+    # where the compounded rate did not: 0 / 0 / 4 / 1 legal against 0 / 1 / 6 / 6
+    # clean solves on the four reference briefs. The compounded formula called the
+    # 50x80 undependable at 71% while it laid out cleanly every single time.
+    if legal >= _COMFORTABLE:
         return Verdict(
-            True, floor, f"{legal}/{_PROBES} topologies legal, {chance:.0%} to solve", []
+            True, floor,
+            f"{legal} of the {TUNE_SHORTLIST} arrangements stage \u2464 tries come out "
+            f"legal ({packed:.0%} packed)",
+            [],
         )
 
     if legal:
-        # Possible but not dependable. The options are still worth measuring: a plot
-        # owner would rather hear "drop the separate dining and it works every time"
-        # than be handed a plan that took a hundred attempts to find.
+        # Solvable, and thin. Said plainly in the reason rather than dressed up with
+        # options: nothing is wrong yet, and offering a plot owner rooms to drop when
+        # their house fits is noise. One legal arrangement in twenty-four is a margin
+        # worth knowing about, not a problem to solve.
         return Verdict(
-            False,
-            floor,
-            f"only {legal}/{_PROBES} topologies are legal ({packed:.0%} packed) — "
-            f"stage \u2464 would find a plan about {chance:.0%} of the time",
-            _options(rooms, envelope),
+            True, floor,
+            f"only {legal} of the {TUNE_SHORTLIST} arrangements stage \u2464 tries "
+            f"comes out legal ({packed:.0%} packed) — solvable, with no margin",
+            [],
         )
 
+    # "None found" is not "none exists", and the difference started to matter once
+    # minimums were measured inside the walls: the rate on a marginal floor fell far
+    # enough that 0 in 60 became a normal result for a plot stage ⑤ still solves. A
+    # 30x50 probes 0/60 at one seed and dimensions a clean plan at another. Claiming
+    # impossibility on that evidence is a stronger statement than the measurement
+    # supports, and it is the kind a plot owner would act on.
     reason = (
         f"needs {needed:.1f} m² of rooms at legal minimums and only "
         f"{envelope.max_footprint_sq_m:.1f} m² is buildable ({packed:.0%} packed) — "
-        f"no arrangement of legal rooms exists"
+        f"none of the {TUNE_SHORTLIST} arrangements stage \u2464 tries came out legal"
     )
-    return Verdict(False, floor, reason, _options(rooms, envelope))
+    return Verdict(False, floor, reason, _options(rooms, envelope, program))
 
 
-def _probe(rooms: list[RoomSpec], envelope: Envelope) -> int:
-    """How many of `_PROBES` topologies CP-SAT can dimension legally.
+def _probe(rooms: list[RoomSpec], envelope: Envelope, program: Program | None = None) -> int:
+    """How many of the arrangements stage ⑤ will try come out as legal plans.
 
     The *rate* is the useful quantity, not just whether it is zero. A floor at 1/60 is
     possible and undependable; one at 40/60 the solver will find first time. Both
@@ -143,37 +166,57 @@ def _probe(rooms: list[RoomSpec], envelope: Envelope) -> int:
     weights = slicing.effective_areas(
         rooms, (x_max_m - x_min_m) * (y_max_m - y_min_m)
     )
-    rng = random.Random(0)
 
-    # Generation is microseconds and tuning is milliseconds, so ranking first costs
-    # almost nothing and is what makes the number comparable to stage ⑤'s.
-    ranked: list[tuple[tuple[int, float], int, object]] = []
-    for index in range(_GENERATED):
-        tree = slicing.random_tree(rooms, rng, weights)
-        placed = slicing.place(tree, x_min_m, y_min_m, x_max_m, y_max_m)
+    # The adjacency graph, restricted to the rooms still present. `_options` probes
+    # reduced programmes, and an edge naming a room that was dropped will not
+    # construct — but ranking without the edges at all is what made the probe and the
+    # solver disagree: it ordered by a different key and reported a 30x50 infeasible
+    # that `solve` then dimensioned with zero unbuildable rooms.
+    ids = {room.id for room in rooms}
+    reduced = Program(
+        rooms=rooms,
+        adjacencies=[
+            edge for edge in (program.adjacencies if program else [])
+            if {edge.a, edge.b} <= ids
+        ],
+    )
+
+    shortlist = shortlist_for(
+        reduced, rooms, bounds, weights, envelope, floor=rooms[0].floor, seed=0,
+    )
+    # **A dimensioned topology is not yet a legal plan.** The probe used to count
+    # `tune` returning something, and that was close enough while Stage B's own
+    # constraints were the whole of legality. They are not any more: Stage B works on
+    # gross rectangles with a conservative wall allowance, while `score` measures the
+    # clear floor side by side and also weighs sectors, road access and the shaft. The
+    # gap showed up immediately — a 50x80 that `solve` lays out cleanly on six seeds
+    # out of six was being called undependable off a raw tune rate.
+    #
+    # So the probe now runs what `solve` runs: tune, build, hill-climb, and ask whether
+    # the result has a room below a minimum. The rate that comes out is the probability
+    # a topology yields a *legal plan*, which is the quantity the verdict formula was
+    # always assuming it had.
+    legal = 0
+    for _, _, _, tree in shortlist[:TUNE_SHORTLIST]:
+        dimensioned = tuning.tune(tree, bounds, weights, time_limit_s=0.15)
+        if dimensioned is None:
+            continue
         try:
             layout = Layout(
-                rooms=placed, x_min_m=x_min_m, y_min_m=y_min_m,
+                rooms=dimensioned, x_min_m=x_min_m, y_min_m=y_min_m,
                 x_max_m=x_max_m, y_max_m=y_max_m, floor=rooms[0].floor,
                 road_edges=envelope.road_edges,
             )
         except ValueError:
             continue
-        # Rooms only, no adjacency graph. Whether CP-SAT can *dimension* a tree is a
-        # question about areas, widths and aspects; adjacency decides how good the
-        # result is, not whether one exists. Building a Program from a reduced room
-        # list would also have to drop edges naming rooms that are no longer there.
-        hard, penalty, _ = score(layout, Program(rooms=rooms))
-        ranked.append(((hard, penalty), index, tree))
-    ranked.sort(key=lambda row: (row[0], row[1]))
-
-    return sum(
-        tuning.tune(tree, bounds, weights, time_limit_s=0.15) is not None
-        for _, _, tree in ranked[:_PROBES]
-    )
+        if improve(layout, reduced).unbuildable == 0:
+            legal += 1
+    return legal
 
 
-def _options(rooms: list[RoomSpec], envelope: Envelope) -> list[Option]:
+def _options(
+    rooms: list[RoomSpec], envelope: Envelope, program: Program | None = None
+) -> list[Option]:
     """Candidate changes, each measured. Ordered by what a person gives up.
 
     Nothing here silently edits the programme. A plot owner who wanted a separate
@@ -201,7 +244,7 @@ def _options(rooms: list[RoomSpec], envelope: Envelope) -> list[Option]:
         reduced = transform(rooms)
         if len(reduced) == len(rooms):
             continue  # nothing to remove; the option does not apply here
-        found.append(Option(change, because, _probe(reduced, envelope), _PROBES))
+        found.append(Option(change, because, _probe(reduced, envelope, program), TUNE_SHORTLIST))
     return found
 
 

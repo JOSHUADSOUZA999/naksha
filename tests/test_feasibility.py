@@ -27,13 +27,14 @@ class TestVerdicts:
         program, envelope = _case("50x80 4bhk in Bengaluru with study and store room")
         assert assess(program, envelope, floor=1).feasible
 
-    def test_a_marginal_floor_is_not_reported_as_fitting(self):
-        """1/60 is possible and undependable. Reporting "fits" would be true and
-        useless — a plan the user cannot regenerate tomorrow is not a plan."""
+    def test_a_floor_with_no_legal_arrangement_says_so(self):
+        """A 30x40 3BHK is 98% packed once minimums are measured inside the walls, and
+        none of the arrangements stage ⑤ tries survives. Reporting "fits" would be
+        false, and reporting a percentage would dress a zero up as a chance."""
         program, envelope = _case("30x40 east facing 3bhk in Whitefield with pooja room")
         verdict = assess(program, envelope, floor=1)
         assert not verdict.feasible
-        assert "% of the time" in verdict.reason or "no arrangement" in verdict.reason
+        assert "arrangements" in verdict.reason
 
     def test_an_empty_floor_is_trivially_fine(self):
         program, envelope = _case("30x40 3bhk in Bengaluru")
@@ -48,16 +49,28 @@ class TestVerdicts:
 
 class TestOptionsAreMeasuredNotGuessed:
     def test_options_appear_only_when_something_is_wrong(self):
-        program, envelope = _case("50x80 4bhk in Bengaluru with study and store room")
-        assert assess(program, envelope, floor=1).options == []
-
-    def test_the_verdict_is_a_solve_probability_not_a_raw_rate(self):
-        """5 in 60 sounds dire and is not: stage ⑤ tries 24 topologies, so it finds a
-        plan 88% of the time. The rate is the input; the probability is the answer."""
+        """Including when the floor is solvable but thin: offering a plot owner rooms
+        to drop while their house fits is noise, so the margin goes in the reason."""
         program, envelope = _case("50x80 4bhk in Bengaluru with study and store room")
         verdict = assess(program, envelope, floor=1)
         assert verdict.feasible
-        assert "% to solve" in verdict.reason
+        assert verdict.options == []
+
+    def test_the_verdict_counts_the_arrangements_stage_five_actually_tries(self):
+        """It used to compound a hit rate — "5 in 60, and ⑤ tries 24, so 88%" — and
+        that needs the 24 to be independent draws. They are not: the shortlist is
+        *ranked*, and this probe runs the same ranked shortlist, so one legal
+        arrangement among them means ⑤ finds it rather than probably finds it.
+
+        Measured over six seeds a brief, the count separated the four reference briefs
+        where the compounded rate did not: it called a 50x80 undependable at 71% while
+        that plot laid out cleanly every single time.
+        """
+        program, envelope = _case("50x80 4bhk in Bengaluru with study and store room")
+        verdict = assess(program, envelope, floor=1)
+        assert verdict.feasible
+        assert "arrangements stage" in verdict.reason
+        assert "% to solve" not in verdict.reason
 
     def test_each_option_reports_what_it_actually_buys(self):
         """The whole point: the stage applies the change and runs the solver, rather
