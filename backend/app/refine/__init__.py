@@ -31,6 +31,7 @@ def refine(layout: Layout, program: Program) -> RefinedFloor:
     rules = load_ruleset(REFINE_RULES).data
     walls = _walls(layout, rules["walls"])
     openings = _doors(walls, layout, program, rules["doors"])
+    openings += _connect(walls, layout, program, openings, rules["doors"])
     openings += _windows(walls, program, rules["windows"], taken=openings)
     fixtures = _fixtures(layout, program, walls, openings, rules)
     clear = {
@@ -540,3 +541,139 @@ def breaches(floor: RefinedFloor, program: Program) -> list[str]:
                 f"{spec.min_width_m:.2f} m minimum width"
             )
     return found
+
+
+def _connect(
+    walls: list[Wall], layout: Layout, program: Program, openings: list[Opening], rules: dict
+) -> list[Opening]:
+    """Add whatever further doors the plan needs to be walkable.
+
+    **The adjacency graph is a door schedule, not the whole door schedule.** Stage ③
+    says where doors *should* be and stage ⑤ satisfies about half of what it asks for,
+    so honouring only those edges produced houses you could not walk through — one room
+    of eleven reachable from the front door on a 30x50. Stage ⑦ measures it; this is
+    what fixes it.
+
+    Connectivity is a much weaker requirement than adjacency, and that is why it can be
+    met here when the ceiling in DECISIONS question 6 says the adjacency graph cannot.
+    A room does not need a door to the room stage ③ named — it needs a door to
+    *something* already reachable, and a tiling gives almost every room several
+    neighbours to choose from.
+
+    Two things are never crossed. A `SEPARATED` edge is hard and means it: a door from
+    a bathroom into a kitchen would satisfy circulation by making the plan worse. And a
+    wall too short to hold a door is not one — the opening has to fit.
+    """
+    forbidden = {
+        frozenset({edge.a, edge.b})
+        for edge in program.adjacencies
+        if edge.relation is Relation.SEPARATED
+    }
+    kinds = {room.id: room.kind for room in program.rooms}
+    clearance = rules["clearance_m"]
+    narrow = {SpaceKind(k) for k in rules["narrow_kinds"]}
+
+    entrance = next((o for o in openings if o.kind is OpeningKind.ENTRANCE), None)
+    if entrance is None or not entrance.connects:
+        return []
+
+    reached = {entrance.connects[0]}
+    graph: dict[str, set[str]] = {}
+    for opening in openings:
+        if opening.kind is OpeningKind.DOOR and len(opening.connects) == 2:
+            a, b = opening.connects
+            graph.setdefault(a, set()).add(b)
+            graph.setdefault(b, set()).add(a)
+
+    def flood(origin: str) -> None:
+        """Pull in everything now reachable, following doors that already exist.
+
+        Marking only the room a new door opens into was a real bug and a quiet one:
+        opening the dining room also reaches the hall and the kitchen through doors
+        stage ⑤ had already earned, and a loop that does not notice believes the
+        kitchen is still stranded. It then stops finding candidates while three rooms
+        sit one door away from the plan.
+        """
+        stack = [origin]
+        while stack:
+            for neighbour in graph.get(stack.pop(), ()):
+                if neighbour not in reached:
+                    reached.add(neighbour)
+                    stack.append(neighbour)
+
+    flood(entrance.connects[0])
+
+    wanted = {
+        placed.room_id for placed in layout.rooms
+        if kinds.get(placed.room_id) in _WALKED_INTO
+    }
+    added: list[Opening] = []
+
+    # Grow outwards from what is already reachable, one room at a time. Circulation
+    # spaces are preferred as the host so new doors land on the corridor and the hall
+    # rather than turning a bedroom into a through-route — which is exactly the privacy
+    # the corridor exists to protect.
+    def host_rank(room_id: str) -> int:
+        kind = kinds.get(room_id)
+        if kind in (SpaceKind.CORRIDOR, SpaceKind.FOYER):
+            return 0
+        if kind in (SpaceKind.HALL, SpaceKind.DINING, SpaceKind.STAIRCASE):
+            return 1
+        return 2
+
+    progress = True
+    while progress:
+        progress = False
+        candidates = []
+        for wall in walls:
+            if wall.kind is not WallKind.INTERIOR:
+                continue
+            a, b = wall.rooms
+            inside = {a, b} & reached
+            outside = ({a, b} - reached) & wanted
+            if len(inside) != 1 or len(outside) != 1:
+                continue
+            if frozenset({a, b}) in forbidden:
+                continue
+            candidates.append((host_rank(next(iter(inside))), -wall.length_m, wall))
+
+        for _, _, wall in sorted(candidates, key=lambda row: (row[0], row[1])):
+            a, b = wall.rooms
+            target = next(iter({a, b} - reached))
+            width = (
+                rules["service_width_m"]
+                if kinds.get(a) in narrow or kinds.get(b) in narrow
+                else rules["internal_width_m"]
+            )
+            placed = _fit(
+                wall, width, clearance, openings + added,
+                floor_width=rules["service_width_m"],
+            )
+            if placed is None:
+                continue
+            offset, fitted = placed
+            added.append(
+                Opening(
+                    wall_id=wall.id, kind=OpeningKind.DOOR, offset_m=offset,
+                    width_m=fitted, connects=[a, b],
+                )
+            )
+            graph.setdefault(a, set()).add(b)
+            graph.setdefault(b, set()).add(a)
+            reached.add(target)
+            flood(target)
+            progress = True
+            break
+
+    return added
+
+
+# Spaces a person walks into, and therefore needs a door to. A car porch is entered
+# from the street, so it is not stranded by having no internal door.
+_WALKED_INTO = {
+    SpaceKind.HALL, SpaceKind.DINING, SpaceKind.KITCHEN, SpaceKind.BEDROOM,
+    SpaceKind.MASTER_BEDROOM, SpaceKind.GUEST_ROOM, SpaceKind.SERVANT_ROOM,
+    SpaceKind.BATHROOM, SpaceKind.WC, SpaceKind.POOJA, SpaceKind.STUDY,
+    SpaceKind.OFFICE, SpaceKind.STORE, SpaceKind.UTILITY, SpaceKind.CORRIDOR,
+    SpaceKind.FOYER, SpaceKind.STAIRCASE,
+}

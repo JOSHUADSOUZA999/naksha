@@ -56,9 +56,10 @@ def expand(brief: Brief, envelope: Envelope | None = None) -> Program:
 
     # What the user did name, carried through unchanged — except parking, which is
     # counted in `parking_bays` and built from it below.
+    extra_ids: set[str] = set()
     for room in hints.extra_rooms:
         if room is not RoomKind.CAR_PARKING:
-            add(SpaceKind.from_room_kind(room), room.value)
+            extra_ids.add(add(SpaceKind.from_room_kind(room), room.value))
 
     # `parking_bays` is authoritative, and reading it here rather than off
     # `extra_rooms` is what makes the room list deterministic. The model lists
@@ -78,6 +79,7 @@ def expand(brief: Brief, envelope: Envelope | None = None) -> Program:
         adjacencies=_wire(
             hall, kitchen, corridor, bedrooms, baths, parking,
             room_ids={room.id for room in rooms},
+            extras=[room for room in rooms if room.id in extra_ids],
         ),
     )
 
@@ -195,6 +197,9 @@ def _wire(
     baths: list[str],
     parking: list[str],
     room_ids: set[str],
+    *,
+    dining: str = "dining",
+    extras: list[RoomSpec] | None = None,
 ) -> list[AdjacencySpec]:
     """The relationships that make a room list a house rather than a pile of rectangles.
 
@@ -202,6 +207,7 @@ def _wire(
     situational — a bedroom for an elderly parent near the entrance — is exactly what
     the LLM version reads out of a brief and this one cannot.
     """
+    extras = extras or []
     edges = [
         AdjacencySpec(a="foyer", b=hall, relation=Relation.CONNECTED),
         AdjacencySpec(a=hall, b=kitchen, relation=Relation.CONNECTED),
@@ -223,8 +229,35 @@ def _wire(
         for bath in baths
     ]
 
-    if "pooja" in room_ids:
-        edges.append(AdjacencySpec(a=hall, b="pooja", relation=Relation.ADJACENT, hard=False))
+    # Everything a person walks into needs a door, and until stage ⑦ existed nothing
+    # checked. `dining` had no edge of any kind and the rooms a user names — pooja,
+    # study, store — got none either, so they were unreachable *by construction*: the
+    # plan drew them, the scorer was happy, and there was no way in. Measured on a
+    # 30x50, you entered the front door and reached one room out of eleven.
+    #
+    # Where each one opens off is the ordinary arrangement rather than a rule: service
+    # rooms off the kitchen, anything private off the corridor for the same reason
+    # bedrooms are, everything else off the hall.
+    # Soft. That a dining room opens off the hall is where the door *should* be, not
+    # whether there is one — stage ⑥ guarantees the plan is walkable and these say what
+    # the ordinary arrangement looks like. Hard edges here would only add violations
+    # stage ⑤ cannot satisfy and would outvote things that matter more.
+    if dining in room_ids:
+        edges.append(
+            AdjacencySpec(a=hall, b=dining, relation=Relation.CONNECTED, hard=False)
+        )
+
+    _OFF_THE_KITCHEN = {SpaceKind.UTILITY, SpaceKind.STORE}
+    _OFF_THE_CORRIDOR = {SpaceKind.GUEST_ROOM, SpaceKind.SERVANT_ROOM, SpaceKind.STUDY}
+    for room in extras:
+        host = (
+            kitchen if room.kind in _OFF_THE_KITCHEN
+            else corridor if room.kind in _OFF_THE_CORRIDOR
+            else hall
+        )
+        edges.append(
+            AdjacencySpec(a=host, b=room.id, relation=Relation.CONNECTED, hard=False)
+        )
     # Reachable from the entrance, not through the living room.
     edges += [
         AdjacencySpec(a="foyer", b=bay, relation=Relation.ADJACENT, hard=False)

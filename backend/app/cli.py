@@ -412,6 +412,7 @@ def _write_svg(bundle, path: str) -> None:
     from app.export.svg import render
 
     from app.refine import breaches, refine
+    from app.validator import validate
 
     kinds = {room.id: room.kind.value for room in bundle.program.rooms}
     target = Path(path)
@@ -430,6 +431,24 @@ def _write_svg(bundle, path: str) -> None:
             render(layout, kinds, title=title, refined=floor), encoding="utf-8"
         )
         flags = f", {layout.unbuildable} unbuildable" if layout.unbuildable else ""
+        # Stage ⑦. Runs on the drawing, so it can ask what no earlier stage could —
+        # first among them whether the house can be walked through.
+        report = validate(layout, bundle.program, floor)
+        if not report.ok or report.findings:
+            state = "\u2717" if not report.ok else "\u26a0"
+            print(
+                f"\n[check] {state} floor {layout.floor}: {report.errors} error(s), "
+                f"{len(report.findings) - report.errors} warning(s)",
+                file=sys.stderr,
+            )
+            for finding in report.findings[:5]:
+                print(f"        \u00b7 {finding.message}", file=sys.stderr)
+            if len(report.findings) > 5:
+                print(
+                    f"        \u00b7 \u2026and {len(report.findings) - 5} more",
+                    file=sys.stderr,
+                )
+
         # Recheck legality on the clear floor, independently of the scorer. Silent
         # when the plan is clean; when it is not, these are the same rooms `score`
         # counted as unbuildable, restated in the dimension a person can measure.

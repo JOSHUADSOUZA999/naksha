@@ -202,3 +202,15 @@ class FixtureKind(StrEnum):
     BED = "bed"
     SINGLE_BED = "single_bed"
     WARDROBE = "wardrobe"
+
+
+class Severity(StrEnum):
+    """How much a finding matters.
+
+    Two levels, not five. A validator whose findings need their own triage has moved
+    the judgment back onto the reader, and the only question a plot owner actually asks
+    is whether the plan is wrong or merely worth a look.
+    """
+
+    ERROR = "error"
+    WARNING = "warning"

@@ -256,10 +256,13 @@ class TestSvgOutput:
     no envelope to solve inside and the flag would have nothing to draw.
     """
 
+    # A plot that lays out legally. The 30x40 is 98% packed and its rooms come out
+    # too small to carry their own labels, which would make this a test of that plot's
+    # troubles rather than of the renderer.
     BRIEF = [
         "--fallback-only",
         "--allow-unverified",
-        "30x40 east facing site in Whitefield, Bengaluru, 3BHK with pooja room",
+        "30x50 3bhk in Bengaluru",
     ]
 
     def test_writes_a_parseable_drawing_naming_its_rooms(self, tmp_path, capsys):

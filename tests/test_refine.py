@@ -137,16 +137,34 @@ class TestDoorsComeFromTheGraphNotFromGeometry:
     written, precisely so ⑥ could tell a shared wall from a shared wall with a door."""
 
     @pytest.mark.parametrize("name", list(BRIEFS))
-    def test_a_door_exists_only_where_the_programme_asked_for_one(self, floors, name):
-        _, program, floor = floors[name]
-        wanted = {
-            frozenset({edge.a, edge.b})
-            for edge in program.adjacencies
-            if edge.relation is Relation.CONNECTED
-        }
+    def test_a_door_joins_two_rooms_that_share_a_wall(self, floors, name):
+        """This used to assert every door came from a `CONNECTED` edge, and that rule
+        was too strong — honouring only those edges produced houses you could not walk
+        through. Stage ⑥ now adds what circulation needs. What no door may ever be is
+        invented between rooms with no wall between them.
+        """
+        _, _, floor = floors[name]
+        walls = {frozenset(w.rooms) for w in floor.walls if w.kind is WallKind.INTERIOR}
         for opening in floor.openings:
             if opening.kind is OpeningKind.DOOR:
-                assert frozenset(opening.connects) in wanted
+                assert frozenset(opening.connects) in walls
+
+    @pytest.mark.parametrize("name", list(BRIEFS))
+    def test_a_separated_pair_never_gets_a_door(self, floors, name):
+        """The one line circulation may not cross. A toilet opening into a kitchen
+        would satisfy reachability by making the plan worse, and `SEPARATED` is hard
+        for exactly the reason CLAUDE.md gives: it is the placement every Indian client
+        objects to.
+        """
+        _, program, floor = floors[name]
+        forbidden = {
+            frozenset({edge.a, edge.b})
+            for edge in program.adjacencies
+            if edge.relation is Relation.SEPARATED
+        }
+        assert forbidden, "the fixture must contain a separated pair"
+        for opening in floor.openings:
+            assert frozenset(opening.connects) not in forbidden
 
     @pytest.mark.parametrize("name", list(BRIEFS))
     def test_an_adjacent_edge_never_gets_a_door(self, floors, name):
@@ -162,16 +180,22 @@ class TestDoorsComeFromTheGraphNotFromGeometry:
         }
         assert not (doors & adjacent_only)
 
-    def test_an_unsatisfied_edge_gets_no_door_rather_than_an_invented_one(self, floors):
-        """Stage ⑤ does not place every CONNECTED pair against each other, and `score`
-        already counts each miss. Drawing a door through a third room would hide a
-        defect the ranking is measuring."""
+    def test_every_satisfied_connected_edge_gets_its_door(self, floors):
+        """Where stage ⑤ did place a `CONNECTED` pair against each other, the door
+        stage ③ asked for is the one that gets drawn — circulation adds to that
+        schedule, it does not replace it."""
         _, program, floor = floors["40x60"]
-        wanted = sum(
-            1 for e in program.adjacencies if e.relation is Relation.CONNECTED
-        )
-        drawn = sum(1 for o in floor.openings if o.kind is OpeningKind.DOOR)
-        assert drawn < wanted, "fixture must include an unsatisfied edge"
+        layout, _, _ = floors["40x60"]
+        drawn = {
+            frozenset(o.connects) for o in floor.openings if o.kind is OpeningKind.DOOR
+        }
+        for edge in program.adjacencies:
+            if edge.relation is not Relation.CONNECTED:
+                continue
+            a, b = layout.by_id(edge.a), layout.by_id(edge.b)
+            if a is None or b is None or not a.touches(b):
+                continue
+            assert frozenset({edge.a, edge.b}) in drawn, f"{edge.a}~{edge.b}"
 
     def test_a_bathroom_door_is_narrower_than_a_bedroom_door(self, floors):
         _, program, floor = floors["50x80"]
