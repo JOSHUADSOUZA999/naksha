@@ -430,13 +430,15 @@ def _write_svg(bundle, path: str) -> None:
             render(layout, kinds, title=title, refined=floor), encoding="utf-8"
         )
         flags = f", {layout.unbuildable} unbuildable" if layout.unbuildable else ""
-        # Legality once the walls are real, which is not what stage ⑤ measured.
+        # Recheck legality on the clear floor, independently of the scorer. Silent
+        # when the plan is clean; when it is not, these are the same rooms `score`
+        # counted as unbuildable, restated in the dimension a person can measure.
         clear_breaches = breaches(floor, bundle.program)
         if clear_breaches:
+            disagrees = "" if layout.unbuildable else " \u2014 and stage \u2464 called this plan clean, which is a bug"
             print(
-                f"\n[walls] floor {layout.floor}: {len(clear_breaches)} room(s) fall "
-                f"below a minimum once wall thickness is counted \u2014 stage \u2464 "
-                f"measures to wall centrelines, the bye-laws mean clear internal size",
+                f"\n[walls] floor {layout.floor}: {len(clear_breaches)} room(s) below "
+                f"a minimum, measured inside the walls{disagrees}",
                 file=sys.stderr,
             )
             for breach in clear_breaches[:4]:

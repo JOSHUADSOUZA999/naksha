@@ -508,20 +508,18 @@ def _on_counter(
 def breaches(floor: RefinedFloor, program: Program) -> list[str]:
     """Rooms that are legal by the tiling and illegal once the walls are real.
 
-    **Stage ⑤ checks minimums against centreline areas, and the bye-laws mean clear
-    ones.** A 2.1 m minimum bedroom width is 2.1 m of floor, not 2.1 m between wall
-    centres — so every legality check in the pipeline is optimistic by half a wall on
-    each side, and systematically so. Measured on the four reference briefs: 36 rooms
-    that stage ⑤ passed are below an area or width minimum once ⑥ gives the walls their
-    thickness, including on plots reporting zero unbuildable rooms.
+    **This should now always come back empty, and that is the point of keeping it.**
+    Stage ⑤ once checked minimums against centreline rectangles while the bye-laws mean
+    clear internal size, and three of the four reference briefs reported a clean plan
+    while carrying six or seven rooms below a minimum. `score.clear_dims` and
+    `_clear_rect` now apply the same rule, so the two agree by construction — and this
+    is what fails loudly if they ever stop.
 
-    This function does not fix that. Fixing it means solving against gross minimums —
-    clear figure plus a wall allowance — which tightens every brief and would swing
-    feasibility on plots that are already 98% packed, so it is a change to measure
-    rather than to slip in. Until then the discrepancy is *reported*, because a wrong
-    number nobody can see is the failure mode this codebase keeps finding.
+    An independent recomputation rather than a call into the scorer, deliberately: a
+    guard that shares its implementation with the thing it guards cannot catch the
+    thing going wrong.
 
-    See DECISIONS.md.
+    See DECISIONS.md question 8.
     """
     specs = {room.id: room for room in program.rooms}
     found: list[str] = []
