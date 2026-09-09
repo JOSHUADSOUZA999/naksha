@@ -13,6 +13,7 @@ from app.ir.layout import Layout
 
 _SCALE = 44          # px per metre
 _MARGIN = 56         # px around the plan, for the title and the compass
+_TITLE_SIZE = 15     # px; the sheet is widened to fit the title, see `render`
 _FILLS = {
     "hall": "#eef2f7", "dining": "#eef2f7", "kitchen": "#fdf1e3",
     "master_bedroom": "#f0f4ec", "bedroom": "#f0f4ec",
@@ -30,8 +31,12 @@ def render(layout: Layout, kinds: dict[str, str], title: str = "") -> str:
     """
     width_m = layout.x_max_m - layout.x_min_m
     depth_m = layout.y_max_m - layout.y_min_m
-    w = width_m * _SCALE + _MARGIN * 2
     h = depth_m * _SCALE + _MARGIN * 2
+    # The canvas has to clear the title as well as the plan. A narrow plot with a long
+    # brief was clipping its own heading mid-word: the drawing was right and the sheet
+    # was too small for it. 0.52em a character is an over-estimate for this font, and
+    # over is the safe direction — the cost is white space, not a lost word.
+    w = max(width_m * _SCALE, len(title) * _TITLE_SIZE * 0.52) + _MARGIN * 2
 
     def px(x_m: float, y_m: float) -> tuple[float, float]:
         return (
@@ -46,7 +51,8 @@ def render(layout: Layout, kinds: dict[str, str], title: str = "") -> str:
     ]
     if title:
         out.append(
-            f'<text x="{_MARGIN}" y="30" font-size="15" fill="#111">{escape(title)}</text>'
+            f'<text x="{_MARGIN}" y="30" font-size="{_TITLE_SIZE}" '
+            f'fill="#111">{escape(title)}</text>'
         )
 
     for room in layout.rooms:

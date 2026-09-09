@@ -70,6 +70,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="solve stage \u2464 and write the plan bundle as JSON (use - for stdout)",
     )
     parser.add_argument(
+        "--svg",
+        metavar="FILE",
+        help="solve stage \u2464 and draw each floor as SVG (one file per storey)",
+    )
+    parser.add_argument(
         "--seed", type=int, default=0, help="layout seed; the same seed replays a plan"
     )
     parser.add_argument(
@@ -182,7 +187,7 @@ def _run_one(text: str, args: argparse.Namespace, settings) -> int:
             print(_envelope_summary(result, args))
         if args.program:
             print(_program_summary(result, args, settings))
-    if args.layout:
+    if args.layout or args.svg:
         _write_layout(result, args, settings)
     else:
         print(json.dumps(result.model_dump(mode="json"), indent=2, ensure_ascii=False))
@@ -378,17 +383,47 @@ def _write_layout(result: IntentResult, args: argparse.Namespace, settings) -> N
         print(f"\n[why] {verdict.reason}", file=sys.stderr)
         for option in verdict.options:
             print(f"       \u00b7 {option}", file=sys.stderr)
-    payload = json.dumps(bundle.model_dump(mode="json"), indent=2, ensure_ascii=False)
-    if args.layout == "-":
-        print(payload)
-    else:
-        from pathlib import Path
+    if args.layout:
+        payload = json.dumps(bundle.model_dump(mode="json"), indent=2, ensure_ascii=False)
+        if args.layout == "-":
+            print(payload)
+        else:
+            from pathlib import Path
 
-        Path(args.layout).write_text(payload, encoding="utf-8")
-        floors = ", ".join(
-            f"floor {lay.floor} score {lay.score:.0f}" for lay in bundle.layouts
+            Path(args.layout).write_text(payload, encoding="utf-8")
+            floors = ", ".join(
+                f"floor {lay.floor} score {lay.score:.0f}" for lay in bundle.layouts
+            )
+            print(f"[layout] {args.layout} \u2014 {floors}", file=sys.stderr)
+
+    if args.svg:
+        _write_svg(bundle, args.svg)
+
+
+def _write_svg(bundle, path: str) -> None:
+    """Draw each storey. Multi-floor briefs get one file per floor, never a merge.
+
+    No `-` for stdout, unlike the JSON: an SVG on a pipe has nothing to receive it,
+    and the bundle is already the machine-readable form. Storeys are separate files
+    because they are separate drawings — a G+1 is two sheets, not one image.
+    """
+    from pathlib import Path
+
+    from app.export.svg import render
+
+    kinds = {room.id: room.kind.value for room in bundle.program.rooms}
+    target = Path(path)
+    for layout in bundle.layouts:
+        # Single-storey keeps the name the user typed; only a stack needs qualifying.
+        out = (
+            target
+            if len(bundle.layouts) == 1
+            else target.with_name(f"{target.stem}-floor{layout.floor}{target.suffix}")
         )
-        print(f"[layout] {args.layout} \u2014 {floors}", file=sys.stderr)
+        title = f"{bundle.brief_text} \u2014 floor {layout.floor}"
+        out.write_text(render(layout, kinds, title=title), encoding="utf-8")
+        flags = f", {layout.unbuildable} unbuildable" if layout.unbuildable else ""
+        print(f"[svg] {out} \u2014 score {layout.score:.0f}{flags}", file=sys.stderr)
 
 
 def _build_program(brief, envelope, args: argparse.Namespace, settings):

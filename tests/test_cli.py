@@ -247,3 +247,68 @@ class TestMultilineBriefs:
         from app import cli
 
         assert cli._input_pending() is False
+
+
+class TestSvgOutput:
+    """`--svg` is the only path from a solved bundle to something a person can judge.
+
+    Bengaluru rather than `ARGS`' Pune: stage ② has no ruleset for Pune, so there is
+    no envelope to solve inside and the flag would have nothing to draw.
+    """
+
+    BRIEF = [
+        "--fallback-only",
+        "--allow-unverified",
+        "30x40 east facing site in Whitefield, Bengaluru, 3BHK with pooja room",
+    ]
+
+    def test_writes_a_parseable_drawing_naming_its_rooms(self, tmp_path, capsys):
+        out = tmp_path / "plan.svg"
+        assert main(["--svg", str(out), *self.BRIEF]) == 0
+
+        from xml.etree import ElementTree
+
+        drawing = out.read_text(encoding="utf-8")
+        ElementTree.fromstring(drawing)  # raises on malformed SVG
+        assert "master bedroom" in drawing
+        assert "[svg]" in capsys.readouterr().err
+
+    def test_the_artefact_replaces_the_json_dump_on_stdout(self, tmp_path, capsys):
+        """Asking for a drawing is asking for the drawing, not the Brief as well.
+
+        `-L` already behaves this way; the two flags have to agree or piping breaks
+        depending on which artefact you asked for.
+        """
+        assert main(["--svg", str(tmp_path / "plan.svg"), *self.BRIEF]) == 0
+        assert capsys.readouterr().out == ""
+
+    def test_a_storey_is_a_sheet(self, tmp_path, capsys):
+        """G+1 is two drawings. Merging them into one image would be a third thing."""
+        out = tmp_path / "plan.svg"
+        assert main(
+            [
+                "--svg",
+                str(out),
+                "--fallback-only",
+                "--allow-unverified",
+                "30x40 4bhk g+1 in Bengaluru with study and car parking",
+            ]
+        ) == 0
+        assert not out.exists()
+        assert (tmp_path / "plan-floor1.svg").exists()
+        assert (tmp_path / "plan-floor2.svg").exists()
+
+    def test_both_artefacts_come_from_one_solve(self, tmp_path, capsys):
+        bundle, drawing = tmp_path / "plan.json", tmp_path / "plan.svg"
+        assert main(["-L", str(bundle), "--svg", str(drawing), *self.BRIEF]) == 0
+
+        rooms = {room["room_id"] for room in json.loads(bundle.read_text())["layouts"][0]["rooms"]}
+        assert "hall" in rooms
+        assert drawing.exists()
+
+    def test_no_envelope_means_no_drawing_rather_than_an_empty_one(self, tmp_path, capsys):
+        """A file that exists and shows nothing is worse than no file."""
+        out = tmp_path / "plan.svg"
+        assert main(["--svg", str(out), "--fallback-only", "30x40 3bhk in Pune"]) == 0
+        assert not out.exists()
+        assert "[no layout]" in capsys.readouterr().err
