@@ -40,6 +40,7 @@
         "sector": null,
         "sector_is_hard": false,
         "needs_exterior_wall": false,
+        "is_through_route": true,
         "outside_envelope": false,
         "needs_door": true,
         "needs_road_access": true,
@@ -56,6 +57,7 @@
         "sector": "north",
         "sector_is_hard": false,
         "needs_exterior_wall": true,
+        "is_through_route": true,
         "outside_envelope": false,
         "needs_door": true,
         "needs_road_access": false,
@@ -72,6 +74,7 @@
         "sector": "south_east",
         "sector_is_hard": false,
         "needs_exterior_wall": true,
+        "is_through_route": true,
         "outside_envelope": false,
         "needs_door": true,
         "needs_road_access": false,
@@ -88,6 +91,7 @@
         "sector": "west",
         "sector_is_hard": false,
         "needs_exterior_wall": false,
+        "is_through_route": true,
         "outside_envelope": false,
         "needs_door": true,
         "needs_road_access": false,
@@ -104,6 +108,7 @@
         "sector": "south_west",
         "sector_is_hard": false,
         "needs_exterior_wall": true,
+        "is_through_route": false,
         "outside_envelope": false,
         "needs_door": true,
         "needs_road_access": false,
@@ -120,6 +125,7 @@
         "sector": "south",
         "sector_is_hard": false,
         "needs_exterior_wall": true,
+        "is_through_route": false,
         "outside_envelope": false,
         "needs_door": true,
         "needs_road_access": false,
@@ -136,6 +142,7 @@
         "sector": "south",
         "sector_is_hard": false,
         "needs_exterior_wall": true,
+        "is_through_route": false,
         "outside_envelope": false,
         "needs_door": true,
         "needs_road_access": false,
@@ -152,6 +159,7 @@
         "sector": "north_west",
         "sector_is_hard": false,
         "needs_exterior_wall": false,
+        "is_through_route": false,
         "outside_envelope": false,
         "needs_door": true,
         "needs_road_access": false,
@@ -168,6 +176,7 @@
         "sector": "north_west",
         "sector_is_hard": false,
         "needs_exterior_wall": false,
+        "is_through_route": false,
         "outside_envelope": false,
         "needs_door": true,
         "needs_road_access": false,
@@ -184,6 +193,7 @@
         "sector": null,
         "sector_is_hard": false,
         "needs_exterior_wall": false,
+        "is_through_route": true,
         "outside_envelope": false,
         "needs_door": true,
         "needs_road_access": false,
@@ -200,6 +210,7 @@
         "sector": "north_east",
         "sector_is_hard": false,
         "needs_exterior_wall": false,
+        "is_through_route": false,
         "outside_envelope": false,
         "needs_door": true,
         "needs_road_access": false,
@@ -216,6 +227,7 @@
         "sector": null,
         "sector_is_hard": false,
         "needs_exterior_wall": true,
+        "is_through_route": false,
         "outside_envelope": false,
         "needs_door": false,
         "needs_road_access": true,
@@ -319,7 +331,7 @@
           "area_sq_m": 3.5520922943999995
         },
         {
-          "room_id": "bed3",
+          "room_id": "bed2",
           "x_min_m": 2.37,
           "y_min_m": 1.4630400000000001,
           "x_max_m": 8.72,
@@ -359,7 +371,7 @@
           "area_sq_m": 25.655638400000004
         },
         {
-          "room_id": "bed2",
+          "room_id": "dining",
           "x_min_m": 0.97536,
           "y_min_m": 7.57,
           "x_max_m": 7.42,
@@ -389,7 +401,7 @@
           "area_sq_m": 20.086315161599998
         },
         {
-          "room_id": "dining",
+          "room_id": "bed3",
           "x_min_m": 4.56,
           "y_min_m": 10.49,
           "x_max_m": 6.91,
@@ -439,17 +451,17 @@
       "road_edges": [
         "north"
       ],
-      "score": 80.0,
+      "score": 115.0,
       "unbuildable": 0,
       "violations": [
         "bath2 landed south west, wanted north west",
         "bath1 landed south east, wanted north west",
         "bed1 landed south, wanted south west",
-        "bed2 landed west, wanted south",
         "kitchen landed east, wanted south east",
-        "dining landed north, wanted west",
+        "bed3 landed north, wanted south",
         "hall landed north east, wanted north",
         "hall does not reach corridor",
+        "corridor does not reach bed3",
         "foyer does not reach car_parking"
       ],
       "area_sq_m": 149.83402291200002
@@ -469,7 +481,7 @@
           "kind": "interior",
           "rooms": [
             "bath2",
-            "bed3"
+            "bed2"
           ],
           "length_m": 2.5469599999999994,
           "is_vertical": true
@@ -498,7 +510,7 @@
           "thickness_m": 0.115,
           "kind": "interior",
           "rooms": [
-            "bed3",
+            "bed2",
             "bath1"
           ],
           "length_m": 2.5469599999999994,
@@ -513,7 +525,7 @@
           "thickness_m": 0.115,
           "kind": "interior",
           "rooms": [
-            "bed3",
+            "bed2",
             "corridor"
           ],
           "length_m": 1.6399999999999997,
@@ -528,7 +540,7 @@
           "thickness_m": 0.115,
           "kind": "interior",
           "rooms": [
-            "bed3",
+            "bed2",
             "bed1"
           ],
           "length_m": 4.710000000000001,
@@ -574,7 +586,7 @@
           "kind": "interior",
           "rooms": [
             "corridor",
-            "bed2"
+            "dining"
           ],
           "length_m": 3.0346399999999996,
           "is_vertical": false
@@ -589,7 +601,7 @@
           "kind": "interior",
           "rooms": [
             "bed1",
-            "bed2"
+            "dining"
           ],
           "length_m": 3.41,
           "is_vertical": false
@@ -618,7 +630,7 @@
           "thickness_m": 0.115,
           "kind": "interior",
           "rooms": [
-            "bed2",
+            "dining",
             "kitchen"
           ],
           "length_m": 2.92,
@@ -633,7 +645,7 @@
           "thickness_m": 0.115,
           "kind": "interior",
           "rooms": [
-            "bed2",
+            "dining",
             "car_parking"
           ],
           "length_m": 3.5846399999999994,
@@ -648,8 +660,8 @@
           "thickness_m": 0.115,
           "kind": "interior",
           "rooms": [
-            "bed2",
-            "dining"
+            "dining",
+            "bed3"
           ],
           "length_m": 2.3500000000000005,
           "is_vertical": false
@@ -663,7 +675,7 @@
           "thickness_m": 0.115,
           "kind": "interior",
           "rooms": [
-            "bed2",
+            "dining",
             "hall"
           ],
           "length_m": 0.5099999999999998,
@@ -709,7 +721,7 @@
           "kind": "interior",
           "rooms": [
             "car_parking",
-            "dining"
+            "bed3"
           ],
           "length_m": 5.603440000000001,
           "is_vertical": true
@@ -723,7 +735,7 @@
           "thickness_m": 0.115,
           "kind": "interior",
           "rooms": [
-            "dining",
+            "bed3",
             "hall"
           ],
           "length_m": 5.603440000000001,
@@ -811,7 +823,7 @@
           "thickness_m": 0.23,
           "kind": "exterior",
           "rooms": [
-            "bed3"
+            "bed2"
           ],
           "length_m": 6.3500000000000005,
           "is_vertical": false
@@ -881,7 +893,7 @@
           "thickness_m": 0.23,
           "kind": "exterior",
           "rooms": [
-            "bed2"
+            "dining"
           ],
           "length_m": 2.92,
           "is_vertical": true
@@ -937,7 +949,7 @@
           "thickness_m": 0.23,
           "kind": "exterior",
           "rooms": [
-            "dining"
+            "bed3"
           ],
           "length_m": 2.3500000000000005,
           "is_vertical": false
@@ -1034,17 +1046,6 @@
           ]
         },
         {
-          "wall_id": "w7",
-          "kind": "door",
-          "offset_m": 1.5173199999999998,
-          "width_m": 0.9,
-          "height_m": null,
-          "connects": [
-            "corridor",
-            "bed2"
-          ]
-        },
-        {
           "wall_id": "w3",
           "kind": "door",
           "offset_m": 0.8199999999999998,
@@ -1052,7 +1053,7 @@
           "height_m": null,
           "connects": [
             "corridor",
-            "bed3"
+            "bed2"
           ]
         },
         {
@@ -1078,17 +1079,6 @@
           ]
         },
         {
-          "wall_id": "w17",
-          "kind": "door",
-          "offset_m": 2.8017200000000004,
-          "width_m": 0.9,
-          "height_m": null,
-          "connects": [
-            "hall",
-            "dining"
-          ]
-        },
-        {
           "wall_id": "w18",
           "kind": "door",
           "offset_m": 1.505,
@@ -1110,13 +1100,35 @@
           ]
         },
         {
-          "wall_id": "w12",
+          "wall_id": "w17",
           "kind": "door",
-          "offset_m": 1.1750000000000003,
+          "offset_m": 2.8017200000000004,
           "width_m": 0.9,
           "height_m": null,
           "connects": [
-            "bed2",
+            "bed3",
+            "hall"
+          ]
+        },
+        {
+          "wall_id": "w9",
+          "kind": "door",
+          "offset_m": 1.89832,
+          "width_m": 0.9,
+          "height_m": null,
+          "connects": [
+            "bed1",
+            "kitchen"
+          ]
+        },
+        {
+          "wall_id": "w7",
+          "kind": "door",
+          "offset_m": 1.5173199999999998,
+          "width_m": 0.9,
+          "height_m": null,
+          "connects": [
+            "corridor",
             "dining"
           ]
         },
@@ -1131,20 +1143,20 @@
           ]
         },
         {
-          "wall_id": "w28",
+          "wall_id": "w23",
           "kind": "window",
-          "offset_m": 1.46,
-          "width_m": 1.4661127250000003,
+          "offset_m": 3.1750000000000003,
+          "width_m": 1.2337298416666669,
           "height_m": 1.2,
           "connects": [
             "bed2"
           ]
         },
         {
-          "wall_id": "w23",
+          "wall_id": "w32",
           "kind": "window",
-          "offset_m": 3.1750000000000003,
-          "width_m": 1.2337298416666669,
+          "offset_m": 1.1750000000000003,
+          "width_m": 1.0115125750000007,
           "height_m": 1.2,
           "connects": [
             "bed3"
@@ -1204,7 +1216,7 @@
         },
         {
           "kind": "single_bed",
-          "room_id": "bed3",
+          "room_id": "bed2",
           "x_min_m": 7.762500000000001,
           "y_min_m": 2.0524999999999998,
           "x_max_m": 8.662500000000001,
@@ -1214,7 +1226,7 @@
         },
         {
           "kind": "wardrobe",
-          "room_id": "bed3",
+          "room_id": "bed2",
           "x_min_m": 2.4275,
           "y_min_m": 1.57804,
           "x_max_m": 3.6275000000000004,
@@ -1253,16 +1265,6 @@
           "area_sq_m": 0.8100000000000003
         },
         {
-          "kind": "bed",
-          "room_id": "bed1",
-          "x_min_m": 9.60164,
-          "y_min_m": 5.5125,
-          "x_max_m": 11.10164,
-          "y_max_m": 7.5125,
-          "faces": "north",
-          "area_sq_m": 3.0
-        },
-        {
           "kind": "wardrobe",
           "room_id": "bed1",
           "x_min_m": 4.0675,
@@ -1273,54 +1275,54 @@
           "area_sq_m": 0.7199999999999996
         },
         {
-          "kind": "single_bed",
-          "room_id": "bed2",
-          "x_min_m": 1.09036,
-          "y_min_m": 8.5325,
-          "x_max_m": 1.99036,
-          "y_max_m": 10.432500000000001,
-          "faces": "north",
-          "area_sq_m": 1.7100000000000002
-        },
-        {
-          "kind": "wardrobe",
-          "room_id": "bed2",
-          "x_min_m": 6.1625,
-          "y_min_m": 7.6275,
-          "x_max_m": 7.3625,
-          "y_max_m": 8.227500000000001,
-          "faces": "south",
-          "area_sq_m": 0.7200000000000008
-        },
-        {
           "kind": "counter",
           "room_id": "kitchen",
           "x_min_m": 7.4775,
           "y_min_m": 7.6275,
-          "x_max_m": 9.2775,
-          "y_max_m": 8.227500000000001,
-          "faces": "south",
+          "x_max_m": 8.0775,
+          "y_max_m": 9.4275,
+          "faces": "east",
           "area_sq_m": 1.080000000000001
         },
         {
           "kind": "sink",
           "room_id": "kitchen",
-          "x_min_m": 7.7175,
-          "y_min_m": 7.6875,
-          "x_max_m": 8.3175,
-          "y_max_m": 8.1675,
-          "faces": "south",
+          "x_min_m": 7.5375,
+          "y_min_m": 7.867500000000001,
+          "x_max_m": 8.0175,
+          "y_max_m": 8.467500000000001,
+          "faces": "east",
           "area_sq_m": 0.28800000000000053
         },
         {
           "kind": "stove",
           "room_id": "kitchen",
-          "x_min_m": 8.5275,
-          "y_min_m": 7.6875,
-          "x_max_m": 9.1275,
-          "y_max_m": 8.1675,
-          "faces": "south",
+          "x_min_m": 7.5375,
+          "y_min_m": 8.6775,
+          "x_max_m": 8.0175,
+          "y_max_m": 9.2775,
+          "faces": "east",
           "area_sq_m": 0.2880000000000001
+        },
+        {
+          "kind": "single_bed",
+          "room_id": "bed3",
+          "x_min_m": 4.6175,
+          "y_min_m": 14.07844,
+          "x_max_m": 5.5175,
+          "y_max_m": 15.97844,
+          "faces": "north",
+          "area_sq_m": 1.710000000000001
+        },
+        {
+          "kind": "wardrobe",
+          "room_id": "bed3",
+          "x_min_m": 5.6525,
+          "y_min_m": 15.378440000000001,
+          "x_max_m": 6.8525,
+          "y_max_m": 15.97844,
+          "faces": "north",
+          "area_sq_m": 0.7199999999999996
         }
       ],
       "outside": [],
@@ -1331,7 +1333,7 @@
           2.3125,
           3.9524999999999997
         ],
-        "bed3": [
+        "bed2": [
           2.4275,
           1.57804,
           8.662500000000001,
@@ -1355,7 +1357,7 @@
           11.10164,
           7.5125
         ],
-        "bed2": [
+        "dining": [
           1.09036,
           7.6275,
           7.3625,
@@ -1373,7 +1375,7 @@
           4.5024999999999995,
           15.97844
         ],
-        "dining": [
+        "bed3": [
           4.6175,
           10.5475,
           6.8525,
@@ -1403,7 +1405,17 @@
   "reports": [
     {
       "floor": 1,
-      "findings": [],
+      "findings": [
+        {
+          "check": "circulation",
+          "severity": "warning",
+          "message": "corridor, dining can only be reached by walking through a bedroom or bathroom — circulation should not run through a private room",
+          "rooms": [
+            "corridor",
+            "dining"
+          ]
+        }
+      ],
       "checks_run": [
         "circulation",
         "light",
@@ -1415,5 +1427,5 @@
   ],
   "seed": 7,
   "candidates": 900,
-  "total_score": 80.0
+  "total_score": 115.0
 }
