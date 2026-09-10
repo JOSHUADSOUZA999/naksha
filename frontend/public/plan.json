@@ -1100,24 +1100,13 @@
           ]
         },
         {
-          "wall_id": "w17",
+          "wall_id": "w10",
           "kind": "door",
-          "offset_m": 2.8017200000000004,
+          "offset_m": 1.46,
           "width_m": 0.9,
           "height_m": null,
           "connects": [
-            "bed3",
-            "hall"
-          ]
-        },
-        {
-          "wall_id": "w9",
-          "kind": "door",
-          "offset_m": 1.89832,
-          "width_m": 0.9,
-          "height_m": null,
-          "connects": [
-            "bed1",
+            "dining",
             "kitchen"
           ]
         },
@@ -1130,6 +1119,17 @@
           "connects": [
             "corridor",
             "dining"
+          ]
+        },
+        {
+          "wall_id": "w17",
+          "kind": "door",
+          "offset_m": 2.8017200000000004,
+          "width_m": 0.9,
+          "height_m": null,
+          "connects": [
+            "bed3",
+            "hall"
           ]
         },
         {
@@ -1265,6 +1265,16 @@
           "area_sq_m": 0.8100000000000003
         },
         {
+          "kind": "bed",
+          "room_id": "bed1",
+          "x_min_m": 9.60164,
+          "y_min_m": 5.5125,
+          "x_max_m": 11.10164,
+          "y_max_m": 7.5125,
+          "faces": "north",
+          "area_sq_m": 3.0
+        },
+        {
           "kind": "wardrobe",
           "room_id": "bed1",
           "x_min_m": 4.0675,
@@ -1277,31 +1287,31 @@
         {
           "kind": "counter",
           "room_id": "kitchen",
-          "x_min_m": 7.4775,
+          "x_min_m": 9.301639999999999,
           "y_min_m": 7.6275,
-          "x_max_m": 8.0775,
-          "y_max_m": 9.4275,
-          "faces": "east",
-          "area_sq_m": 1.080000000000001
+          "x_max_m": 11.10164,
+          "y_max_m": 8.227500000000001,
+          "faces": "south",
+          "area_sq_m": 1.0800000000000014
         },
         {
           "kind": "sink",
           "room_id": "kitchen",
-          "x_min_m": 7.5375,
-          "y_min_m": 7.867500000000001,
-          "x_max_m": 8.0175,
-          "y_max_m": 8.467500000000001,
-          "faces": "east",
-          "area_sq_m": 0.28800000000000053
+          "x_min_m": 9.54164,
+          "y_min_m": 7.6875,
+          "x_max_m": 10.141639999999999,
+          "y_max_m": 8.1675,
+          "faces": "south",
+          "area_sq_m": 0.2880000000000001
         },
         {
           "kind": "stove",
           "room_id": "kitchen",
-          "x_min_m": 7.5375,
-          "y_min_m": 8.6775,
-          "x_max_m": 8.0175,
-          "y_max_m": 9.2775,
-          "faces": "east",
+          "x_min_m": 10.35164,
+          "y_min_m": 7.6875,
+          "x_max_m": 10.95164,
+          "y_max_m": 8.1675,
+          "faces": "south",
           "area_sq_m": 0.2880000000000001
         },
         {
@@ -1405,17 +1415,7 @@
   "reports": [
     {
       "floor": 1,
-      "findings": [
-        {
-          "check": "circulation",
-          "severity": "warning",
-          "message": "corridor, dining can only be reached by walking through a bedroom or bathroom — circulation should not run through a private room",
-          "rooms": [
-            "corridor",
-            "dining"
-          ]
-        }
-      ],
+      "findings": [],
       "checks_run": [
         "circulation",
         "light",
