@@ -391,7 +391,12 @@ def _write_layout(result: IntentResult, args: argparse.Namespace, settings) -> N
         return
     if how != "model":
         print(f"[program] deterministic expansion — {how}", file=sys.stderr)
-    bundle = plan(result.brief, envelope, program, seed=args.seed)
+    # ⑤ then ⑥ then ⑦, on one bundle. Doing it here rather than per-artefact is what
+    # keeps the JSON and the drawing from disagreeing: both now read the same floors.
+    from app.refine import draw
+    from app.validator import check
+
+    bundle = check(draw(plan(result.brief, envelope, program, seed=args.seed), envelope))
 
     # Stage ④ only where stage ⑤ could not produce a legal plan. Assessing costs 60
     # solves a floor, which is not worth paying on the common path where it worked.
@@ -432,15 +437,11 @@ def _write_svg(bundle, path: str) -> None:
 
     from app.export.svg import render
 
-    from app.refine import breaches, refine
-    from app.validator import validate
+    from app.refine import breaches
 
     kinds = {room.id: room.kind.value for room in bundle.program.rooms}
     target = Path(path)
-    for layout in bundle.layouts:
-        # Stage ⑥. Refining is deterministic and cheap, so the drawing always gets
-        # walls — a room outline is what stage ⑤ produces, not what a person asked for.
-        floor = refine(layout, bundle.program, bundle.envelope)
+    for layout, floor in zip(bundle.layouts, bundle.floors):
         # Single-storey keeps the name the user typed; only a stack needs qualifying.
         out = (
             target
@@ -452,9 +453,7 @@ def _write_svg(bundle, path: str) -> None:
             render(layout, kinds, title=title, refined=floor), encoding="utf-8"
         )
         flags = f", {layout.unbuildable} unbuildable" if layout.unbuildable else ""
-        # Stage ⑦. Runs on the drawing, so it can ask what no earlier stage could —
-        # first among them whether the house can be walked through.
-        report = validate(layout, bundle.program, floor)
+        report = bundle.reports[bundle.layouts.index(layout)]
         if not report.ok or report.findings:
             state = "\u2717" if not report.ok else "\u26a0"
             print(

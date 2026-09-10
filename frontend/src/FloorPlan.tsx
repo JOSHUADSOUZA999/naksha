@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState } from "react";
-import { Stage, Layer, Rect, Text, Group } from "react-konva";
+import { Stage, Layer, Rect, Text, Group, Line, Arc, Ellipse, Circle } from "react-konva";
 import type Konva from "konva";
-import type { Layout, PlacedRoom, RoomSpec } from "./types";
+import type { Fixture, Layout, PlacedRoom, RefinedFloor, RoomSpec, Wall } from "./types";
 
 const FILLS: Record<string, string> = {
   hall: "#eef2f7", dining: "#eef2f7", kitchen: "#fdf1e3",
@@ -13,6 +13,9 @@ const FILLS: Record<string, string> = {
 
 interface Props {
   layout: Layout;
+  /** Stage ⑥'s drawing. Absent when the bundle stopped at ⑤, and the viewer then
+   *  falls back to outlined rectangles — which is what it drew before ⑥ existed. */
+  refined?: RefinedFloor;
   specs: Map<string, RoomSpec>;
   width: number;
   height: number;
@@ -20,7 +23,7 @@ interface Props {
   onSelect: (roomId: string | null) => void;
 }
 
-export function FloorPlan({ layout, specs, width, height, selected, onSelect }: Props) {
+export function FloorPlan({ layout, refined, specs, width, height, selected, onSelect }: Props) {
   const stageRef = useRef<Konva.Stage>(null);
   const [zoom, setZoom] = useState(1);
 
@@ -96,8 +99,12 @@ export function FloorPlan({ layout, specs, width, height, selected, onSelect }: 
                 // Undersized rooms are outlined rather than tinted: the fill already
                 // encodes what a room *is*, and losing that to show a problem trades
                 // one piece of information for another.
-                stroke={isSelected ? "#2563eb" : undersized ? "#dc2626" : "#222"}
-                strokeWidth={isSelected ? 3 : undersized ? 2.5 : 1.5}
+                // No outline once real walls are drawn over the top: a 1.5 px stroke
+                // on the tile plus a wall at its true thickness reads as a double
+                // line, and the tile edge is the wall's *centreline* so the two do
+                // not even coincide. Selection and undersize still need to show.
+                stroke={isSelected ? "#2563eb" : undersized ? "#dc2626" : refined ? undefined : "#222"}
+                strokeWidth={isSelected ? 3 : undersized ? 2.5 : refined ? 0 : 1.5}
               />
               {w > 56 && h > 30 && (
                 <>
@@ -123,6 +130,123 @@ export function FloorPlan({ layout, specs, width, height, selected, onSelect }: 
                   />
                 </>
               )}
+            </Group>
+          );
+        })}
+
+        {/* Fixtures under the walls: a fixture is inside a room and a wall is the
+            room's edge, so masonry over a bed reads right and a bed over masonry
+            does not. */}
+        {refined?.fixtures.map((f: Fixture, i: number) => {
+          const tl = toScreen(f.x_min_m, f.y_max_m);
+          const br = toScreen(f.x_max_m, f.y_min_m);
+          const w = br.x - tl.x;
+          const h = br.y - tl.y;
+          const cx = tl.x + w / 2;
+          const cy = tl.y + h / 2;
+          return (
+            <Group key={`fx${i}`} listening={false}>
+              <Rect x={tl.x} y={tl.y} width={w} height={h} fill="#ffffff" opacity={0.55} />
+              {["wc", "basin", "sink"].includes(f.kind) && (
+                <Ellipse x={cx} y={cy} radiusX={w * 0.34} radiusY={h * 0.34}
+                         stroke="#8a8a8a" strokeWidth={1} />
+              )}
+              {f.kind === "shower" && (
+                <>
+                  <Line points={[tl.x, tl.y, br.x, br.y]} stroke="#8a8a8a" strokeWidth={1} />
+                  <Line points={[br.x, tl.y, tl.x, br.y]} stroke="#8a8a8a" strokeWidth={1} />
+                </>
+              )}
+              {f.kind === "stove" && [0.3, 0.7].flatMap((fx) =>
+                [0.3, 0.7].map((fy) => (
+                  <Circle key={`${fx}-${fy}`} x={tl.x + w * fx} y={tl.y + h * fy}
+                          radius={Math.min(w, h) * 0.16} stroke="#8a8a8a" strokeWidth={1} />
+                ))
+              )}
+              {(f.kind === "bed" || f.kind === "single_bed") && (
+                <Line points={
+                  f.faces === "north" || f.faces === "south"
+                    ? [tl.x, f.faces === "north" ? br.y - h * 0.22 : tl.y + h * 0.22,
+                       br.x, f.faces === "north" ? br.y - h * 0.22 : tl.y + h * 0.22]
+                    : [f.faces === "west" ? tl.x + w * 0.22 : br.x - w * 0.22, tl.y,
+                       f.faces === "west" ? tl.x + w * 0.22 : br.x - w * 0.22, br.y]
+                } stroke="#8a8a8a" strokeWidth={1} />
+              )}
+              {f.kind === "wardrobe" && (
+                <Line points={[tl.x, tl.y, br.x, br.y]} stroke="#8a8a8a" strokeWidth={1} />
+              )}
+              <Rect x={tl.x} y={tl.y} width={w} height={h} stroke="#8a8a8a" strokeWidth={1} />
+            </Group>
+          );
+        })}
+
+        {/* Walls at their true thickness, then openings punched back out of them.
+            Punching rather than splitting each wall in two keeps one Konva line per
+            `Wall` in the IR — a viewer that silently re-partitions the geometry is one
+            whose output cannot be traced back to what produced it. */}
+        {refined?.walls.map((wall: Wall) => {
+          const a = toScreen(wall.x1_m, wall.y1_m);
+          const b = toScreen(wall.x2_m, wall.y2_m);
+          return (
+            <Line key={wall.id} points={[a.x, a.y, b.x, b.y]} stroke="#1c1c1c"
+                  strokeWidth={wall.thickness_m * scale} lineCap="butt" listening={false} />
+          );
+        })}
+
+        {refined?.openings.map((op, i) => {
+          const wall = refined.walls.find((w) => w.id === op.wall_id);
+          if (!wall) return null;
+          const t = (o: number) => {
+            const f = wall.length_m > 0 ? o / wall.length_m : 0;
+            return toScreen(wall.x1_m + (wall.x2_m - wall.x1_m) * f,
+                            wall.y1_m + (wall.y2_m - wall.y1_m) * f);
+          };
+          const a = t(op.offset_m - op.width_m / 2);
+          const b = t(op.offset_m + op.width_m / 2);
+          const isWindow = op.kind === "window";
+          const room = op.connects.length ? layout.rooms.find(
+            (r) => r.room_id === op.connects[op.connects.length - 1]) : undefined;
+
+          // Which side the leaf falls on follows the room being entered. Picking by
+          // axis alone put a front door outside the building.
+          let angle = 0;
+          const radius = Math.hypot(b.x - a.x, b.y - a.y);
+          if (!isWindow && room) {
+            const c = toScreen((room.x_min_m + room.x_max_m) / 2,
+                               (room.y_min_m + room.y_max_m) / 2);
+            const mid = t(op.offset_m);
+            angle = wall.is_vertical ? (c.x > mid.x ? 0 : 180) : (c.y > mid.y ? 90 : 270);
+          }
+
+          return (
+            <Group key={`op${i}`} listening={false}>
+              <Line points={[a.x, a.y, b.x, b.y]} stroke="#ffffff" lineCap="butt"
+                    strokeWidth={wall.thickness_m * scale + 1} />
+              {isWindow ? (
+                <Line points={[a.x, a.y, b.x, b.y]} stroke="#3f6f8f" strokeWidth={1.4} />
+              ) : (
+                <Arc x={a.x} y={a.y} innerRadius={radius} outerRadius={radius}
+                     angle={90} rotation={angle} stroke="#555" strokeWidth={1.1}
+                     dash={[3, 3]} />
+              )}
+            </Group>
+          );
+        })}
+
+        {/* A porch in the setback: dashed and unfilled, because it is a slab and a
+            roof rather than a room, and drawing it like one would claim built-up area
+            the plan does not have. */}
+        {refined?.outside.map((room: PlacedRoom) => {
+          const tl = toScreen(room.x_min_m, room.y_max_m);
+          return (
+            <Group key={`out-${room.room_id}`} listening={false}>
+              <Rect x={tl.x} y={tl.y} width={room.width_m * scale}
+                    height={room.depth_m * scale} fill="#f4f4f2"
+                    stroke="#8a8a8a" strokeWidth={1.4} dash={[6, 4]} />
+              <Text x={tl.x} y={tl.y + (room.depth_m * scale) / 2 - 6}
+                    width={room.width_m * scale} align="center"
+                    text={(specs.get(room.room_id)?.kind ?? room.room_id).replace(/_/g, " ")}
+                    fontSize={10.5} fill="#6b7075" />
             </Group>
           );
         })}

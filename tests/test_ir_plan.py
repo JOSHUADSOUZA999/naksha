@@ -124,3 +124,78 @@ class TestBudgets:
         program = Program(rooms=[_room("a", floor=1), _room("b", floor=2), _room("c", floor=1)])
         assert [r.id for r in program.on_floor(1)] == ["a", "c"]
         assert [r.id for r in program.on_floor(2)] == ["b"]
+
+
+class TestTheBundleIsTheFrontendContract:
+    """`PlanBundle` is what crosses the backend/frontend edge, and `types.ts` mirrors
+    it by hand. The mirror cannot be typechecked here — this machine runs Node 16 and
+    the viewer needs 18+ — so the shape is asserted from the Python side instead.
+
+    A renamed field would otherwise surface as a blank drawing in a browser nobody on
+    this machine can open.
+    """
+
+    @staticmethod
+    def _bundle():
+        from app.envelope import build_envelope
+        from app.llm import fallback
+        from app.program import expand
+        from app.refine import draw
+        from app.solver import plan
+        from app.validator import check
+
+        brief = fallback.parse("40x60 3bhk in Bengaluru with pooja room")
+        envelope = build_envelope(brief, allow_unverified=True)
+        program = expand(brief, envelope)
+        return check(draw(plan(brief, envelope, program, seed=7), envelope))
+
+    def test_a_full_bundle_carries_the_drawing_and_the_findings(self):
+        bundle = self._bundle()
+        assert bundle.floors and bundle.reports
+        assert len(bundle.floors) == len(bundle.layouts) == len(bundle.reports)
+
+    def test_stage_five_alone_still_produces_a_valid_bundle(self):
+        """`floors` defaults rather than being required: the bundle is stage ⑤'s
+        output and has to stay valid before ⑥ has run. A viewer reading one draws
+        rectangles, which is what it drew before ⑥ existed."""
+        from app.envelope import build_envelope
+        from app.llm import fallback
+        from app.program import expand
+        from app.solver import plan
+
+        brief = fallback.parse("30x50 3bhk in Bengaluru")
+        envelope = build_envelope(brief, allow_unverified=True)
+        bundle = plan(brief, envelope, expand(brief, envelope), seed=7)
+        assert bundle.floors == [] and bundle.reports == []
+
+    def test_the_json_carries_every_field_the_viewer_reads(self):
+        """Named explicitly rather than dumped-and-eyeballed. These are the keys
+        `types.ts` declares, and each one is read by `FloorPlan.tsx` or `App.tsx`."""
+        import json
+
+        payload = json.loads(json.dumps(self._bundle().model_dump(mode="json")))
+
+        assert {"brief_text", "program", "layouts", "floors", "reports", "seed"} <= set(payload)
+
+        floor = payload["floors"][0]
+        assert {"walls", "openings", "fixtures", "outside", "floor"} <= set(floor)
+        assert {"id", "x1_m", "y1_m", "x2_m", "y2_m", "thickness_m", "kind",
+                "rooms", "length_m", "is_vertical"} <= set(floor["walls"][0])
+        assert {"wall_id", "kind", "offset_m", "width_m", "height_m",
+                "connects"} <= set(floor["openings"][0])
+        assert {"kind", "room_id", "x_min_m", "y_min_m", "x_max_m", "y_max_m",
+                "faces"} <= set(floor["fixtures"][0])
+
+        report = payload["reports"][0]
+        assert {"floor", "findings", "checks_run", "errors", "ok"} <= set(report)
+
+    def test_an_opening_can_be_located_without_reconstructing_geometry(self):
+        """The viewer resolves `wall_id` and walks `offset_m` along the centreline.
+        Both have to be present and consistent or a door lands in mid-air."""
+        floor = self._bundle().floors[0]
+        walls = {w.id: w for w in floor.walls}
+        for opening in floor.openings:
+            wall = walls[opening.wall_id]
+            assert 0 <= opening.offset_m <= wall.length_m
+            assert opening.width_m / 2 <= max(opening.offset_m,
+                                              wall.length_m - opening.offset_m) + 1e-6

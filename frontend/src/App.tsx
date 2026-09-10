@@ -36,6 +36,10 @@ export default function App() {
   if (!bundle) return <p style={{ padding: 32 }}>Loading…</p>;
 
   const layout = bundle.layouts[floorIndex];
+  // Positional, matching how the backend builds them — one drawing and one report per
+  // layout, in order. Absent when the bundle stopped at stage ⑤.
+  const refined = bundle.floors?.[floorIndex];
+  const report = bundle.reports?.[floorIndex];
   const spec = selected ? specs.get(selected) : undefined;
   const placed = selected ? layout.rooms.find((r) => r.room_id === selected) : undefined;
 
@@ -44,6 +48,7 @@ export default function App() {
       <div style={{ flex: 1, position: "relative", background: "#fff" }}>
         <FloorPlan
           layout={layout}
+          refined={refined}
           specs={specs}
           width={window.innerWidth - 320}
           height={window.innerHeight}
@@ -73,6 +78,32 @@ export default function App() {
             </button>
           ))}
         </div>
+
+        {report && report.findings.length > 0 && (
+          <section style={{ marginBottom: 20 }}>
+            <h2 style={{ fontSize: 13, margin: "0 0 8px" }}>
+              {report.errors > 0
+                ? `${report.errors} problem${report.errors > 1 ? "s" : ""}`
+                : "Worth a look"}
+            </h2>
+            <ul style={{ margin: 0, padding: 0, listStyle: "none", display: "grid", gap: 6 }}>
+              {report.findings.map((f, i) => (
+                <li
+                  key={i}
+                  onClick={() => f.rooms.length && setSelected(f.rooms[0])}
+                  style={{
+                    fontSize: 12, lineHeight: 1.45, cursor: f.rooms.length ? "pointer" : "default",
+                    padding: "7px 9px", borderRadius: 4,
+                    borderLeft: "2px solid " + (f.severity === "error" ? "#dc2626" : "#b45309"),
+                    background: f.severity === "error" ? "#fef2f2" : "#fffbeb",
+                  }}
+                >
+                  {f.message}
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
 
         {spec && placed ? (
           <section style={{ marginBottom: 20 }}>

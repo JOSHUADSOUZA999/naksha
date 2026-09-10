@@ -235,6 +235,18 @@ class PlanBundle(DerivedFieldsAreOutputOnly):
     envelope: "Envelope"
     program: "Program"
     layouts: list[Layout] = Field(description="One per floor, ascending.")
+    floors: list["RefinedFloor"] = Field(
+        default_factory=list,
+        description="Stage ⑥'s drawing of each storey — walls, openings, fixtures. "
+        "Empty until ⑥ has run, which is why it defaults rather than being required: "
+        "the bundle is stage ⑤'s output and stays valid on its own.",
+    )
+    reports: list["Report"] = Field(
+        default_factory=list,
+        description="Stage ⑦'s findings per storey. Carried alongside the drawing "
+        "because a viewer that can show a plan should be able to show what is wrong "
+        "with it — a defect the user cannot see is one they cannot weigh.",
+    )
     seed: int = Field(description="Regenerates these exact layouts.")
     candidates: int = Field(description="Topologies tried per floor.", gt=0)
 
@@ -246,5 +258,7 @@ class PlanBundle(DerivedFieldsAreOutputOnly):
 
 from app.ir.envelope import Envelope  # noqa: E402  — circular at module scope
 from app.ir.plan import Program  # noqa: E402
+from app.ir.refined import RefinedFloor  # noqa: E402  — imports PlacedRoom from here
+from app.ir.validation import Report  # noqa: E402
 
 PlanBundle.model_rebuild()

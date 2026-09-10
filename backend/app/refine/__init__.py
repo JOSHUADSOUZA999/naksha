@@ -772,3 +772,16 @@ def _in_the_setback(layout: Layout, program: Program, envelope) -> list[PlacedRo
             )
         )
     return placed
+
+
+def draw(bundle, envelope=None):
+    """Stage ⑥ over a whole `PlanBundle` — every storey refined, in one call.
+
+    Takes the bundle and returns it with `floors` filled. The direction matters: ⑥
+    depends on ⑤'s output and ⑤ knows nothing about walls, so `solver.plan` cannot do
+    this itself without inverting the pipeline. A caller that wants rectangles stops
+    after `plan`; one that wants a drawing calls this.
+    """
+    floors = [refine(layout, bundle.program, envelope or bundle.envelope)
+              for layout in bundle.layouts]
+    return bundle.model_copy(update={"floors": floors})

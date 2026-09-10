@@ -161,3 +161,20 @@ def _legality(program: Program, floor: RefinedFloor) -> list[Finding]:
         )
         for message in breaches(floor, program)
     ]
+
+
+def check(bundle):
+    """Stage ⑦ over a whole `PlanBundle` — every storey validated, in one call.
+
+    Requires `floors`, because every question worth asking here is about the drawing:
+    a bundle that has not been through ⑥ has no doors, and "no room is reachable" would
+    be true of it and mean nothing. Returns the bundle unchanged in that case rather
+    than reporting a plan-shaped absence as a defect.
+    """
+    if not bundle.floors:
+        return bundle
+    reports = [
+        validate(layout, bundle.program, floor)
+        for layout, floor in zip(bundle.layouts, bundle.floors)
+    ]
+    return bundle.model_copy(update={"reports": reports})
