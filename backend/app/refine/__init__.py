@@ -655,10 +655,19 @@ def _connect(
     wanted = {placed.room_id for placed in layout.rooms if placed.room_id in walk_in}
     added: list[Opening] = []
 
-    # Grow outwards from what is already reachable, one room at a time. Circulation
-    # spaces are preferred as the host so new doors land on the corridor and the hall
-    # rather than turning a bedroom into a through-route — which is exactly the privacy
-    # the corridor exists to protect.
+    # Grow outwards from what is already reachable, one room at a time — and only ever
+    # *through* a space you may pass through.
+    #
+    # Preferring circulation was not enough, and the difference is the whole point. A
+    # 40x60 came out with the corridor reachable only through a bedroom, so the route
+    # to the master bedroom's bathroom ran hall → dining → bed2 → corridor → bed1 →
+    # bath1: every room reachable, stage ⑦ satisfied, and a plan nobody would live in.
+    # A preference bends when nothing better is available, which is exactly when it
+    # matters. This is a refusal instead: if the only way to reach a room is through a
+    # bedroom, it stays unreached and ⑦ reports it, because that is a defect in the
+    # tiling that ⑤ should have avoided and not one ⑥ can paper over.
+    through = {room.id for room in program.rooms if room.is_through_route}
+
     def host_rank(room_id: str) -> int:
         kind = kinds.get(room_id)
         if kind in (SpaceKind.CORRIDOR, SpaceKind.FOYER):
@@ -679,11 +688,22 @@ def _connect(
             outside = ({a, b} - reached) & wanted
             if len(inside) != 1 or len(outside) != 1:
                 continue
+            # Hard, and checked before anything else is weighed. An edit once left
+            # this behind an unconditional `continue` and a bathroom got a door into a
+            # kitchen — the one placement CLAUDE.md says every Indian client objects
+            # to, arrived at while making the plan more walkable.
             if frozenset({a, b}) in forbidden:
                 continue
-            candidates.append((host_rank(next(iter(inside))), -wall.length_m, wall))
+            candidates.append(
+                (0 if inside & through else 1, host_rank(next(iter(inside))),
+                 -wall.length_m, wall)
+            )
 
-        for _, _, wall in sorted(candidates, key=lambda row: (row[0], row[1])):
+        # Through-routes first, always. A door hung off a bedroom is a last resort:
+        # the alternative is leaving rooms with no way in at all, and a drawing missing
+        # six doors is a worse thing to hand someone than a drawing whose circulation
+        # is wrong and says so. Stage ⑦ names it either way.
+        for _, _, _, wall in sorted(candidates, key=lambda row: (row[0], row[1], row[2])):
             a, b = wall.rooms
             target = next(iter({a, b} - reached))
             width = (

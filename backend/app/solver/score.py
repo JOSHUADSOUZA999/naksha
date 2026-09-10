@@ -80,6 +80,18 @@ INACCESSIBLE = 90.0
 # to the centimetre, and demanding that would reject every candidate. Not much lower
 # either — at half, a "staircase" whose flights miss each other by a metre passes.
 ALIGNMENT = 0.75
+
+
+@functools.lru_cache(maxsize=1)
+def _door_span() -> float:
+    """The shortest wall that can hold a door, from the ruleset stage ⑥ places them by.
+
+    Walkability has to ask the question ⑥ will later have to answer. Testing that two
+    rooms merely *touch* is not it: a 0.4 m shared edge is a corner, not a doorway, and
+    a 40x60 passed this check on one and came out with a room ⑥ could not reach.
+    """
+    doors = load_ruleset("refine_v1").data["doors"]
+    return doors["service_width_m"] + 2 * doors["clearance_m"]
 STRUCTURAL = 40.0
 PREFERENCE = 5.0
 
@@ -228,6 +240,33 @@ def score(layout: Layout, program: Program) -> tuple[int, float, list[str]]:
                     f"wanted {spec.sector.value.replace('_', ' ')}",
                 )
 
+    # **Can this tiling be walked at all, without going through a bedroom?**
+    #
+    # No doors exist yet, so this asks the question doors will later answer: is every
+    # space joined to the entrance by a chain of *touching* rooms whose intermediate
+    # links are ones you may pass through. If such a chain exists, stage ⑥ can put
+    # doors along it; if it does not, no arrangement of doors will save the plan.
+    #
+    # Scoring the adjacency edges alone was not enough, and the failure was
+    # instructive. A 40x60 left `hall ↔ corridor` unsatisfied, took the 40-point
+    # structural hit, and won anyway — so ⑥ reached the corridor the only way left to
+    # it, through a bedroom, and the route to the master bedroom's bathroom ran
+    # hall → dining → bed2 → corridor → bed1 → bath1. Every room reachable, every check
+    # passed, a plan nobody would live in. A stranded corridor is not forty points
+    # worse than a tidy one; it is a different kind of thing.
+    # Once, not once per room. Counting each stranded room separately let the tally
+    # swamp everything else it was supposed to be weighed against: three stranded rooms
+    # outscored the foyer losing its road access, and the solver duly returned a plan
+    # with no front door — walkable in principle and impossible to enter. It is one
+    # defect, "this plan cannot be walked", which is how stage ⑦ reports it too.
+    stranded = _unwalkable(layout, program)
+    if stranded:
+        fail(
+            INACCESSIBLE,
+            f"the circulation is broken — {', '.join(stranded)} can only be reached "
+            f"by walking through a private room",
+        )
+
     for edge in program.adjacencies:
         a, b = layout.by_id(edge.a), layout.by_id(edge.b)
         if a is None or b is None:
@@ -240,6 +279,54 @@ def score(layout: Layout, program: Program) -> tuple[int, float, list[str]]:
             fail(weight, f"{edge.a} does not reach {edge.b}")
 
     return unbuildable, total, reasons
+
+
+def _shared_wall_m(a, b) -> float:
+    """How much wall two rooms actually share. 0.0 when they only meet at a corner."""
+    if abs(a.x_max_m - b.x_min_m) <= TOLERANCE_M or abs(b.x_max_m - a.x_min_m) <= TOLERANCE_M:
+        return max(0.0, min(a.y_max_m, b.y_max_m) - max(a.y_min_m, b.y_min_m))
+    if abs(a.y_max_m - b.y_min_m) <= TOLERANCE_M or abs(b.y_max_m - a.y_min_m) <= TOLERANCE_M:
+        return max(0.0, min(a.x_max_m, b.x_max_m) - max(a.x_min_m, b.x_min_m))
+    return 0.0
+
+
+def _unwalkable(layout: Layout, program: Program) -> list[str]:
+    """Circulation spaces that can only be reached by walking through a private room.
+
+    **The rule is narrower than "no private room is ever a passage", and the narrowing
+    matters.** An en-suite is reached through its bedroom and that is the point of an
+    en-suite; a first version flagged every one of them. What is wrong is the other
+    direction — reaching the *corridor* through a bedroom, which turns that bedroom
+    into a passage and is what CLAUDE.md means by "bedrooms open off the corridor".
+
+    So: the circulation spine must hang together on its own. Every through-route space
+    has to be reachable from the entrance across doorways between through-route spaces
+    only. What hangs off the spine afterwards — bedrooms, their bathrooms — is the
+    programme's business and not this check's.
+    """
+    specs = {room.id: room for room in program.rooms}
+    placed = {r.room_id: r for r in layout.rooms}
+    spine = {
+        r.id for r in program.rooms
+        if r.is_through_route and r.needs_door and r.id in placed
+    }
+    start = next(
+        (r.id for r in program.rooms if r.kind is SpaceKind.FOYER and r.id in spine),
+        None,
+    )
+    if start is None:
+        return []
+
+    seen = {start}
+    queue = [start]
+    while queue:
+        here = placed[queue.pop()]
+        for other_id in spine - seen:
+            if _shared_wall_m(here, placed[other_id]) >= _door_span() - EPSILON:
+                seen.add(other_id)
+                queue.append(other_id)
+
+    return sorted(spine - seen)
 
 
 def _inside(placed, zone: tuple[float, float, float, float]) -> bool:

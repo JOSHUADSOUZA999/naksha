@@ -78,8 +78,14 @@ def _circulation(layout: Layout, program: Program, floor: RefinedFloor) -> list[
         for placed in layout.rooms
         if placed.room_id not in seen and placed.room_id in walk_in
     )
+
+    # Reachable *only* through a bedroom is its own defect, and a plan can have it
+    # while every room is technically reachable. A 40x60 came out with the route to the
+    # master bedroom's bathroom running hall → dining → bed2 → corridor → bed1 → bath1:
+    # every check passed and a bedroom was serving as a corridor.
+    findings = _through_private_rooms(layout, program, floor, graph, entrance)
     if not stranded:
-        return []
+        return findings
 
     # One finding, not one per room. Twelve separate "you cannot reach the kitchen"
     # lines describe a single defect — the plan is not connected — and splitting it up
@@ -93,7 +99,8 @@ def _circulation(layout: Layout, program: Program, floor: RefinedFloor) -> list[
                 f"the front door: {', '.join(stranded)}"
             ),
             rooms=stranded,
-        )
+        ),
+        *findings,
     ]
 
 
@@ -178,3 +185,46 @@ def check(bundle):
         for layout, floor in zip(bundle.layouts, bundle.floors)
     ]
     return bundle.model_copy(update={"reports": reports})
+
+
+def _through_private_rooms(layout, program, floor, graph, entrance) -> list[Finding]:
+    """Circulation spaces reachable only by walking through somewhere private.
+
+    Narrower than "a private room is never a passage", deliberately. An en-suite is
+    reached through its bedroom and that is what an en-suite is — a first version
+    flagged every one of them as a defect. What is wrong is a *corridor* you reach
+    through a bedroom, which makes that bedroom a passage.
+
+    Walks the doors ⑥ actually drew, where `score._unwalkable` walks the tiling before
+    any exist. The two can disagree, and the disagreement is the useful part: ⑥ hangs a
+    door off a bedroom as a last resort when the alternative is a room with no way in.
+    """
+    through = {r.id for r in program.rooms if r.is_through_route and r.needs_door}
+    start = entrance.connects[0]
+
+    seen = {start}
+    stack = [start]
+    while stack:
+        for neighbour in graph.get(stack.pop(), ()):
+            # Spine to spine only: a private room is where the walk stops.
+            if neighbour in through and neighbour not in seen:
+                seen.add(neighbour)
+                stack.append(neighbour)
+
+    detoured = sorted(
+        r.room_id for r in layout.rooms if r.room_id in through and r.room_id not in seen
+    )
+    if not detoured:
+        return []
+    return [
+        Finding(
+            check="circulation",
+            severity=Severity.WARNING,
+            message=(
+                f"{', '.join(detoured)} can only be reached by walking through a "
+                f"bedroom or bathroom \u2014 circulation should not run through a "
+                f"private room"
+            ),
+            rooms=detoured,
+        )
+    ]

@@ -206,8 +206,20 @@ def shortlist_for(
     def unreachable(row) -> bool:
         return any("road" in reason for reason in row[2].violations)
 
+    def unwalkable(row) -> bool:
+        return any("private room" in reason for reason in row[2].violations)
+
+    # A third group, for the same reason and with sharper numbers. A tiling that admits
+    # a privacy-respecting route — corridor to bedrooms, never bedroom to bedroom — is
+    # *rare*: 35 in 2000 on a 30x50 and 3 in 2000 on a 30x40. They also score badly
+    # before tuning, for the usual reason that what Stage B fixes is exactly what they
+    # look bad on, so ranking alone never showed them to CP-SAT and every plan on a
+    # tight plot came back with a bedroom serving as a corridor.
     reachable = [row for row in scored if not unreachable(row)]
-    shortlist = _interleave(scored[:TUNE_SHORTLIST], reachable[:TUNE_SHORTLIST])
+    walkable = [row for row in scored if not unwalkable(row)]
+    shortlist = _interleave(
+        scored[:TUNE_SHORTLIST], reachable[:TUNE_SHORTLIST], walkable[:TUNE_SHORTLIST]
+    )
     return shortlist
 
 
@@ -240,24 +252,23 @@ def _kinds(program: Program) -> dict:
     return {room.id: room.kind for room in program.rooms}
 
 
-def _interleave(primary: list, secondary: list) -> list:
-    """Merge two ranked shortlists, best-first, alternating, without duplicates.
+def _interleave(*groups: list) -> list:
+    """Merge ranked shortlists, best-first, round-robin, without duplicates.
 
     Alternating rather than concatenating because the tuning loop stops as soon as it
-    has enough dimensioned candidates — appending the second group would mean it was
-    only ever reached when the first group failed outright.
+    has enough dimensioned candidates — appending a group would mean it was only ever
+    reached when the earlier ones failed outright.
     """
     merged: list = []
     seen: set[int] = set()
-    for pair in zip(primary, secondary):
-        for row in pair:
-            if row[1] not in seen:          # row[1] is the generation index
+    for rank in range(max((len(g) for g in groups), default=0)):
+        for group in groups:
+            if rank >= len(group):
+                continue
+            row = group[rank]
+            if row[1] not in seen:         # row[1] is the generation index
                 seen.add(row[1])
                 merged.append(row)
-    for row in [*primary, *secondary]:
-        if row[1] not in seen:
-            seen.add(row[1])
-            merged.append(row)
     return merged
 
 

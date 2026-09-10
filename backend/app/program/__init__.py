@@ -223,6 +223,7 @@ def _spec(kind: SpaceKind, room_id: str, rules: dict[str, Any], *, floor: int) -
         needs_exterior_wall=rule["exterior_wall"],
         needs_road_access=rule["road_access"],
         needs_door=rule["walk_in"],
+        is_through_route=rule["through_route"],
         floor=floor,
     )
 

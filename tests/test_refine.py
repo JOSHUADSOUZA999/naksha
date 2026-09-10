@@ -186,14 +186,23 @@ class TestDoorsComeFromTheGraphNotFromGeometry:
         schedule, it does not replace it."""
         _, program, floor = floors["40x60"]
         layout, _, _ = floors["40x60"]
+        from app.rules import load_ruleset
+
+        doors = load_ruleset("refine_v1").data["doors"]
+        span = doors["service_width_m"] + 2 * doors["clearance_m"]
+        walls = {
+            frozenset(w.rooms): w for w in floor.walls if w.kind is WallKind.INTERIOR
+        }
         drawn = {
             frozenset(o.connects) for o in floor.openings if o.kind is OpeningKind.DOOR
         }
         for edge in program.adjacencies:
             if edge.relation is not Relation.CONNECTED:
                 continue
-            a, b = layout.by_id(edge.a), layout.by_id(edge.b)
-            if a is None or b is None or not a.touches(b):
+            wall = walls.get(frozenset({edge.a, edge.b}))
+            # Touching is not enough: two rooms can share 0.4 m of wall, which is a
+            # corner rather than a doorway, and no door was ever going in it.
+            if wall is None or wall.length_m < span:
                 continue
             assert frozenset({edge.a, edge.b}) in drawn, f"{edge.a}~{edge.b}"
 

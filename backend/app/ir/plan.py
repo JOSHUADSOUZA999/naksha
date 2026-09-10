@@ -75,6 +75,15 @@ class RoomSpec(BaseModel):
         description="True where NBC requires light and ventilation — habitable rooms "
         "and kitchens. A constraint on the tiling, not a preference.",
     )
+    is_through_route: bool = Field(
+        default=False,
+        description="True where a person may pass *through* this space to reach "
+        "another. Circulation may; a bedroom may not, and that is the rule CLAUDE.md "
+        "gives for why the corridor exists at all. Stage ⑥ will not hang a connecting "
+        "door off a room that is false here, even when doing so is the only way to "
+        "reach what is behind it — a plan where every room is reachable through a "
+        "bedroom is reachable and still wrong.",
+    )
     outside_envelope: bool = Field(
         default=False,
         description="True where this space sits outside the buildable rectangle — a "

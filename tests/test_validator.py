@@ -47,10 +47,16 @@ class TestYouCanWalkThroughTheHouse:
         Reachability over *doors*, not adjacency: a shared wall is stage ⑤'s claim and
         only a door in it lets anyone through. This held on none of the four briefs
         when it was first measured.
+
+        Errors only. A warning here is the narrower defect — circulation running
+        through a bedroom — which ⑥ accepts as a last resort when the alternative is a
+        room with no way in, and which stage ⑤ separately scores on the tiling.
         """
         layout, _, _, report = plans[name]
-        stranded = report.by_check("circulation")
-        assert stranded == [], stranded[0].message if stranded else ""
+        errors = [
+            f for f in report.by_check("circulation") if f.severity is Severity.ERROR
+        ]
+        assert errors == [], errors[0].message if errors else ""
 
     def test_a_finding_names_the_rooms_it_is_about(self, plans, name):
         """A defect a user cannot locate on the drawing is one they cannot fix."""
@@ -114,7 +120,10 @@ class TestCirculationIsMeasuredNotAssumed:
                 ]
             }
         )
-        findings = validate(layout, program, stripped).by_check("circulation")
+        findings = [
+            f for f in validate(layout, program, stripped).by_check("circulation")
+            if f.severity is Severity.ERROR
+        ]
         assert len(findings) == 1
         assert len(findings[0].rooms) > 1
 
@@ -317,3 +326,69 @@ class TestGlazingIsMeasuredNotCountedPresence:
         assert findings
         assert "no window" in findings[0].message
         assert "%" not in findings[0].message
+
+
+class TestCirculationDoesNotRunThroughBedrooms:
+    """CLAUDE.md: "bedrooms open off the corridor, never the hall — that is what
+    circulation is for, and why privacy survives the tiling."
+
+    Stage ⑥ broke it the moment it started adding doors for connectivity. A 40x60 came
+    out with the corridor reachable only through a bedroom, so the route to the master
+    bedroom's bathroom ran hall → dining → bed2 → corridor → bed1 → bath1. Every room
+    reachable, every check passing, and a plan nobody would live in.
+    """
+
+    def test_an_en_suite_is_not_a_defect(self, plans):
+        """The narrowing that makes the rule usable.
+
+        A bathroom off its bedroom is reached *through* that bedroom, and that is what
+        an en-suite is. A first version flagged every one of them — the rule is about
+        the circulation spine, not about private rooms having neighbours.
+        """
+        from app.ir.enums import SpaceKind
+
+        for _, program, _, report in plans.values():
+            flagged = {r for f in report.by_check("circulation") for r in f.rooms}
+            kinds = {r.id: r.kind for r in program.rooms}
+            for room in flagged:
+                assert kinds[room] not in (SpaceKind.BATHROOM, SpaceKind.WC), room
+
+    def test_the_finding_names_circulation_spaces_only(self, plans):
+        for _, program, _, report in plans.values():
+            through = {r.id for r in program.rooms if r.is_through_route}
+            for finding in report.by_check("circulation"):
+                if finding.severity is Severity.WARNING:
+                    assert set(finding.rooms) <= through, finding.message
+
+    def test_a_corridor_reached_through_a_bedroom_is_reported(self, plans):
+        """Built by severing the spine rather than by finding a bad brief."""
+        layout, program, floor, _ = plans["50x80"]
+        through = {r.id for r in program.rooms if r.is_through_route}
+        spine_doors = [
+            o for o in floor.openings
+            if o.kind is OpeningKind.DOOR and set(o.connects) <= through
+        ]
+        assert spine_doors, "the fixture must join two circulation spaces"
+
+        severed = floor.model_copy(
+            update={"openings": [o for o in floor.openings if o not in spine_doors]}
+        )
+        findings = validate(layout, program, severed).by_check("circulation")
+        assert any("through a bedroom" in f.message for f in findings)
+
+    def test_stage_five_scores_the_same_property_on_the_tiling(self, plans):
+        """Before any door exists. ⑤ has to prefer tilings ⑥ can wire honestly — the
+        alternative is ⑥ discovering there is no honest wiring left."""
+        from app.solver.score import _unwalkable
+
+        layout, program, _, _ = plans["50x80"]
+        assert _unwalkable(layout, program) == []
+
+    def test_it_is_rare_enough_to_need_its_own_shortlist(self, plans):
+        """Measured: 35 tilings in 2000 on a 30x50 admit a privacy-respecting route,
+        and 3 in 2000 on a 30x40. That is why `solve` interleaves a walkable group into
+        the tuning shortlist rather than trusting the ranking to surface them."""
+        from app.solver import _interleave
+
+        merged = _interleave([("a", 1), ("a", 2)], [("b", 2), ("b", 3)], [("c", 4)])
+        assert [row[1] for row in merged] == [1, 2, 4, 3]
