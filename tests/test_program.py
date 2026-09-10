@@ -273,15 +273,22 @@ class TestAGenerousSiteBuysABiggerHouse:
 
         assert hall(roomy).target_area_sq_m > hall(tight).target_area_sq_m
 
-    def test_a_tight_plot_grows_nothing(self):
-        """There is nothing to spend. Growing here would push a programme that already
-        overflows further past its envelope."""
+    def test_a_tight_floor_grows_nothing(self):
+        """There is nothing to spend. Growing here would push a floor that already
+        overflows further past its envelope.
+
+        Per *floor*, not per plot, and that distinction arrived with stacking: a 30x40
+        3BHK is now G+1, its ground floor is still over capacity and grows nothing,
+        and its first floor holds three bedrooms in the same envelope and rightly
+        grows them.
+        """
         from app.rules import load_ruleset
 
         spaces = load_ruleset("spaces_v1").data["spaces"]
         program, envelope = self._case("30x40 east facing 3bhk in Whitefield with pooja room")
-        assert sum(r.target_area_sq_m for r in program.on_floor(1)) > envelope.max_footprint_sq_m
-        for room in program.rooms:
+        ground = program.on_floor(1)
+        assert sum(r.target_area_sq_m for r in ground) > envelope.max_footprint_sq_m
+        for room in ground:
             assert room.target_area_sq_m == spaces[room.kind.value]["target_area_sq_m"]
 
     def test_no_room_grows_past_its_ceiling(self):
@@ -426,3 +433,56 @@ class TestThePorchInTheSetback:
         brief, envelope = self._case("50x80 4bhk in Bengaluru with study")
         program = expand(brief, envelope)
         assert not any(room.outside_envelope for room in program.rooms)
+
+
+class TestSmallPlotsGetASecondStorey:
+    """Fitting is not the same as being buildable.
+
+    `_stack` used to stop the moment the ground floor's minimums summed under the
+    footprint. An area sum cannot see minimum widths, doors, or whether the corridor is
+    reachable without walking through a bedroom, so a floor that "fits" at 97% routinely
+    could not be tiled — a 30x30 came back with six rooms below their minimums while its
+    first floor sat at 26% and two more permitted storeys went unused.
+    """
+
+    @staticmethod
+    def _case(text: str):
+        from app.envelope import build_envelope
+        from app.llm import fallback
+
+        brief = fallback.parse(text)
+        envelope = build_envelope(brief, allow_unverified=True)
+        return expand(brief, envelope), envelope
+
+    def test_a_tight_ground_floor_is_left_with_room_to_work_in(self):
+        from app.program import PACKING_CEILING
+
+        for text in ("25x40 2bhk in Bengaluru", "30x30 2bhk in Bengaluru"):
+            program, envelope = self._case(text)
+            if len({r.floor for r in program.rooms}) < 2:
+                continue
+            load = sum(r.min_area_sq_m for r in program.on_floor(1))
+            assert load <= envelope.max_footprint_sq_m * PACKING_CEILING + 1e-6, text
+
+    def test_the_floor_count_uses_the_same_ceiling(self):
+        """Dividing by the raw footprint decides "one storey is enough" at 98% packed
+        and then hands `_stack` a single floor with nowhere to unload to. A 25x40 and a
+        30x40 3BHK both sat at 100% on one storey with three permitted overhead."""
+        for text in ("25x40 2bhk in Bengaluru", "30x40 3bhk in Bengaluru"):
+            program, _ = self._case(text)
+            assert len({r.floor for r in program.rooms}) >= 2, text
+
+    def test_a_plot_that_already_fits_comfortably_stays_on_one_floor(self):
+        """The margin must not send rooms upstairs that had no need to go."""
+        for text in ("30x40 2bhk in Bengaluru", "40x60 3bhk in Bengaluru with pooja room"):
+            program, _ = self._case(text)
+            assert {r.floor for r in program.rooms} == {1}, text
+
+    def test_the_small_plots_now_solve(self):
+        """The outcome, not the mechanism. These produced six and seven rooms below
+        their statutory minimums before the margin existed."""
+        from app.feasibility import assess
+
+        for text in ("25x40 2bhk in Bengaluru", "30x30 2bhk in Bengaluru"):
+            program, envelope = self._case(text)
+            assert assess(program, envelope, floor=1).feasible, text

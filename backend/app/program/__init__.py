@@ -21,6 +21,16 @@ from app.rules import load_ruleset
 
 SPACE_RULES = "spaces_v1"
 
+# How full the ground floor may be left before rooms are sent upstairs, as a fraction
+# of the buildable footprint measured at legal minimums.
+#
+# Not 1.0, and the difference is what makes small plots work at all. An area sum cannot
+# see minimum widths, doors, or whether the corridor can be reached without walking
+# through a bedroom, so a floor that "fits" on paper at 97% routinely cannot be tiled —
+# a 30x30 came back with six rooms below their minimums while its first floor sat at
+# 26% and two more storeys went unused.
+PACKING_CEILING = 0.85
+
 
 class PorchDoesNotFit(ValueError):
     """`porch_in_setback` was asked for and the setback cannot hold a car.
@@ -144,7 +154,14 @@ def _assign_floors(
 
     footprint = envelope.max_footprint_sq_m
     needed = sum(room.min_area_sq_m for room in rooms)
-    forced = math.ceil(needed / footprint) if footprint > 0 else requested
+    # Against the same ceiling `_stack` works to, and for the same reason. Dividing by
+    # the raw footprint decides "one storey is enough" at 98% packed, and then hands
+    # `_stack` a single floor it has no second storey to unload onto — a 30x40 3BHK and
+    # a 25x40 2BHK both sat at 100% on one floor with three empty storeys permitted
+    # overhead. The margin has to be applied where the floor *count* is chosen, not
+    # only where rooms are moved.
+    usable = footprint * PACKING_CEILING
+    forced = math.ceil(needed / usable) if usable > 0 else requested
     floors = min(max(requested, forced), envelope.max_floors)
     _stack(rooms, floors, rules, footprint)
 
@@ -152,11 +169,22 @@ def _assign_floors(
 def _stack(
     rooms: list[RoomSpec], floors: int, rules: dict[str, Any], footprint: float | None = None
 ) -> None:
-    """Move rooms up until the ground floor fits, largest first.
+    """Move rooms up until the ground floor fits *with room to work in*, largest first.
 
     Greedy rather than a fixed split: moving half the movable rooms left 66 m² on a
     55 m² floor, which is the same failure as not splitting at all. The stop condition
-    has to be the footprint, not a fraction.
+    has to be measured against the footprint, not a fraction of the room list.
+
+    **Fitting is not the same as being buildable, and stopping at "fits" is what broke
+    the small plots.** The minimums are areas; a tiling also has to satisfy minimum
+    *widths*, put a door in every wall it needs one in, and reach every room without
+    going through a bedroom — none of which the area sum can see. A 30x30 came out at
+    97% packed on the ground floor with its first floor at 26%, and stage ⑤ could not
+    place it: six rooms below their minimums. There was a whole empty storey overhead
+    the entire time.
+
+    So the stop condition carries a margin. Measured across the small briefs, the
+    ground floor becomes solvable around 85% and comfortable below it.
 
     The master bedroom and one bathroom stay down whatever happens — that is the room
     an elderly parent uses, and it is what keeps the house liveable if the upper floor
@@ -181,6 +209,8 @@ def _stack(
     reluctant = by_size(r for r in rooms if r.id in {"bed1", "bath1"})
     movable = preferred + reluctant
 
+    ceiling = footprint * PACKING_CEILING if footprint is not None else None
+
     def ground_load() -> float:
         # The staircase lands on the ground floor too, so it is part of the budget
         # being tested rather than an afterthought added once the split is decided.
@@ -194,7 +224,7 @@ def _stack(
             object.__setattr__(room, "floor", 2)
     else:
         for room in movable:
-            if ground_load() <= footprint:
+            if ground_load() <= ceiling:
                 break
             object.__setattr__(room, "floor", 2)
 

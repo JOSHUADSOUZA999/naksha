@@ -617,11 +617,23 @@ def _connect(
     clearance = rules["clearance_m"]
     narrow = {SpaceKind(k) for k in rules["narrow_kinds"]}
 
+    # Where the walk starts depends on the storey: a ground floor is entered from the
+    # street, a first floor off the stair. Requiring an entrance meant this returned
+    # immediately on every upper floor, so no connecting doors were added at all and
+    # stage ⑦ duly reported four rooms in five as unreachable.
     entrance = next((o for o in openings if o.kind is OpeningKind.ENTRANCE), None)
-    if entrance is None or not entrance.connects:
+    if entrance is not None and entrance.connects:
+        origin = entrance.connects[0]
+    else:
+        origin = next(
+            (r.id for r in program.all_on_floor(layout.floor)
+             if r.kind is SpaceKind.STAIRCASE),
+            None,
+        )
+    if origin is None:
         return []
 
-    reached = {entrance.connects[0]}
+    reached = {origin}
     graph: dict[str, set[str]] = {}
     for opening in openings:
         if opening.kind is OpeningKind.DOOR and len(opening.connects) == 2:
@@ -645,7 +657,7 @@ def _connect(
                     reached.add(neighbour)
                     stack.append(neighbour)
 
-    flood(entrance.connects[0])
+    flood(origin)
 
     # From the ruleset, via the programme — not a set of kinds written out here. The
     # identical list lived in this module and in `validator`, and two copies of the

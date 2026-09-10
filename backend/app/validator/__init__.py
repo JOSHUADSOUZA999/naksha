@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from collections import defaultdict, deque
 
-from app.ir.enums import OpeningKind, Severity
+from app.ir.enums import OpeningKind, Severity, SpaceKind
 from app.ir.layout import Layout
 from app.ir.plan import Program
 from app.ir.refined import RefinedFloor
@@ -44,16 +44,33 @@ def _circulation(layout: Layout, program: Program, floor: RefinedFloor) -> list[
     anywhere else would call a perfectly sealed cluster of rooms connected.
     """
     walk_in = {room.id for room in program.rooms if room.needs_door}
+
+    # **Where you arrive depends on the storey.** A ground floor is entered from the
+    # street; a first floor is entered off the stair, and demanding a front door up
+    # there reported every upper floor in the project as unreachable — which is how a
+    # 25x40 and a 30x30, both of them freshly working, came back with errors.
     entrance = next(
         (o for o in floor.openings if o.kind is OpeningKind.ENTRANCE), None
     )
-    if entrance is None or not entrance.connects:
+    if entrance is not None and entrance.connects:
+        start = entrance.connects[0]
+    else:
+        start = next(
+            (
+                placed.room_id
+                for placed in layout.rooms
+                if program_kind(program, placed.room_id) is SpaceKind.STAIRCASE
+            ),
+            None,
+        )
+    if start is None:
+        message = (
+            "the plan has no front door, so no room is reachable at all"
+            if layout.floor == 1
+            else "this storey has no staircase, so there is no way up to it"
+        )
         return [
-            Finding(
-                check="circulation",
-                severity=Severity.ERROR,
-                message="the plan has no front door, so no room is reachable at all",
-            )
+            Finding(check="circulation", severity=Severity.ERROR, message=message)
         ]
 
     graph: dict[str, set[str]] = defaultdict(set)
@@ -64,7 +81,6 @@ def _circulation(layout: Layout, program: Program, floor: RefinedFloor) -> list[
         graph[a].add(b)
         graph[b].add(a)
 
-    start = entrance.connects[0]
     seen = {start}
     queue = deque([start])
     while queue:
@@ -83,7 +99,7 @@ def _circulation(layout: Layout, program: Program, floor: RefinedFloor) -> list[
     # while every room is technically reachable. A 40x60 came out with the route to the
     # master bedroom's bathroom running hall → dining → bed2 → corridor → bed1 → bath1:
     # every check passed and a bedroom was serving as a corridor.
-    findings = _through_private_rooms(layout, program, floor, graph, entrance)
+    findings = _through_private_rooms(layout, program, floor, graph, start)
     if not stranded:
         return findings
 
@@ -187,7 +203,7 @@ def check(bundle):
     return bundle.model_copy(update={"reports": reports})
 
 
-def _through_private_rooms(layout, program, floor, graph, entrance) -> list[Finding]:
+def _through_private_rooms(layout, program, floor, graph, start) -> list[Finding]:
     """Circulation spaces reachable only by walking through somewhere private.
 
     Narrower than "a private room is never a passage", deliberately. An en-suite is
@@ -200,8 +216,6 @@ def _through_private_rooms(layout, program, floor, graph, entrance) -> list[Find
     door off a bedroom as a last resort when the alternative is a room with no way in.
     """
     through = {r.id for r in program.rooms if r.is_through_route and r.needs_door}
-    start = entrance.connects[0]
-
     seen = {start}
     stack = [start]
     while stack:
@@ -228,3 +242,8 @@ def _through_private_rooms(layout, program, floor, graph, entrance) -> list[Find
             rooms=detoured,
         )
     ]
+
+
+def program_kind(program: Program, room_id: str):
+    """The `SpaceKind` of a placed room, or None if the programme does not know it."""
+    return next((r.kind for r in program.rooms if r.id == room_id), None)

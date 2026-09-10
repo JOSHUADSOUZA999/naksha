@@ -627,10 +627,19 @@ class TestTheSpineIsConnectedBeforeAnythingElse:
         if _unwalkable(layout, program):
             pytest.skip("this tiling has no self-contained spine to find")
 
-        through = {r.id for r in program.rooms if r.is_through_route and r.needs_door}
+        # This storey's circulation only. A G+1 puts `corridor2` and `stair2` upstairs,
+        # and asking one floor's doors to reach another floor's rooms fails for a
+        # reason that has nothing to do with the rule.
+        on_this_floor = {r.room_id for r in layout.rooms}
+        through = {
+            r.id for r in program.rooms
+            if r.is_through_route and r.needs_door and r.id in on_this_floor
+        }
         entrance = next(
-            o for o in floor.openings if o.kind is OpeningKind.ENTRANCE
+            (o for o in floor.openings if o.kind is OpeningKind.ENTRANCE), None
         )
+        if entrance is None:
+            pytest.skip("upper storeys are entered off the stair, tested in ⑦")
         graph: dict[str, set[str]] = {}
         for opening in floor.openings:
             if opening.kind is OpeningKind.DOOR and set(opening.connects) <= through:
