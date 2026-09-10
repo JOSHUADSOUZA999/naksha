@@ -73,6 +73,7 @@ def expand(brief: Brief, envelope: Envelope | None = None) -> Program:
     ]
 
     _assign_floors(rooms, hints.floors, envelope, rules)
+    _grow(rooms, envelope)
 
     return Program(
         rooms=rooms,
@@ -180,6 +181,11 @@ def _spec(kind: SpaceKind, room_id: str, rules: dict[str, Any], *, floor: int) -
         kind=kind,
         min_area_sq_m=rule["min_area_sq_m"],
         target_area_sq_m=rule["target_area_sq_m"],
+        max_target_sq_m=(
+            rule["max_target_sq_m"]
+            if rule["max_target_sq_m"] > rule["target_area_sq_m"]
+            else None
+        ),
         min_width_m=rule["min_width_m"],
         max_aspect=rule["max_aspect"],
         sector=Sector(sector) if sector else None,
@@ -316,3 +322,51 @@ def fits(program: Program, envelope: Envelope) -> tuple[bool, str]:
             f"of {footprint:.1f} m² buildable — rooms will be tight"
         )
     return True, f"{target:.1f} m² of {budget:.1f} m² allowed, across {len(floors_used)} floor(s)"
+
+
+def _grow(rooms: list[RoomSpec], envelope: Envelope | None) -> None:
+    """Spend a generous site on bigger rooms rather than on lawn.
+
+    The targets in `spaces_v1` are what a room should be when the plot is tight, and
+    they were the only figures there — so a 50x80 sized its programme exactly as a
+    30x40 does and left 47% of its permitted footprint unbuilt. Correct arithmetic and
+    the wrong house: an owner paying for that site wants a bigger hall, not more grass.
+
+    Grows the floor with the most on it, proportionally to how much headroom each room
+    has, and stops at the ceilings. Proportional rather than equal because a hall with
+    14 m² of headroom and a kitchen with 5 m² should not both get the same 3 m² — and
+    stopping at ceilings is what keeps the surplus from all landing in one room, which
+    is the defect `footprint` was introduced to fix and would otherwise reintroduce.
+
+    Mutates in place, and only upward: nothing here can push a room below a minimum.
+    """
+    if envelope is None:
+        return
+
+    for floor in {room.floor for room in rooms}:
+        on_floor = [room for room in rooms if room.floor == floor]
+        growable = [room for room in on_floor if room.max_target_sq_m is not None]
+        if not growable:
+            continue
+
+        wanted = sum(room.target_area_sq_m for room in on_floor)
+        spare = envelope.max_footprint_sq_m - wanted
+        if spare <= 0:
+            continue
+
+        headroom = {
+            room.id: room.max_target_sq_m - room.target_area_sq_m for room in growable
+        }
+        total = sum(headroom.values())
+        if total <= 0:
+            continue
+
+        share = min(1.0, spare / total)
+        for index, room in enumerate(rooms):
+            if room.floor != floor or room.id not in headroom:
+                continue
+            rooms[index] = room.model_copy(
+                update={
+                    "target_area_sq_m": room.target_area_sq_m + headroom[room.id] * share
+                }
+            )

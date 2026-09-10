@@ -245,3 +245,74 @@ class TestParkingIsDeterministic:
         program = expand(fallback.parse("30x40 3bhk in Bengaluru with car parking"))
         assert len(self._bays(fallback.parse("30x40 3bhk in Bengaluru with car parking"))) == 1
         assert len({r.id for r in program.rooms}) == len(program.rooms)
+
+
+class TestAGenerousSiteBuysABiggerHouse:
+    """`target_area_sq_m` is what a room should be on a tight plot, and it was the only
+    figure there — so a 50x80 sized its programme exactly as a 30x40 does and left 47%
+    of its permitted footprint unbuilt. Correct arithmetic, wrong house.
+    """
+
+    @staticmethod
+    def _case(text: str):
+        from app.envelope import build_envelope
+        from app.llm import fallback
+
+        brief = fallback.parse(text)
+        envelope = build_envelope(brief, allow_unverified=True)
+        return expand(brief, envelope), envelope
+
+    def test_a_roomy_plot_grows_its_rooms(self):
+        from app.ir.enums import SpaceKind
+
+        tight, _ = self._case("30x50 3bhk in Bengaluru")
+        roomy, _ = self._case("50x80 4bhk in Bengaluru with study")
+
+        def hall(program):
+            return next(r for r in program.rooms if r.kind is SpaceKind.HALL)
+
+        assert hall(roomy).target_area_sq_m > hall(tight).target_area_sq_m
+
+    def test_a_tight_plot_grows_nothing(self):
+        """There is nothing to spend. Growing here would push a programme that already
+        overflows further past its envelope."""
+        from app.rules import load_ruleset
+
+        spaces = load_ruleset("spaces_v1").data["spaces"]
+        program, envelope = self._case("30x40 east facing 3bhk in Whitefield with pooja room")
+        assert sum(r.target_area_sq_m for r in program.on_floor(1)) > envelope.max_footprint_sq_m
+        for room in program.rooms:
+            assert room.target_area_sq_m == spaces[room.kind.value]["target_area_sq_m"]
+
+    def test_no_room_grows_past_its_ceiling(self):
+        """The ceiling is the load-bearing half. Without one the surplus lands in
+        whichever room the solver happens to pick, which is the defect `footprint` was
+        introduced to fix."""
+        program, _ = self._case("50x80 4bhk in Bengaluru with study")
+        for room in program.rooms:
+            if room.max_target_sq_m is not None:
+                assert room.target_area_sq_m <= room.max_target_sq_m + 1e-9
+
+    def test_the_car_bay_never_grows(self):
+        """18 m² is what the bye-laws set, on any plot."""
+        from app.ir.enums import SpaceKind
+
+        for text in ("30x50 3bhk in Bengaluru", "50x80 4bhk in Bengaluru with study"):
+            program, _ = self._case(text)
+            bay = next(
+                (r for r in program.rooms if r.kind is SpaceKind.CAR_PARKING), None
+            )
+            if bay is not None:
+                assert bay.max_target_sq_m is None
+                assert bay.target_area_sq_m == 18.0
+
+    def test_growth_never_touches_a_minimum(self):
+        """Only upward, and only the target. A minimum is a statutory floor and has
+        nothing to do with how generous the site is."""
+        from app.rules import load_ruleset
+
+        spaces = load_ruleset("spaces_v1").data["spaces"]
+        program, _ = self._case("50x80 4bhk in Bengaluru with study")
+        for room in program.rooms:
+            assert room.min_area_sq_m == spaces[room.kind.value]["min_area_sq_m"]
+            assert room.target_area_sq_m >= room.min_area_sq_m

@@ -233,13 +233,28 @@ class TestOneJudgmentInOnePlace:
         assert dining and not dining[0].needs_exterior_wall
         assert dining[0].id not in flagged
 
-    def test_a_hall_with_no_exterior_wall_is_still_flagged(self, plans):
-        """The rule did not become lax — a hall does need daylight, and where stage ⑤
-        puts one in the interior the drawing says so."""
-        _, program, _, report = plans["40x60"]
+    def test_a_room_that_needs_light_and_has_none_is_still_flagged(self, plans):
+        """The rule did not become lax when the ruleset took over the judgment.
+
+        Built by stripping the windows rather than by finding a brief with a landlocked
+        hall: the 40x60 used to have one and no longer does, and a test that waits for
+        the pipeline to produce a defect stops testing anything the day it stops
+        producing one.
+        """
+        layout, program, floor, _ = plans["40x60"]
         hall = next(r for r in program.rooms if r.kind is SpaceKind.HALL)
         assert hall.needs_exterior_wall
-        assert any(hall.id in f.rooms for f in report.by_check("light"))
+
+        blind = floor.model_copy(
+            update={
+                "openings": [
+                    o for o in floor.openings
+                    if not (o.kind is OpeningKind.WINDOW and hall.id in o.connects)
+                ]
+            }
+        )
+        findings = validate(layout, program, blind).by_check("light")
+        assert any(hall.id in f.rooms for f in findings)
 
 
 class TestGlazingIsMeasuredNotCountedPresence:
@@ -279,10 +294,26 @@ class TestGlazingIsMeasuredNotCountedPresence:
                 if floor.window_area_sq_m(room.id) >= area * fraction - 1e-6:
                     assert room.id not in flagged, f"{name}/{room.id}"
 
-    def test_a_room_with_no_exterior_wall_says_so_plainly(self, plans):
-        """Not "glazed to 0%", which reads as a shortfall to make up. There is no wall
-        to put a window in, and that is a different problem."""
-        _, _, _, report = plans["40x60"]
-        no_window = [f for f in report.by_check("light") if "no window" in f.message]
-        assert no_window
-        assert "%" not in no_window[0].message
+    def test_a_room_with_no_window_says_so_plainly(self, plans):
+        """Not "glazed to 0%", which reads as a shortfall to make up. Having no window
+        and having too little window are different problems and read differently."""
+        layout, program, floor, _ = plans["50x80"]
+        lit = next(
+            r for r in program.rooms
+            if r.needs_exterior_wall and floor.window_area_sq_m(r.id) > 0
+        )
+        blind = floor.model_copy(
+            update={
+                "openings": [
+                    o for o in floor.openings
+                    if not (o.kind is OpeningKind.WINDOW and lit.id in o.connects)
+                ]
+            }
+        )
+        findings = [
+            f for f in validate(layout, program, blind).by_check("light")
+            if lit.id in f.rooms
+        ]
+        assert findings
+        assert "no window" in findings[0].message
+        assert "%" not in findings[0].message

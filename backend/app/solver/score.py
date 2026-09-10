@@ -145,13 +145,19 @@ def score(layout: Layout, program: Program) -> tuple[int, float, list[str]]:
         # 2.5 m² target, which nobody would object to; absolute alone flags a large
         # hall for being large. Together they catch the room that is the wrong *kind*
         # of size.
-        excess = placed.area_sq_m - spec.target_area_sq_m
-        if placed.area_sq_m > 2 * spec.target_area_sq_m and excess > 3.0:
+        # Measured against the room's *ceiling* where it has one. Stage ③ grows targets
+        # on a generous site, and this rule compared against the grown target — so a
+        # bedroom whose ceiling is 16 m² could reach 29.9 m² and pass, which is the
+        # defect the ceiling exists to prevent. A room with no ceiling does not grow,
+        # and its target is its ceiling.
+        ceiling = spec.max_target_sq_m or spec.target_area_sq_m
+        excess = placed.area_sq_m - ceiling
+        if placed.area_sq_m > 1.5 * ceiling and excess > 3.0:
             fail(
                 STRUCTURAL,
                 f"{spec.id} is {placed.area_sq_m:.1f} m², "
-                f"{placed.area_sq_m / spec.target_area_sq_m:.1f}x the "
-                f"{spec.target_area_sq_m:.1f} m² it needs",
+                f"{placed.area_sq_m / ceiling:.1f}x the {ceiling:.1f} m² "
+                f"it should ever be",
             )
         if placed.aspect > spec.max_aspect + EPSILON:
             fail(

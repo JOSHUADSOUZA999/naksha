@@ -495,17 +495,37 @@ class TestWindowsAreSizedToTheRoomTheyLight:
         return load_ruleset("refine_v1").data["windows"]["area_fraction"]
 
     @pytest.mark.parametrize("name", list(BRIEFS))
-    def test_a_glazed_room_meets_the_fraction(self, floors, name):
+    def test_a_glazed_room_meets_the_fraction_or_runs_out_of_wall(self, floors, name):
+        """Stage ⑥ glazes to the fraction where the walls allow it and stops where they
+        do not — a window wider than the wall it sits in is not a fix. A room that ends
+        up short is stage ⑦'s finding, so the invariant here is that the shortfall is
+        always the wall's fault and never the sizing's.
+        """
+        from app.rules import load_ruleset
+
+        rules = load_ruleset("refine_v1").data["windows"]
         _, program, floor = floors[name]
-        fraction = self._fraction()
         for room in program.rooms:
             if not room.needs_exterior_wall or room.id not in floor.clear:
                 continue
             glazed = floor.window_area_sq_m(room.id)
             if glazed <= 0:
-                continue  # no exterior wall to glaze — stage ⑦'s finding, not ⑥'s
+                continue  # no exterior wall at all — again ⑦'s finding
             area = floor.clear_area_sq_m(room.id)
-            assert glazed >= area * fraction - 1e-6, f"{name}/{room.id}"
+            if glazed >= area * rules["area_fraction"] - 1e-6:
+                continue
+            usable = sum(
+                min(w.length_m, rules["max_width_m"])
+                for w in floor.walls
+                if w.kind is WallKind.EXTERIOR
+                and w.rooms == [room.id]
+                and w.length_m >= rules["min_wall_m"]
+            )
+            wanted = area * rules["area_fraction"] / rules["height_m"]
+            assert usable < wanted + 1e-6, (
+                f"{name}/{room.id}: {usable:.2f} m of usable wall was enough for "
+                f"{wanted:.2f} m of window and it was not used"
+            )
 
     @pytest.mark.parametrize("name", list(BRIEFS))
     def test_a_bigger_room_gets_more_glass(self, floors, name):
@@ -528,17 +548,33 @@ class TestWindowsAreSizedToTheRoomTheyLight:
         smallest window anybody builds — and reading that as "no window" left every
         kitchen in the set blind. The minimum is a floor on a window, not a reason to
         omit one.
+
+        Searched for rather than named: which rooms are small enough changed the day
+        stage ③ started growing targets on a generous site, and a test pinned to one
+        room in one brief would have gone quietly vacuous.
         """
         from app.rules import load_ruleset
 
         rules = load_ruleset("refine_v1").data["windows"]
-        _, program, floor = floors["40x60"]
-        kitchen = next(r for r in program.rooms if r.kind is SpaceKind.KITCHEN)
-        area = floor.clear_area_sq_m(kitchen.id)
-        assert area * rules["area_fraction"] / rules["height_m"] < rules["min_width_m"], (
-            "the fixture's kitchen must be small enough to want less than one window"
-        )
-        assert floor.window_area_sq_m(kitchen.id) > 0
+        threshold = rules["min_width_m"] * rules["height_m"] / rules["area_fraction"]
+
+        checked = 0
+        for _, program, floor in floors.values():
+            for room in program.rooms:
+                if not room.needs_exterior_wall or room.id not in floor.clear:
+                    continue
+                area = floor.clear_area_sq_m(room.id)
+                has_wall = any(
+                    w.kind is WallKind.EXTERIOR
+                    and w.rooms == [room.id]
+                    and w.length_m >= rules["min_wall_m"]
+                    for w in floor.walls
+                )
+                if area >= threshold or not has_wall:
+                    continue
+                assert floor.window_area_sq_m(room.id) > 0, room.id
+                checked += 1
+        assert checked, "no room in the set wants less than the minimum window"
 
     @pytest.mark.parametrize("name", list(BRIEFS))
     def test_no_window_is_wider_than_its_wall(self, floors, name):

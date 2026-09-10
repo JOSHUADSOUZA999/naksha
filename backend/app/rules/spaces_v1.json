@@ -7,6 +7,7 @@
     "hall": {
       "min_area_sq_m": 9.5,
       "target_area_sq_m": 18.0,
+      "max_target_sq_m": 32.0,
       "min_width_m": 2.4,
       "sector": "north",
       "exterior_wall": true,
@@ -20,6 +21,7 @@
     "dining": {
       "min_area_sq_m": 7.5,
       "target_area_sq_m": 10.0,
+      "max_target_sq_m": 18.0,
       "min_width_m": 2.1,
       "sector": "west",
       "exterior_wall": false,
@@ -33,6 +35,7 @@
     "kitchen": {
       "min_area_sq_m": 5.0,
       "target_area_sq_m": 9.0,
+      "max_target_sq_m": 14.0,
       "min_width_m": 1.8,
       "sector": "south_east",
       "exterior_wall": true,
@@ -46,6 +49,7 @@
     "master_bedroom": {
       "min_area_sq_m": 9.5,
       "target_area_sq_m": 14.0,
+      "max_target_sq_m": 22.0,
       "min_width_m": 2.4,
       "sector": "south_west",
       "exterior_wall": true,
@@ -59,6 +63,7 @@
     "bedroom": {
       "min_area_sq_m": 7.5,
       "target_area_sq_m": 11.0,
+      "max_target_sq_m": 16.0,
       "min_width_m": 2.1,
       "sector": "south",
       "exterior_wall": true,
@@ -72,6 +77,7 @@
     "bathroom": {
       "min_area_sq_m": 1.8,
       "target_area_sq_m": 3.5,
+      "max_target_sq_m": 5.0,
       "min_width_m": 1.2,
       "sector": "north_west",
       "exterior_wall": false,
@@ -85,6 +91,7 @@
     "wc": {
       "min_area_sq_m": 1.1,
       "target_area_sq_m": 1.8,
+      "max_target_sq_m": 2.5,
       "min_width_m": 0.9,
       "sector": "north_west",
       "exterior_wall": false,
@@ -98,6 +105,7 @@
     "foyer": {
       "min_area_sq_m": 2.0,
       "target_area_sq_m": 3.0,
+      "max_target_sq_m": 7.0,
       "min_width_m": 1.2,
       "sector": null,
       "exterior_wall": false,
@@ -111,6 +119,7 @@
     "corridor": {
       "min_area_sq_m": 2.0,
       "target_area_sq_m": 4.0,
+      "max_target_sq_m": 14.0,
       "min_width_m": 1.0,
       "sector": null,
       "exterior_wall": false,
@@ -123,6 +132,7 @@
     "staircase": {
       "min_area_sq_m": 5.0,
       "target_area_sq_m": 7.0,
+      "max_target_sq_m": 9.5,
       "min_width_m": 1.0,
       "sector": "south_west",
       "exterior_wall": false,
@@ -136,6 +146,7 @@
     "pooja": {
       "min_area_sq_m": 1.5,
       "target_area_sq_m": 2.5,
+      "max_target_sq_m": 4.0,
       "min_width_m": 1.0,
       "sector": "north_east",
       "exterior_wall": false,
@@ -148,6 +159,7 @@
     "study": {
       "min_area_sq_m": 5.5,
       "target_area_sq_m": 8.0,
+      "max_target_sq_m": 13.0,
       "min_width_m": 2.1,
       "sector": "west",
       "exterior_wall": true,
@@ -160,6 +172,7 @@
     "store": {
       "min_area_sq_m": 3.0,
       "target_area_sq_m": 4.0,
+      "max_target_sq_m": 6.0,
       "min_width_m": 1.2,
       "sector": "south_west",
       "exterior_wall": false,
@@ -172,6 +185,7 @@
     "utility": {
       "min_area_sq_m": 2.5,
       "target_area_sq_m": 4.0,
+      "max_target_sq_m": 6.0,
       "min_width_m": 1.2,
       "sector": "north_west",
       "exterior_wall": true,
@@ -184,6 +198,7 @@
     "car_parking": {
       "min_area_sq_m": 18.0,
       "target_area_sq_m": 18.0,
+      "max_target_sq_m": 18.0,
       "min_width_m": 3.0,
       "sector": null,
       "exterior_wall": true,
@@ -197,6 +212,7 @@
     "guest_room": {
       "min_area_sq_m": 7.5,
       "target_area_sq_m": 11.0,
+      "max_target_sq_m": 16.0,
       "min_width_m": 2.4,
       "sector": "north_west",
       "exterior_wall": true,
@@ -209,6 +225,7 @@
     "servant_room": {
       "min_area_sq_m": 7.5,
       "target_area_sq_m": 9.0,
+      "max_target_sq_m": 11.0,
       "min_width_m": 2.4,
       "sector": "north_west",
       "exterior_wall": true,
@@ -221,6 +238,7 @@
     "balcony": {
       "min_area_sq_m": 2.0,
       "target_area_sq_m": 4.0,
+      "max_target_sq_m": 8.0,
       "min_width_m": 1.0,
       "sector": null,
       "exterior_wall": true,
@@ -233,6 +251,7 @@
     "veranda": {
       "min_area_sq_m": 3.0,
       "target_area_sq_m": 6.0,
+      "max_target_sq_m": 12.0,
       "min_width_m": 1.5,
       "sector": "east",
       "exterior_wall": true,
@@ -245,6 +264,7 @@
     "office": {
       "min_area_sq_m": 5.5,
       "target_area_sq_m": 8.0,
+      "max_target_sq_m": 13.0,
       "min_width_m": 2.1,
       "sector": "west",
       "exterior_wall": true,
@@ -259,5 +279,6 @@
   "_edition": "Cited as NBC 2016 Part 3 with NO amendment number, because the document was never read — the figures are transcribed from practice knowledge. NBC 2016 (SP 7 : 2016) is still the current edition, but BIS issues amendments and we do not know which apply to Part 3 or whether they move these minimums. Confirming that is VERIFY.md Q5. When a figure is checked, record the amendment it was checked against alongside `verified: true`.",
   "_verified_2017": "Five figures confirmed against the Karnataka Municipalities Model Building Bye-Laws 2017 (UDD 14 TTP 2017 (P-4), 28-10-2017), downloaded from BBMP's own BPAS portal and read first-hand. The rest remain transcribed from practice. Note cl. 1(3): FAR, setback, coverage and height are governed by the Master Plan and Zonal Regulations, NOT by these bye-laws — so `setbacks_v1.json` is a separate question and is still unverified.",
   "_scope": "For Bengaluru the operative document is the Karnataka Municipalities Model Building Bye-Laws 2017, not NBC 2016. NBC is the national model code; Karnataka adopted and adapted it, and a BBMP sanction is checked against the Karnataka version. Citing NBC was one level too abstract. Entries still marked 'practice, not code' are conventions with no legal floor found in the 2017 document — a plan violating one is unusual, not illegal.",
-  "_walk_in": "Whether a person reaches this space through the house. It decides two things that must agree: which rooms stage ⑥ guarantees a door to, and which rooms stage ⑦ reports as stranded. They were separate hardcoded sets in two modules until this existed — one list in `refine` and an identical one in `validator` — which is a drift waiting to happen: ⑥ connecting one set while ⑦ checks another would read as a clean plan. False only for the car porch, which is entered from the street."
+  "_walk_in": "Whether a person reaches this space through the house. It decides two things that must agree: which rooms stage ⑥ guarantees a door to, and which rooms stage ⑦ reports as stranded. They were separate hardcoded sets in two modules until this existed — one list in `refine` and an identical one in `validator` — which is a drift waiting to happen: ⑥ connecting one set while ⑦ checks another would read as a clean plan. False only for the car porch, which is entered from the street.",
+  "_growth": "`target_area_sq_m` is what a room should be on a plot that is tight; `max_target_sq_m` is what it grows to on one that is not. A 50x80 was leaving 47% of its permitted footprint unbuilt because the targets were the same figures used for a 30x40 — the owner of the larger site got a modest house and a large lawn. Rooms grow only where a bigger one is better: a hall and a bedroom do, a bathroom and a corridor do not, and a car bay is a statutory 18 m² either way. Where the two figures are equal the room does not grow at all. Practice figures throughout, and the ceiling matters more than the number — without one, surplus keeps landing in whichever room the solver happens to pick. Circulation grows too, and pretending otherwise only pushed the surplus there anyway: a 50x80 came out with a 13.3 m² foyer and an 11.4 m² corridor against ceilings of 3 and 4, flagged as defects when a larger house genuinely has more hallway. A bathroom in a big house is bigger than a bathroom in a small one for the same reason. The car bay is the one space that never grows — 18 m² is what the bye-laws set, on any plot."
 }

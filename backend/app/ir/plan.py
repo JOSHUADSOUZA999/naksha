@@ -42,6 +42,14 @@ class RoomSpec(BaseModel):
     kind: SpaceKind
     min_area_sq_m: float = Field(description="Below this it is not legally a room.", gt=0)
     target_area_sq_m: float = Field(description="What it should be if the budget allows.", gt=0)
+    max_target_sq_m: float | None = Field(
+        default=None,
+        gt=0,
+        description="What this room grows to on a site that can afford it. Null means "
+        "it does not grow — a bathroom and a corridor are the size they are, and a car "
+        "bay is a statutory 18 m² on any plot. The ceiling is the load-bearing half: "
+        "without one, surplus lands in whichever room the solver happens to pick.",
+    )
     min_width_m: float = Field(
         description="Shortest usable dimension. Area alone permits a 1 m x 9 m bedroom.",
         gt=0,
@@ -88,6 +96,11 @@ class RoomSpec(BaseModel):
             raise ValueError(
                 f"{self.id}: target {self.target_area_sq_m} m² is below the minimum "
                 f"{self.min_area_sq_m} m²"
+            )
+        if self.max_target_sq_m is not None and self.max_target_sq_m < self.target_area_sq_m:
+            raise ValueError(
+                f"{self.id}: growth ceiling {self.max_target_sq_m} m² is below the "
+                f"target {self.target_area_sq_m} m²"
             )
         return self
 
