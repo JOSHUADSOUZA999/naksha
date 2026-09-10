@@ -2,16 +2,17 @@
 
 Reads a `PlanBundle` and draws it with react-konva. Pan, zoom, click a room.
 
-**Not verified.** Written on a machine with Node 16, which cannot run Vite 5 — the
-code has never been executed. Expect to fix something on first run.
+**Runs.** Node 20.20.2 via nvm, `npm install`, `tsc -b` clean, `vite build` clean,
+and the plan renders headless with no console errors. Two things were wrong on that
+first run and both were only visible in the picture:
 
-The bundle it reads now carries stage ⑥'s drawing and stage ⑦'s findings, so the
-viewer draws walls at their true thickness, doors with swing arcs, windows, fixtures,
-and a porch in the setback where there is one; the side panel lists what ⑦ found and
-selects the room a finding names. None of that TSX has been run either. What *is*
-checked is the JSON shape it depends on — `tests/test_ir_plan.py` asserts every field
-`types.ts` declares, from the Python side, because a renamed field would otherwise
-surface as a blank drawing in a browser nobody here can open.
+- **Door swings were drawn outside the building.** Konva's `Arc` is a *wedge*, and with
+  `innerRadius === outerRadius` it degenerates — it drew near-full circles floating off
+  the plan. The swing is now an explicit twelve-segment polyline, computed from the same
+  two vectors the SVG renderer uses, so the two cannot drift apart.
+- **Room areas disagreed with the SVG.** The viewer quoted stage ⑤'s rectangles, which
+  run to the wall centrelines and overstate every room by half a wall a side. It now
+  reads `clear` from the refined floor, which is the figure a person should see.
 
 ## Requires Node 18+
 

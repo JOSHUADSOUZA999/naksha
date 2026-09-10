@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from "react";
-import { Stage, Layer, Rect, Text, Group, Line, Arc, Ellipse, Circle } from "react-konva";
+import { Stage, Layer, Rect, Text, Group, Line, Ellipse, Circle } from "react-konva";
 import type Konva from "konva";
 import type { Fixture, Layout, PlacedRoom, RefinedFloor, RoomSpec, Wall } from "./types";
 
@@ -40,6 +40,15 @@ export function FloorPlan({ layout, refined, specs, width, height, selected, onS
   }, [width, height, plan.width, plan.depth]);
 
   const scale = base * zoom;
+
+  /** Floor inside the plaster. Stage ⑤'s rectangles run to the wall centrelines and
+   *  overstate every room by half a wall a side — the SVG renderer has shown the clear
+   *  figure since ⑥ existed, and a viewer quoting the other one makes two consumers of
+   *  one plan disagree about how big a bathroom is. */
+  const clearArea = (room: PlacedRoom) => {
+    const r = refined?.clear?.[room.room_id];
+    return r ? Math.max(0, r[2] - r[0]) * Math.max(0, r[3] - r[1]) : room.area_sq_m;
+  };
   const originX = (width - plan.width * scale) / 2;
   const originY = (height - plan.depth * scale) / 2;
 
@@ -123,7 +132,7 @@ export function FloorPlan({ layout, refined, specs, width, height, selected, onS
                     y={topLeft.y + h / 2 + 1}
                     width={w}
                     align="center"
-                    text={`${room.area_sq_m.toFixed(1)} m²`}
+                    text={`${clearArea(room).toFixed(1)} m²`}
                     fontSize={9.5}
                     fill="#666"
                     listening={false}
@@ -207,15 +216,36 @@ export function FloorPlan({ layout, refined, specs, width, height, selected, onS
           const room = op.connects.length ? layout.rooms.find(
             (r) => r.room_id === op.connects[op.connects.length - 1]) : undefined;
 
-          // Which side the leaf falls on follows the room being entered. Picking by
-          // axis alone put a front door outside the building.
-          let angle = 0;
+          // The leaf falls into the room being entered, and the arc sweeps from the
+          // leaf round to the far reveal. Deriving both from the same two vectors is
+          // what keeps this identical to the SVG renderer: the first version picked a
+          // Konva rotation by hand and put half the swings outside the building.
           const radius = Math.hypot(b.x - a.x, b.y - a.y);
-          if (!isWindow && room) {
+          const mid = t(op.offset_m);
+          let inward = { x: 0, y: -1 };
+          if (room) {
             const c = toScreen((room.x_min_m + room.x_max_m) / 2,
                                (room.y_min_m + room.y_max_m) / 2);
-            const mid = t(op.offset_m);
-            angle = wall.is_vertical ? (c.x > mid.x ? 0 : 180) : (c.y > mid.y ? 90 : 270);
+            inward = wall.is_vertical
+              ? { x: c.x > mid.x ? 1 : -1, y: 0 }
+              : { x: 0, y: c.y > mid.y ? 1 : -1 };
+          }
+          const deg = (v: { x: number; y: number }) =>
+            (Math.atan2(v.y, v.x) * 180) / Math.PI;
+          const fromLeaf = deg(inward);
+          const toReveal = deg({ x: b.x - a.x, y: b.y - a.y });
+          // ±90: the leaf and the wall are perpendicular, and the sign is which way
+          // round. Normalised into (-180, 180] so it never takes the long way.
+          const sweep = ((toReveal - fromLeaf + 540) % 360) - 180;
+          const leaf = { x: a.x + inward.x * radius, y: a.y + inward.y * radius };
+          // The quarter circle as an explicit polyline. Konva's `Arc` is a wedge, and
+          // with innerRadius === outerRadius it degenerates into something that drew
+          // near-full circles floating outside the building. Twelve segments is past
+          // the point anyone can see the facets at this scale.
+          const arc: number[] = [];
+          for (let k = 0; k <= 12; k++) {
+            const th = ((fromLeaf + (sweep * k) / 12) * Math.PI) / 180;
+            arc.push(a.x + Math.cos(th) * radius, a.y + Math.sin(th) * radius);
           }
 
           return (
@@ -225,9 +255,10 @@ export function FloorPlan({ layout, refined, specs, width, height, selected, onS
               {isWindow ? (
                 <Line points={[a.x, a.y, b.x, b.y]} stroke="#3f6f8f" strokeWidth={1.4} />
               ) : (
-                <Arc x={a.x} y={a.y} innerRadius={radius} outerRadius={radius}
-                     angle={90} rotation={angle} stroke="#555" strokeWidth={1.1}
-                     dash={[3, 3]} />
+                <>
+                  <Line points={[a.x, a.y, leaf.x, leaf.y]} stroke="#555" strokeWidth={1.1} />
+                  <Line points={arc} stroke="#555" strokeWidth={1.1} dash={[3, 3]} />
+                </>
               )}
             </Group>
           );
