@@ -75,6 +75,14 @@ class RoomSpec(BaseModel):
         description="True where NBC requires light and ventilation — habitable rooms "
         "and kitchens. A constraint on the tiling, not a preference.",
     )
+    outside_envelope: bool = Field(
+        default=False,
+        description="True where this space sits outside the buildable rectangle — a "
+        "car porch in the front setback, which many Indian bye-laws permit and which "
+        "decides whether a 30x40 fits a 3BHK at all. Stage ⑤ does not tile it; stage ⑥ "
+        "places it in the setback strip and draws it. Gated, because whether the "
+        "setback may be built on is exactly the rule we have not verified.",
+    )
     needs_door: bool = Field(
         default=True,
         description="True where a person reaches this space through the house. Stage "
@@ -177,7 +185,20 @@ class Program(DerivedFieldsAreOutputOnly):
         return sum(room.target_area_sq_m for room in self.rooms)
 
     def on_floor(self, floor: int) -> list[RoomSpec]:
-        """Stage ⑤ tiles one floor at a time; each is its own rectangle."""
+        """The rooms stage ⑤ tiles on this floor — each floor is its own rectangle.
+
+        Excludes anything `outside_envelope`, and excluding it here rather than at each
+        call site is deliberate: every consumer of this method wants the tiled set, so
+        a caller that has not been told about setback spaces gets the right answer by
+        default. `all_on_floor` is for the ones that want the whole storey.
+        """
+        return [
+            room for room in self.rooms
+            if room.floor == floor and not room.outside_envelope
+        ]
+
+    def all_on_floor(self, floor: int) -> list[RoomSpec]:
+        """Every space on this storey, tiled or not. What stage ⑥ draws."""
         return [room for room in self.rooms if room.floor == floor]
 
 

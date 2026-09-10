@@ -33,6 +33,39 @@ In practice, is a covered car porch on a plot this size:
 **Does cl. 5.1.8.2's 3.0 × 6.0 m apply to an open porch**, or only to an enclosed
 garage? ____________________________________
 
+**Since this sheet was written we measured the strip itself, and it changes the
+question.** A statutory bay is 3.0 × 6.0 m. The front setback on every plot naksha
+models is shallower than 3.0 m:
+
+| plot | road | front setback | bay fits? |
+|---|---|---|---|
+| 30x40 | east | 1.46 m | no |
+| 30x50 | north | 1.83 m | no |
+| 40x60 | north | 2.19 m | no |
+| 50x80 | north | **2.93 m** | no — by seven centimetres |
+
+So "built within the front setback" may be permitted and still be impossible: on plots
+this size there is no setback deep enough to stand a car in. If the practice is real,
+one of these is wrong — the setback figures (unverified, `setbacks_v1.json`), the
+3.0 × 6.0 bay (cl. 5.1.8.2(a), verified), or our assumption that the porch is a
+separate structure rather than **stilt parking under the house**.
+
+**Which is it?**
+
+- [ ] the setback figures are wrong — the real front setback on a 30x40 is ______ m
+- [ ] a porch may project *over* the setback line, or the plot line
+- [ ] an open standing space is permitted at less than 3.0 × 6.0 — the real figure is
+      ______ × ______ m
+- [ ] **it is stilt parking**, under the house, and a 30x40 3BHK is G+1 by necessity
+- [ ] something else: ______________________
+
+*What it changes:* moving the bay off the ground floor takes a 30x40 3BHK from
+73.6 m² of statutory minimums against a 74.9 m² envelope — infeasible on every seed
+tried — to 55.6 m², which solves. It is the single change that decides whether naksha
+serves the commonest plot in the market. `--porch-in-setback` implements it and
+currently refuses on all four plots, with the numbers, rather than drawing a house with
+the car nowhere.
+
 *Measured, using the statutory 18 m² bay:*
 
 | ground floor | packed | legal layouts |

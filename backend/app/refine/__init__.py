@@ -26,8 +26,14 @@ from app.rules import load_ruleset
 REFINE_RULES = "refine_v1"
 
 
-def refine(layout: Layout, program: Program) -> RefinedFloor:
-    """Walls and openings for one storey."""
+def refine(layout: Layout, program: Program, envelope=None) -> RefinedFloor:
+    """Walls and openings for one storey.
+
+    `envelope` is needed only to place spaces that sit outside the buildable rectangle
+    — a car porch in the setback. Optional so every existing caller keeps working, and
+    a programme carrying such a space without one draws the house without it rather
+    than guessing where the plot boundary is.
+    """
     rules = load_ruleset(REFINE_RULES).data
     walls = _walls(layout, rules["walls"])
     openings = _doors(walls, layout, program, rules["doors"])
@@ -43,6 +49,7 @@ def refine(layout: Layout, program: Program) -> RefinedFloor:
     return RefinedFloor(
         floor=layout.floor, walls=walls, openings=openings,
         fixtures=fixtures, clear=clear,
+        outside=_in_the_setback(layout, program, envelope),
     )
 
 
@@ -705,3 +712,63 @@ def _connect(
             break
 
     return added
+
+
+def _in_the_setback(layout: Layout, program: Program, envelope) -> list[PlacedRoom]:
+    """Place whatever stage ③ marked as sitting outside the buildable rectangle.
+
+    Centred on the road edge, in the strip between the envelope and the plot boundary.
+    Centred rather than cornered because a car porch is the approach: it wants to be in
+    front of the door, and with the entrance already constrained to the road-facing
+    wall the middle of the strip is the closest this can get without knowing where in
+    that wall the door landed.
+
+    Whether the strip can hold a bay at all is stage ③'s decision — it refuses the
+    whole programme when it cannot, rather than letting a drawing show a house with a
+    car nowhere. By the time this runs the answer is yes.
+    """
+    wanted = [r for r in program.all_on_floor(layout.floor) if r.outside_envelope]
+    if not wanted or envelope is None:
+        return []
+
+    from app.ir.enums import Facing
+
+    road = envelope.road_edges[0]
+    depth = envelope.setbacks[road]
+    vertical_road = road in (Facing.NORTH, Facing.SOUTH)
+    placed: list[PlacedRoom] = []
+
+    for index, room in enumerate(wanted):
+        short = room.min_width_m
+        long = room.min_area_sq_m / short if short > 0 else 0.0
+        # Whichever way round the strip can take: out from the house if it is deep
+        # enough, along the road otherwise.
+        out, across = (long, short) if depth >= long else (short, long)
+        if depth < out:
+            continue
+
+        step = (index - (len(wanted) - 1) / 2) * (across + 0.3)
+        if vertical_road:
+            centre = (envelope.x_min_m + envelope.x_max_m) / 2 + step
+            x_min, x_max = centre - across / 2, centre + across / 2
+            y_min, y_max = (
+                (envelope.y_max_m, envelope.y_max_m + out)
+                if road is Facing.NORTH
+                else (envelope.y_min_m - out, envelope.y_min_m)
+            )
+        else:
+            centre = (envelope.y_min_m + envelope.y_max_m) / 2 + step
+            y_min, y_max = centre - across / 2, centre + across / 2
+            x_min, x_max = (
+                (envelope.x_max_m, envelope.x_max_m + out)
+                if road is Facing.EAST
+                else (envelope.x_min_m - out, envelope.x_min_m)
+            )
+
+        placed.append(
+            PlacedRoom(
+                room_id=room.id, x_min_m=x_min, y_min_m=y_min,
+                x_max_m=x_max, y_max_m=y_max,
+            )
+        )
+    return placed

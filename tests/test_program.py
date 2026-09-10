@@ -316,3 +316,113 @@ class TestAGenerousSiteBuysABiggerHouse:
         for room in program.rooms:
             assert room.min_area_sq_m == spaces[room.kind.value]["min_area_sq_m"]
             assert room.target_area_sq_m >= room.min_area_sq_m
+
+
+class TestThePorchInTheSetback:
+    """Moving the 18 m² bay off the ground floor is what decides whether a 30x40 fits
+    a 3BHK. Whether the setback may hold it is VERIFY.md Q1 — unanswered — so the flag
+    is off by default and refuses when the strip is too shallow.
+    """
+
+    @staticmethod
+    def _case(text: str):
+        from app.envelope import build_envelope
+        from app.llm import fallback
+
+        brief = fallback.parse(text)
+        return brief, build_envelope(brief, allow_unverified=True)
+
+    def test_moving_the_bay_off_the_ground_floor_makes_a_30x40_feasible(self):
+        """The measurement the whole flag exists for: 73.6 m² of minimums against a
+        74.9 m² envelope becomes 55.6, and stage ④ flips."""
+        from app.feasibility import assess
+
+        brief, envelope = self._case(
+            "30x40 east facing site in Whitefield, Bengaluru, 3BHK with pooja room"
+        )
+        grounded = expand(brief, envelope)
+        assert not assess(grounded, envelope, floor=1).feasible
+
+        deep = self._deepen(envelope)
+        lifted = expand(brief, deep, porch_in_setback=True)
+        assert sum(r.min_area_sq_m for r in lifted.on_floor(1)) < sum(
+            r.min_area_sq_m for r in grounded.on_floor(1)
+        )
+
+    @staticmethod
+    def _deepen(envelope):
+        """A front setback that can actually take a bay.
+
+        Needed because none of the real ones can — which is the finding, not a gap in
+        the fixture."""
+        from app.ir.enums import Facing
+
+        return envelope.model_copy(
+            update={"setbacks": {**envelope.setbacks, envelope.road_edges[0]: 3.2}}
+        )
+
+    def test_no_reference_plot_has_a_setback_deep_enough(self):
+        """The measurement that stopped this becoming a feature.
+
+        The deepest front setback in the set is 2.93 m against the 3.0 m a statutory
+        bay needs — the 50x80 misses by seven centimetres. So on plots this size there
+        is no setback to put a porch in, whatever the bye-laws permit.
+        """
+        from app.program import PorchDoesNotFit
+
+        for text in (
+            "30x40 east facing site in Whitefield, Bengaluru, 3BHK with pooja room",
+            "30x50 3bhk in Bengaluru",
+            "40x60 3bhk in Bengaluru with pooja room",
+            "50x80 4bhk in Bengaluru with study",
+        ):
+            brief, envelope = self._case(text)
+            with pytest.raises(PorchDoesNotFit):
+                expand(brief, envelope, porch_in_setback=True)
+
+    def test_the_refusal_carries_the_numbers(self):
+        """"It does not fit" is not a finding anybody can act on."""
+        from app.program import PorchDoesNotFit
+
+        brief, envelope = self._case("40x60 3bhk in Bengaluru with pooja room")
+        with pytest.raises(PorchDoesNotFit) as caught:
+            expand(brief, envelope, porch_in_setback=True)
+        assert "2.19 m deep" in str(caught.value)
+        assert "3.0 x 6.0" in str(caught.value)
+
+    def test_the_bay_leaves_the_tiled_programme_but_not_the_house(self):
+        from app.ir.enums import SpaceKind
+
+        brief, envelope = self._case("50x80 4bhk in Bengaluru with study")
+        program = expand(brief, self._deepen(envelope), porch_in_setback=True)
+
+        tiled = {r.id for r in program.on_floor(1)}
+        every = {r.id for r in program.all_on_floor(1)}
+        bay = next(r for r in program.rooms if r.kind is SpaceKind.CAR_PARKING)
+
+        assert bay.outside_envelope
+        assert bay.id not in tiled
+        assert bay.id in every
+
+    def test_it_is_placed_in_the_strip_and_never_inside_the_house(self):
+        from app.refine import refine
+        from app.solver import solve
+
+        brief, envelope = self._case("50x80 4bhk in Bengaluru with study")
+        deep = self._deepen(envelope)
+        program = expand(brief, deep, porch_in_setback=True)
+        layout = solve(program, deep, seed=7)[0]
+        floor = refine(layout, program, deep)
+
+        assert len(floor.outside) == 1
+        porch = floor.outside[0]
+        assert porch.area_sq_m >= 18.0 - 1e-6
+        # Beyond the tiled rectangle on the road side, and touching it.
+        assert porch.y_min_m >= layout.y_max_m - 1e-6
+        assert porch.room_id not in {r.room_id for r in layout.rooms}
+
+    def test_off_by_default(self):
+        """The rule behind it is unverified, so nothing gets it by accident."""
+        brief, envelope = self._case("50x80 4bhk in Bengaluru with study")
+        program = expand(brief, envelope)
+        assert not any(room.outside_envelope for room in program.rooms)

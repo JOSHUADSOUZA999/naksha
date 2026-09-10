@@ -13,7 +13,7 @@ from __future__ import annotations
 import math
 from typing import Any
 
-from app.ir.enums import Relation, RoomKind, Sector, SpaceKind
+from app.ir.enums import Facing, Relation, RoomKind, Sector, SpaceKind
 from app.ir.envelope import Envelope
 from app.ir.models import Brief
 from app.ir.plan import AdjacencySpec, Program, RoomSpec
@@ -22,7 +22,28 @@ from app.rules import load_ruleset
 SPACE_RULES = "spaces_v1"
 
 
-def expand(brief: Brief, envelope: Envelope | None = None) -> Program:
+class PorchDoesNotFit(ValueError):
+    """`porch_in_setback` was asked for and the setback cannot hold a car.
+
+    Carries the numbers, like the envelope errors do. "It does not fit" is not a
+    finding anybody can act on; "the front setback is 2.19 m deep and a bay needs 3.0"
+    names the rule to go and check.
+    """
+
+    def __init__(self, *, depth_m: float, along_m: float, needs: tuple[float, float]):
+        self.depth_m, self.along_m, self.needs = depth_m, along_m, needs
+        super().__init__(
+            f"the front setback is {depth_m:.2f} m deep and {along_m:.2f} m along the "
+            f"road, and a {needs[0]:.1f} x {needs[1]:.1f} m bay does not fit in it"
+        )
+
+
+def expand(
+    brief: Brief,
+    envelope: Envelope | None = None,
+    *,
+    porch_in_setback: bool = False,
+) -> Program:
     """Turn "3BHK with a pooja room" into every room a house actually needs.
 
     The bedroom count is stated; the hall, kitchen, circulation and sanitary spaces
@@ -71,6 +92,16 @@ def expand(brief: Brief, envelope: Envelope | None = None) -> Program:
         add(SpaceKind.CAR_PARKING, "car_parking" if bays == 1 else f"car_parking{n}")
         for n in range(1, bays + 1)
     ]
+    if porch_in_setback and parking:
+        _refuse_if_the_setback_is_too_shallow(envelope, rules)
+    if porch_in_setback:
+        # The statutory 18 m² bay is a quarter of a 30x40's ground floor, and moving it
+        # into the front setback is what decides whether that plot fits a 3BHK at all.
+        # Off by default because whether the setback may be built on is VERIFY.md Q1 —
+        # unanswered, and answering it wrongly produces a plan that cannot be sanctioned.
+        for index, room in enumerate(rooms):
+            if room.id in parking:
+                rooms[index] = room.model_copy(update={"outside_envelope": True})
 
     _assign_floors(rooms, hints.floors, envelope, rules)
     _grow(rooms, envelope)
@@ -370,3 +401,43 @@ def _grow(rooms: list[RoomSpec], envelope: Envelope | None) -> None:
                     "target_area_sq_m": room.target_area_sq_m + headroom[room.id] * share
                 }
             )
+
+
+def _refuse_if_the_setback_is_too_shallow(
+    envelope: Envelope | None, rules: dict[str, Any]
+) -> None:
+    """Check the strip can hold a car before promising it one.
+
+    **Measured across the four reference plots and it fits on none of them.** The
+    deepest front setback in the set is 2.93 m against the 3.0 m a statutory garage
+    needs — the 50x80 misses by seven centimetres and the 30x40 by half the bay. So the
+    honest answer to "may the porch go in the setback" is that on plots this size there
+    is no setback to put it in, whatever the bye-laws permit.
+
+    Refusing is the point. Moving the bay off the ground floor is what makes a 30x40
+    3BHK feasible at all, and it would have been easy to ship that as a flag and let
+    the drawing show a house with a car nowhere. That is the shape of every bug this
+    codebase has found.
+    """
+    if envelope is None:
+        return
+
+    bay = rules[SpaceKind.CAR_PARKING.value]
+    # A bay is 3.0 x 6.0; either dimension may run along the road.
+    short = bay["min_width_m"]
+    long = bay["min_area_sq_m"] / short
+
+    road = envelope.road_edges[0]
+    depth = envelope.setbacks[road]
+    if road in (Facing.NORTH, Facing.SOUTH):
+        along = (envelope.x_max_m - envelope.x_min_m) + (
+            envelope.setbacks[Facing.EAST] + envelope.setbacks[Facing.WEST]
+        )
+    else:
+        along = (envelope.y_max_m - envelope.y_min_m) + (
+            envelope.setbacks[Facing.NORTH] + envelope.setbacks[Facing.SOUTH]
+        )
+
+    if (depth >= short and along >= long) or (depth >= long and along >= short):
+        return
+    raise PorchDoesNotFit(depth_m=depth, along_m=along, needs=(short, long))

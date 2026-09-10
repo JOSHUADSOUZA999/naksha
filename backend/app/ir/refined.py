@@ -26,6 +26,7 @@ from typing import Self
 from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
 
 from app.ir.base import DerivedFieldsAreOutputOnly
+from app.ir.layout import PlacedRoom
 from app.ir.enums import Facing, FixtureKind, OpeningKind, WallKind
 
 # Walls run on cardinal axes only — v1 is rectangular plots and a slicing tree, so a
@@ -167,6 +168,13 @@ class RefinedFloor(DerivedFieldsAreOutputOnly):
     walls: list[Wall] = Field(min_length=1)
     openings: list[Opening] = Field(default_factory=list)
     fixtures: list[Fixture] = Field(default_factory=list)
+    outside: list[PlacedRoom] = Field(
+        default_factory=list,
+        description="Spaces placed beyond the buildable rectangle — a car porch in the "
+        "front setback. Kept apart from the tiled rooms because they are not part of "
+        "the tiling and must never be: `Layout` tiles its bounds exactly, and a room "
+        "outside those bounds would read as a gap.",
+    )
     clear: dict[str, tuple[float, float, float, float]] = Field(
         default_factory=dict,
         description="Each room inside its walls, as (x_min, y_min, x_max, y_max). "

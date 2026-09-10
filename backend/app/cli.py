@@ -78,6 +78,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--seed", type=int, default=0, help="layout seed; the same seed replays a plan"
     )
     parser.add_argument(
+        "--porch-in-setback",
+        action="store_true",
+        help="build the car porch in the front setback instead of on the ground floor "
+        "\u2014 what decides whether a 30x40 fits a 3BHK; see VERIFY.md Q1",
+    )
+    parser.add_argument(
         "--allow-unverified",
         action="store_true",
         help="proceed on setback figures that have not been checked against the bye-laws",
@@ -367,7 +373,22 @@ def _write_layout(result: IntentResult, args: argparse.Namespace, settings) -> N
         print(f"[no layout] {type(exc).__name__}: {exc}", file=sys.stderr)
         return
 
-    program, how = _build_program(result.brief, envelope, args, settings)
+    from app.program import PorchDoesNotFit
+
+    try:
+        program, how = _build_program(result.brief, envelope, args, settings)
+    except PorchDoesNotFit as exc:
+        # Refused rather than drawn. Moving the bay off the ground floor is what makes
+        # a 30x40 3BHK feasible, and shipping that without checking the strip can hold
+        # a car would put a house on the page with the car nowhere.
+        print(f"[no layout] PorchDoesNotFit: {exc}", file=sys.stderr)
+        print(
+            "           \u2192 measured on every reference plot and it fits on none: "
+            "the deepest front setback in the set is 2.93 m against the 3.0 m a bay "
+            "needs. See VERIFY.md Q1.",
+            file=sys.stderr,
+        )
+        return
     if how != "model":
         print(f"[program] deterministic expansion — {how}", file=sys.stderr)
     bundle = plan(result.brief, envelope, program, seed=args.seed)
@@ -419,7 +440,7 @@ def _write_svg(bundle, path: str) -> None:
     for layout in bundle.layouts:
         # Stage ⑥. Refining is deterministic and cheap, so the drawing always gets
         # walls — a room outline is what stage ⑤ produces, not what a person asked for.
-        floor = refine(layout, bundle.program)
+        floor = refine(layout, bundle.program, bundle.envelope)
         # Single-storey keeps the name the user typed; only a stack needs qualifying.
         out = (
             target
@@ -482,7 +503,9 @@ def _build_program(brief, envelope, args: argparse.Namespace, settings):
     if args.fallback_only:
         from app.program import expand
 
-        return expand(brief, envelope), "--fallback-only"
+        return expand(brief, envelope, porch_in_setback=args.porch_in_setback), (
+            "--fallback-only"
+        )
 
     from app.llm.program import build_program
 

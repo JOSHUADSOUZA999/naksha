@@ -41,8 +41,17 @@ def render(
     y is flipped on the way out: the IR runs y north, SVG runs y down the page. Doing
     it here rather than in the solver keeps north-is-up a presentation concern.
     """
-    width_m = layout.x_max_m - layout.x_min_m
-    depth_m = layout.y_max_m - layout.y_min_m
+    # The sheet has to cover anything drawn outside the buildable rectangle — a car
+    # porch in the setback sits beyond every bound `layout` knows about, and a canvas
+    # sized to the house alone would simply clip it off the page.
+    x_min_m, y_min_m = layout.x_min_m, layout.y_min_m
+    x_max_m, y_max_m = layout.x_max_m, layout.y_max_m
+    for outside in (refined.outside if refined else ()):
+        x_min_m, y_min_m = min(x_min_m, outside.x_min_m), min(y_min_m, outside.y_min_m)
+        x_max_m, y_max_m = max(x_max_m, outside.x_max_m), max(y_max_m, outside.y_max_m)
+
+    width_m = x_max_m - x_min_m
+    depth_m = y_max_m - y_min_m
     h = depth_m * _SCALE + _MARGIN * 2
     # The canvas has to clear the title as well as the plan. A narrow plot with a long
     # brief was clipping its own heading mid-word: the drawing was right and the sheet
@@ -52,8 +61,8 @@ def render(
 
     def px(x_m: float, y_m: float) -> tuple[float, float]:
         return (
-            _MARGIN + (x_m - layout.x_min_m) * _SCALE,
-            _MARGIN + (layout.y_max_m - y_m) * _SCALE,   # flip: north is up
+            _MARGIN + (x_m - x_min_m) * _SCALE,
+            _MARGIN + (y_max_m - y_m) * _SCALE,          # flip: north is up
         )
 
     out = [
@@ -98,6 +107,26 @@ def render(
             )
 
     if refined is not None:
+        for outside in refined.outside:
+            # Dashed and unfilled: a porch is a slab and a roof, not a room. Drawing it
+            # like one would claim built-up area the plan does not have.
+            ox, oy = px(outside.x_min_m, outside.y_max_m)
+            out.append(
+                f'<rect x="{ox:.1f}" y="{oy:.1f}" '
+                f'width="{outside.width_m * _SCALE:.1f}" '
+                f'height="{outside.depth_m * _SCALE:.1f}" fill="#f4f4f2" '
+                f'stroke="#8a8a8a" stroke-width="1.4" stroke-dasharray="6 4"/>'
+            )
+            lx, ly = px(*outside.centroid)
+            out.append(
+                f'<text x="{lx:.1f}" y="{ly:.1f}" font-size="10.5" '
+                f'text-anchor="middle" fill="#6b7075">'
+                f'{escape(kinds.get(outside.room_id, outside.room_id).replace("_", " "))}'
+                f'</text>'
+                f'<text x="{lx:.1f}" y="{ly + 13:.1f}" font-size="9" '
+                f'text-anchor="middle" fill="#8a8a8a">in setback</text>'
+            )
+
         # Under the walls: a fixture is inside a room and the wall is the room's edge,
         # so masonry drawn over a bed reads correctly and a bed drawn over masonry does
         # not. Under the labels too — the room's name is the thing to read first.
