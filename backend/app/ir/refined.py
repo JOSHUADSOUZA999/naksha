@@ -106,6 +106,13 @@ class Opening(BaseModel):
         ge=0, description="Distance from the wall's (x1, y1) end to the opening's centre."
     )
     width_m: float = Field(gt=0)
+    height_m: float | None = Field(
+        default=None,
+        gt=0,
+        description="Head height above sill. Set for windows, because the bye-laws "
+        "regulate window *area* and an opening stored only as a width along a wall has "
+        "none. Null for doors, whose height decides nothing on a plan.",
+    )
     connects: list[str] = Field(
         default_factory=list,
         max_length=2,
@@ -214,3 +221,11 @@ class RefinedFloor(DerivedFieldsAreOutputOnly):
 
     def openings_in(self, wall_id: str) -> list[Opening]:
         return [o for o in self.openings if o.wall_id == wall_id]
+
+    def window_area_sq_m(self, room_id: str) -> float:
+        """Aggregate glazed area for one room. What the bye-laws actually measure."""
+        return sum(
+            opening.width_m * (opening.height_m or 0.0)
+            for opening in self.openings
+            if opening.kind is OpeningKind.WINDOW and room_id in opening.connects
+        )

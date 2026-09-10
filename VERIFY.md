@@ -185,6 +185,34 @@ If your numbers differ materially, that is the most useful single thing on this 
 
 ---
 
+## Q6 — How much window does a habitable room need?
+
+naksha now sizes every window from the room's floor area rather than drawing a fixed
+opening, because the code regulates area and not width. The figure it uses is
+**one tenth of the floor area**, aggregate, per habitable room — transcribed from
+practice knowledge and **not read first-hand**, which is why no clause number appears
+beside it in `refine_v1.json`.
+
+For a plan sanctioned in Bengaluru, is the operative figure:
+
+- [ ] **1/10 of floor area** — as we assume
+- [ ] 1/8
+- [ ] 1/6
+- [ ] a ventilation figure separate from the daylight one: ______________________
+
+**Does it differ for a kitchen?**  [ ] no  [ ] yes: ______________________
+
+**Is it measured on the openable area or the whole opening?**
+[ ] openable only  [ ] whole opening including fixed lights
+
+**Does a bathroom or WC have its own figure**, or is a mechanical vent accepted
+instead? ____________________________________
+
+*What it changes:* the window on a 19 m² hall is currently 0.93 m wide at 1.2 m high.
+At 1/6 it would be 1.6 m, which changes which walls can carry it and therefore which
+plans are drawable at all.
+
+
 ## What happens with the answers
 
 Each becomes a line in `backend/app/rules/setbacks_v1.json` or `spaces_v1.json` with

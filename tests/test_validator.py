@@ -240,3 +240,49 @@ class TestOneJudgmentInOnePlace:
         hall = next(r for r in program.rooms if r.kind is SpaceKind.HALL)
         assert hall.needs_exterior_wall
         assert any(hall.id in f.rooms for f in report.by_check("light"))
+
+
+class TestGlazingIsMeasuredNotCountedPresence:
+    """"Has a window" passed a room with one token opening nowhere near the tenth of
+    floor area the code requires — and reported nothing, which is worse than reporting
+    a number that is too small."""
+
+    def test_an_under_glazed_room_is_reported_with_its_ratio(self, plans):
+        layout, program, floor, _ = plans["50x80"]
+        glazed = next(
+            o for o in floor.openings if o.kind is OpeningKind.WINDOW
+        )
+        pinched = floor.model_copy(
+            update={
+                "openings": [
+                    o.model_copy(update={"width_m": 0.3}) if o is glazed else o
+                    for o in floor.openings
+                ]
+            }
+        )
+        findings = validate(layout, program, pinched).by_check("light")
+        assert any("below the" in f.message and "%" in f.message for f in findings)
+
+    def test_a_fully_glazed_room_is_not_reported(self, plans):
+        """Stage ⑥ sizes to the fraction, so ⑦ must agree with it on every room that
+        got a window at all — the two read the same figure from the same ruleset."""
+        from app.rules import load_ruleset
+
+        fraction = load_ruleset("refine_v1").data["windows"]["area_fraction"]
+        for name in ("30x50", "50x80"):
+            _, program, floor, report = plans[name]
+            flagged = {f.rooms[0] for f in report.by_check("light")}
+            for room in program.rooms:
+                if not room.needs_exterior_wall or room.id not in floor.clear:
+                    continue
+                area = floor.clear_area_sq_m(room.id)
+                if floor.window_area_sq_m(room.id) >= area * fraction - 1e-6:
+                    assert room.id not in flagged, f"{name}/{room.id}"
+
+    def test_a_room_with_no_exterior_wall_says_so_plainly(self, plans):
+        """Not "glazed to 0%", which reads as a shortfall to make up. There is no wall
+        to put a window in, and that is a different problem."""
+        _, _, _, report = plans["40x60"]
+        no_window = [f for f in report.by_check("light") if "no window" in f.message]
+        assert no_window
+        assert "%" not in no_window[0].message

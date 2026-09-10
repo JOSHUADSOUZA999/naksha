@@ -479,3 +479,84 @@ class TestWallsChangeWhatALegalRoomIs:
         clear = floor.clear_area_sq_m(big.room_id)
         assert f"{clear:.1f} m²" in drawing
         assert f"{big.area_sq_m:.1f} m²" not in drawing
+
+
+class TestWindowsAreSizedToTheRoomTheyLight:
+    """The bye-laws regulate window *area* as a fraction of floor area.
+
+    Every window used to be 1.2 m wide, so a 19 m² hall and a 3 m² bathroom got the
+    same opening — which satisfies neither the code nor anyone living there.
+    """
+
+    @staticmethod
+    def _fraction():
+        from app.rules import load_ruleset
+
+        return load_ruleset("refine_v1").data["windows"]["area_fraction"]
+
+    @pytest.mark.parametrize("name", list(BRIEFS))
+    def test_a_glazed_room_meets_the_fraction(self, floors, name):
+        _, program, floor = floors[name]
+        fraction = self._fraction()
+        for room in program.rooms:
+            if not room.needs_exterior_wall or room.id not in floor.clear:
+                continue
+            glazed = floor.window_area_sq_m(room.id)
+            if glazed <= 0:
+                continue  # no exterior wall to glaze — stage ⑦'s finding, not ⑥'s
+            area = floor.clear_area_sq_m(room.id)
+            assert glazed >= area * fraction - 1e-6, f"{name}/{room.id}"
+
+    @pytest.mark.parametrize("name", list(BRIEFS))
+    def test_a_bigger_room_gets_more_glass(self, floors, name):
+        """The property the fixed width could not have: the ratio is what is constant,
+        not the opening."""
+        _, program, floor = floors[name]
+        glazed = [
+            (floor.clear_area_sq_m(r.id), floor.window_area_sq_m(r.id))
+            for r in program.rooms
+            if r.needs_exterior_wall and floor.window_area_sq_m(r.id) > 0
+        ]
+        if len(glazed) < 2:
+            pytest.skip("needs two glazed rooms to compare")
+        big = max(glazed)
+        small = min(glazed)
+        assert big[1] >= small[1]
+
+    def test_a_small_room_still_gets_a_window(self, floors):
+        """A 6.6 m² kitchen wants 0.55 m of glazing at one tenth, which is under the
+        smallest window anybody builds — and reading that as "no window" left every
+        kitchen in the set blind. The minimum is a floor on a window, not a reason to
+        omit one.
+        """
+        from app.rules import load_ruleset
+
+        rules = load_ruleset("refine_v1").data["windows"]
+        _, program, floor = floors["40x60"]
+        kitchen = next(r for r in program.rooms if r.kind is SpaceKind.KITCHEN)
+        area = floor.clear_area_sq_m(kitchen.id)
+        assert area * rules["area_fraction"] / rules["height_m"] < rules["min_width_m"], (
+            "the fixture's kitchen must be small enough to want less than one window"
+        )
+        assert floor.window_area_sq_m(kitchen.id) > 0
+
+    @pytest.mark.parametrize("name", list(BRIEFS))
+    def test_no_window_is_wider_than_its_wall(self, floors, name):
+        """Sizing from floor area cannot be allowed to draw an opening the wall cannot
+        hold — past the maximum it becomes two windows, and short of the room's need it
+        becomes stage ⑦'s finding."""
+        _, _, floor = floors[name]
+        for opening in floor.openings:
+            if opening.kind is OpeningKind.WINDOW:
+                assert opening.width_m <= floor.by_id(opening.wall_id).length_m + 1e-9
+
+    @pytest.mark.parametrize("name", list(BRIEFS))
+    def test_windows_carry_a_height_and_doors_do_not(self, floors, name):
+        """An opening stored only as a width along a wall has no area, and area is the
+        thing the code regulates."""
+        _, _, floor = floors[name]
+        for opening in floor.openings:
+            if opening.kind is OpeningKind.WINDOW:
+                assert opening.height_m and opening.height_m > 0
+            else:
+                assert opening.height_m is None

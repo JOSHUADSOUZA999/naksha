@@ -25,11 +25,17 @@
     "verified": false
   },
   "windows": {
-    "width_m": 1.2,
-    "min_wall_m": 1.5,
+    "area_fraction": 0.1,
+    "height_m": 1.2,
     "sill_height_m": 0.9,
-    "_min_wall": "An exterior wall shorter than this gets no window rather than a token one — a 1.2 m opening in a 1.4 m wall leaves two 100 mm piers, which is not something anyone builds.",
-    "source": "Practice. The bye-laws regulate window AREA as a fraction of floor area for light and ventilation (cl. 5.1.2.5 territory) rather than a single width, so this is a drawing convention standing in for a calculation stage ⑧ should eventually do properly.",
+    "min_width_m": 0.6,
+    "max_width_m": 2.4,
+    "min_wall_m": 1.5,
+    "_area_fraction": "The rule the bye-laws actually state: window area as a fraction of the room's FLOOR area, not a fixed opening. A 19 m² hall and a 3 m² bathroom were getting the same 1.2 m window, which satisfies neither the code nor anybody living there. 1/10th is the figure for habitable rooms.",
+    "_height": "Openings are stored as a width along a wall, so a height is needed to get an area at all. 1.2 m is an ordinary window: 0.9 m sill to 2.1 m head, which is also the door head height, and lining them up is what a draughtsman does.",
+    "_min_wall": "An exterior wall shorter than this gets no window rather than a token one — a 0.6 m opening in a 1.4 m wall leaves two 400 mm piers, which is not something anyone builds.",
+    "_widths": "The clamp is what makes a second window necessary rather than optional: past 2.4 m an opening wants a mullion and is really two windows, and stage ⑥ places it as two.",
+    "source": "NBC 2016 Part 3 requires an aggregate openable area of not less than one-tenth of the floor area for habitable rooms, with kitchens and sanitary spaces treated separately. TRANSCRIBED FROM PRACTICE KNOWLEDGE, not read first-hand — the clause number is not recorded here because we have not seen it. The Karnataka Municipalities Model Building Bye-Laws 2017 govern in Bengaluru and may differ. See VERIFY.md.",
     "verified": false
   },
   "_fixtures": "Sizes are the ones an Indian sanitaryware or modular-kitchen catalogue quotes, which is what a draughtsman reaches for at concept stage. They are drawing conventions, not code: the bye-laws regulate a bathroom's AREA and ventilation, not the model of WC in it. `depth_m` is measured out from the wall the fixture backs onto and `width_m` along it.",

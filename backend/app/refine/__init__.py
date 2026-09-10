@@ -32,12 +32,14 @@ def refine(layout: Layout, program: Program) -> RefinedFloor:
     walls = _walls(layout, rules["walls"])
     openings = _doors(walls, layout, program, rules["doors"])
     openings += _connect(walls, layout, program, openings, rules["doors"])
-    openings += _windows(walls, program, rules["windows"], taken=openings)
-    fixtures = _fixtures(layout, program, walls, openings, rules)
+
     clear = {
         placed.room_id: _clear_rect(placed, layout, rules["walls"])
         for placed in layout.rooms
     }
+    # After the clear rects, because a window is sized from the floor area it lights.
+    openings += _windows(walls, program, rules["windows"], openings, clear)
+    fixtures = _fixtures(layout, program, walls, openings, rules)
     return RefinedFloor(
         floor=layout.floor, walls=walls, openings=openings,
         fixtures=fixtures, clear=clear,
@@ -240,39 +242,74 @@ def _faces_a_road(wall: Wall, layout: Layout) -> bool:
 
 
 def _windows(
-    walls: list[Wall], program: Program, rules: dict, taken: list[Opening]
+    walls: list[Wall],
+    program: Program,
+    rules: dict,
+    taken: list[Opening],
+    clear: dict[str, tuple[float, float, float, float]],
 ) -> list[Opening]:
-    """One window on the longest exterior wall of every room that needs light.
+    """Glaze every room that needs light, to the area the bye-laws ask for.
 
-    `needs_exterior_wall` is the same flag `score` uses to penalise a room with no
-    window, so the drawing and the score agree about which rooms have one. A room the
-    solver put on no boundary at all gets none here — again, visibly, rather than by
-    drawing a window into an internal partition.
+    **Sized to the room, not to a convention.** Every window used to be 1.2 m wide, so
+    a 19 m² hall and a 3 m² bathroom got the same opening — which satisfies neither the
+    code nor anyone living there. The rule is an aggregate area of one tenth of the
+    floor, so the width follows from the floor area and the window height.
+
+    Spills onto a second wall when one cannot hold it. Past the maximum width an
+    opening wants a mullion and is really two windows, so drawing it as two is not a
+    workaround — it is what gets built. Rooms with only one short exterior wall end up
+    under-glazed, and that is a finding for stage ⑦ rather than something to fake here
+    by drawing a window wider than its wall.
     """
     needs = {room.id for room in program.rooms if room.needs_exterior_wall}
-    width = rules["width_m"]
-    minimum = rules["min_wall_m"]
+    height = rules["height_m"]
+    fraction = rules["area_fraction"]
+    smallest = rules["min_width_m"]
+    widest = rules["max_width_m"]
+    shortest_wall = rules["min_wall_m"]
     openings: list[Opening] = []
 
     for room_id in sorted(needs):
-        outer = [
-            wall for wall in walls
-            if wall.kind is WallKind.EXTERIOR
-            and wall.rooms == [room_id]
-            and wall.length_m >= minimum
-        ]
-        if not outer:
+        rect = clear.get(room_id)
+        if rect is None:
             continue
-        wall = max(outer, key=lambda w: w.length_m)
-        placed = _fit(wall, width, 0.0, [*taken, *openings])
-        if placed is not None:
+        floor_area = max(0.0, rect[2] - rect[0]) * max(0.0, rect[3] - rect[1])
+        wanted = floor_area * fraction / height if height > 0 else 0.0
+
+        outer = sorted(
+            (
+                wall for wall in walls
+                if wall.kind is WallKind.EXTERIOR
+                and wall.rooms == [room_id]
+                and wall.length_m >= shortest_wall
+            ),
+            key=lambda w: w.length_m,
+            reverse=True,
+        )
+        # The minimum width is a floor on a window, not a reason to skip one. A 6.6 m²
+        # kitchen wants 0.55 m of glazing at one tenth, which is under the smallest
+        # window anybody builds — and the first version read that as "no window", so
+        # every kitchen in the set came out blind. Small rooms get the minimum; only
+        # the *remainder* after a window is placed has to clear it to earn another.
+        first = True
+        for wall in outer:
+            if not first and wanted < smallest:
+                break
+            placed = _fit(
+                wall, min(max(wanted, smallest), widest), 0.0, [*taken, *openings],
+                floor_width=smallest,
+            )
+            if placed is None:
+                continue
             offset, fitted = placed
             openings.append(
                 Opening(
                     wall_id=wall.id, kind=OpeningKind.WINDOW, offset_m=offset,
-                    width_m=fitted, connects=[room_id],
+                    width_m=fitted, height_m=height, connects=[room_id],
                 )
             )
+            wanted -= fitted
+            first = False
     return openings
 
 

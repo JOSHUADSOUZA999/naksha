@@ -98,36 +98,49 @@ def _circulation(layout: Layout, program: Program, floor: RefinedFloor) -> list[
 
 
 def _light(program: Program, floor: RefinedFloor) -> list[Finding]:
-    """A habitable room with no window.
+    """Is every habitable room glazed to the area the bye-laws ask for?
 
-    `score` already penalises a room with no *exterior wall*, and this is the stricter
-    question: the wall may exist and still be too short to hold an opening, in which
-    case the tiling passed and the drawing has a bedroom with no daylight.
+    Presence was the wrong question and it took building ⑥'s window sizing to see it.
+    A room with one token opening passed a "has a window" check while being nowhere
+    near the one-tenth of floor area the code requires — and the check reported nothing,
+    which is worse than reporting a number that is too small.
+
+    `needs_exterior_wall` from the ruleset, the same flag `score` penalises a room for
+    missing and `refine` places windows from. A second opinion written out here said a
+    dining room needs daylight while `spaces_v1` says it does not; one of them was going
+    to be wrong, and it is not a module's call to make.
     """
-    # `needs_exterior_wall` from the ruleset, the same flag `score` penalises a room
-    # for missing and `refine` places windows from. A second opinion written out here
-    # said a dining room needs daylight while `spaces_v1` says it does not — one of
-    # them was going to be wrong, and it is not the module's call to make.
-    lit = {
-        room
-        for opening in floor.openings
-        if opening.kind is OpeningKind.WINDOW
-        for room in opening.connects
-    }
-    dark = sorted(
-        room.id
-        for room in program.rooms
-        if room.needs_exterior_wall and room.id not in lit and room.id in floor.clear
-    )
-    return [
-        Finding(
-            check="light",
-            severity=Severity.WARNING,
-            message=f"{room_id} is a habitable room with no window",
-            rooms=[room_id],
+    from app.rules import load_ruleset
+
+    fraction = load_ruleset("refine_v1").data["windows"]["area_fraction"]
+    findings: list[Finding] = []
+
+    for room in program.rooms:
+        if not room.needs_exterior_wall or room.id not in floor.clear:
+            continue
+        area = floor.clear_area_sq_m(room.id) or 0.0
+        glazed = floor.window_area_sq_m(room.id)
+        if area <= 0 or glazed >= area * fraction - 1e-6:
+            continue
+
+        if glazed <= 0:
+            # Not "habitable room" in the no-window case: `needs_exterior_wall` is
+            # also true of a car porch, which needs to be open and is nobody's idea of
+            # a habitable room. The ratio message keeps the term because that is where
+            # it carries its legal meaning.
+            message = f"{room.id} has no window at all"
+        else:
+            message = (
+                f"{room.id} is glazed to {glazed / area:.0%} of its floor area, "
+                f"below the {fraction:.0%} a habitable room needs"
+            )
+        findings.append(
+            Finding(
+                check="light", severity=Severity.WARNING, message=message,
+                rooms=[room.id],
+            )
         )
-        for room_id in dark
-    ]
+    return findings
 
 
 def _legality(program: Program, floor: RefinedFloor) -> list[Finding]:
