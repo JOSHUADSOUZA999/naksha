@@ -605,3 +605,66 @@ class TestWindowsAreSizedToTheRoomTheyLight:
                 assert opening.height_m and opening.height_m > 0
             else:
                 assert opening.height_m is None
+
+
+class TestTheSpineIsConnectedBeforeAnythingElse:
+    """Circulation is joined to itself first; bedrooms are attached after.
+
+    A single greedy pass looks right and is not. On a 40x60 it added a perfectly
+    reasonable kitchen → bedroom door, and that door incidentally pulled the corridor
+    into reach *through* the bedroom, along the corridor ↔ bedroom door stage ③ had
+    asked for — so the route to the kitchen ran through the master bedroom. Nothing
+    about the choice was wrong in isolation; the route it created was.
+    """
+
+    @pytest.mark.parametrize("name", list(BRIEFS))
+    def test_circulation_is_joined_without_using_a_private_room(self, floors, name):
+        """Where the tiling allows it at all. Stage ⑤ scores the same property on the
+        rectangles, so the two agree about what was possible."""
+        from app.solver.score import _unwalkable
+
+        layout, program, floor = floors[name]
+        if _unwalkable(layout, program):
+            pytest.skip("this tiling has no self-contained spine to find")
+
+        through = {r.id for r in program.rooms if r.is_through_route and r.needs_door}
+        entrance = next(
+            o for o in floor.openings if o.kind is OpeningKind.ENTRANCE
+        )
+        graph: dict[str, set[str]] = {}
+        for opening in floor.openings:
+            if opening.kind is OpeningKind.DOOR and set(opening.connects) <= through:
+                a, b = opening.connects
+                graph.setdefault(a, set()).add(b)
+                graph.setdefault(b, set()).add(a)
+
+        seen = {entrance.connects[0]}
+        stack = [entrance.connects[0]]
+        while stack:
+            for neighbour in graph.get(stack.pop(), ()):
+                if neighbour not in seen:
+                    seen.add(neighbour)
+                    stack.append(neighbour)
+
+        assert through <= seen, f"{name}: {sorted(through - seen)} off the spine"
+
+    def test_a_kitchen_to_bedroom_door_does_not_smuggle_in_the_corridor(self, floors):
+        """The exact failure, named. The door itself is fine; what it must not do is
+        become the only way to a circulation space."""
+        layout, program, floor = floors["40x60"]
+        kinds = {r.id: r.kind for r in program.rooms}
+        through = {r.id for r in program.rooms if r.is_through_route}
+
+        corridor = [r for r, k in kinds.items() if k is SpaceKind.CORRIDOR]
+        assert corridor, "the fixture must have a corridor"
+
+        spine_neighbours = {
+            other
+            for o in floor.openings
+            if o.kind is OpeningKind.DOOR and corridor[0] in o.connects
+            for other in o.connects
+            if other != corridor[0]
+        }
+        assert spine_neighbours & through, (
+            "the corridor must open onto circulation, not only onto bedrooms"
+        )

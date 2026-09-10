@@ -676,61 +676,71 @@ def _connect(
             return 1
         return 2
 
-    progress = True
-    while progress:
-        progress = False
-        candidates = []
-        for wall in walls:
-            if wall.kind is not WallKind.INTERIOR:
-                continue
-            a, b = wall.rooms
-            inside = {a, b} & reached
-            outside = ({a, b} - reached) & wanted
-            if len(inside) != 1 or len(outside) != 1:
-                continue
-            # Hard, and checked before anything else is weighed. An edit once left
-            # this behind an unconditional `continue` and a bathroom got a door into a
-            # kitchen — the one placement CLAUDE.md says every Indian client objects
-            # to, arrived at while making the plan more walkable.
-            if frozenset({a, b}) in forbidden:
-                continue
-            candidates.append(
-                (0 if inside & through else 1, host_rank(next(iter(inside))),
-                 -wall.length_m, wall)
-            )
-
-        # Through-routes first, always. A door hung off a bedroom is a last resort:
-        # the alternative is leaving rooms with no way in at all, and a drawing missing
-        # six doors is a worse thing to hand someone than a drawing whose circulation
-        # is wrong and says so. Stage ⑦ names it either way.
-        for _, _, _, wall in sorted(candidates, key=lambda row: (row[0], row[1], row[2])):
-            a, b = wall.rooms
-            target = next(iter({a, b} - reached))
-            width = (
-                rules["service_width_m"]
-                if kinds.get(a) in narrow or kinds.get(b) in narrow
-                else rules["internal_width_m"]
-            )
-            placed = _fit(
-                wall, width, clearance, openings + added,
-                floor_width=rules["service_width_m"],
-            )
-            if placed is None:
-                continue
-            offset, fitted = placed
-            added.append(
-                Opening(
-                    wall_id=wall.id, kind=OpeningKind.DOOR, offset_m=offset,
-                    width_m=fitted, connects=[a, b],
+    # **Two passes, and the order is the whole fix.** Join the circulation to itself
+    # first; attach everything else after.
+    #
+    # A single greedy pass looks right and is not. On a 40x60 it added a perfectly
+    # reasonable kitchen → bedroom door, and that door incidentally pulled the corridor
+    # into reach *through* the bedroom, along the corridor ↔ bedroom door stage ③ had
+    # asked for. Nothing about the choice was wrong in isolation; the route it created
+    # was. Ranking the host by kind cannot catch it either, because the host was the
+    # kitchen and a kitchen is a perfectly good thing to walk through.
+    #
+    # Completing the spine first removes the opportunity: by the time bedrooms are
+    # attached, every hall and corridor is already reachable without them.
+    for spine_only in (True, False):
+        progress = True
+        while progress:
+            progress = False
+            candidates = []
+            for wall in walls:
+                if wall.kind is not WallKind.INTERIOR:
+                    continue
+                a, b = wall.rooms
+                inside = {a, b} & reached
+                outside = ({a, b} - reached) & wanted
+                if len(inside) != 1 or len(outside) != 1:
+                    continue
+                if spine_only and not ({*inside, *outside} <= through):
+                    continue
+                # Hard, and weighed before anything else. An edit once left this behind
+                # an unconditional `continue` and a bathroom got a door into a kitchen —
+                # the one placement CLAUDE.md says every Indian client objects to,
+                # arrived at while making the plan more walkable.
+                if frozenset({a, b}) in forbidden:
+                    continue
+                candidates.append(
+                    (0 if inside & through else 1, host_rank(next(iter(inside))),
+                     -wall.length_m, wall)
                 )
-            )
-            graph.setdefault(a, set()).add(b)
-            graph.setdefault(b, set()).add(a)
-            reached.add(target)
-            flood(target)
-            progress = True
-            break
 
+            for _, _, _, wall in sorted(candidates, key=lambda r: (r[0], r[1], r[2])):
+                a, b = wall.rooms
+                target = next(iter({a, b} - reached))
+                width = (
+                    rules["service_width_m"]
+                    if kinds.get(a) in narrow or kinds.get(b) in narrow
+                    else rules["internal_width_m"]
+                )
+                placed = _fit(
+                    wall, width, clearance, openings + added,
+                    floor_width=rules["service_width_m"],
+                )
+                if placed is None:
+                    continue
+                offset, fitted = placed
+                added.append(
+                    Opening(
+                        wall_id=wall.id, kind=OpeningKind.DOOR, offset_m=offset,
+                        width_m=fitted, connects=[a, b],
+                    )
+                )
+                graph.setdefault(a, set()).add(b)
+                graph.setdefault(b, set()).add(a)
+                reached.add(target)
+                flood(target)
+                progress = True
+                break
     return added
 
 

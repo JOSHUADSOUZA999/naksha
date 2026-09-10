@@ -73,6 +73,18 @@ ILLEGAL = 100.0
 # to zero road violations *and* its other penalties fall 240 → 120, so it is not a
 # trade. At 200 the 30x50 also clears, but pays 195 → 270 for it — buying the last
 # case with plans that are worse everywhere else.
+# Just under ILLEGAL, and deliberately not a round fraction of it. A car bay the
+# driveway cannot reach does not satisfy the parking requirement that put it in the
+# programme, so it is much worse than an awkward aspect ratio — but it does not make
+# the *room* unlawful, and `unbuildable` means "below a statutory minimum". Keeping it
+# below 100 keeps that counter honest while still outranking everything soft.
+#
+# Raising it to 220 was tried, to make a broken circulation decisive, and it is worse.
+# It reorders the Stage A ranking enough to change which topologies reach CP-SAT, and a
+# 30x50 came back with two rooms below their minimums where it had none — buying a
+# walkable plan with an illegal one, which is the trade this file exists to refuse.
+# Stage ⑥ connecting the circulation before it attaches anything private is the fix
+# that costs nothing.
 INACCESSIBLE = 90.0
 
 # How much of the smaller footprint two stacked rooms must share to count as the same
@@ -80,6 +92,10 @@ INACCESSIBLE = 90.0
 # to the centimetre, and demanding that would reject every candidate. Not much lower
 # either — at half, a "staircase" whose flights miss each other by a metre passes.
 ALIGNMENT = 0.75
+
+# The marker that makes broken circulation findable in a reason list. Ranking has to
+# put it *ahead* of the penalty rather than inside it — see `circulation_is_broken`.
+BROKEN_CIRCULATION = "the circulation is broken"
 
 
 @functools.lru_cache(maxsize=1)
@@ -263,7 +279,7 @@ def score(layout: Layout, program: Program) -> tuple[int, float, list[str]]:
     if stranded:
         fail(
             INACCESSIBLE,
-            f"the circulation is broken — {', '.join(stranded)} can only be reached "
+            f"{BROKEN_CIRCULATION} — {', '.join(stranded)} can only be reached "
             f"by walking through a private room",
         )
 
@@ -279,6 +295,25 @@ def score(layout: Layout, program: Program) -> tuple[int, float, list[str]]:
             fail(weight, f"{edge.a} does not reach {edge.b}")
 
     return unbuildable, total, reasons
+
+
+def circulation_is_broken(reasons: list[str]) -> bool:
+    """Does this plan make a private room do the corridor's job?
+
+    **Ranked ahead of the penalty, not inside it.** As a weight it was 90 points, and
+    on a 40x60 that produced an exact tie: the best plan with a sound spine scored 115
+    on preferences, the best with a bedroom serving as a corridor scored 25 plus the
+    90, and the tie broke on generation index. The pipeline shipped a house where the
+    route to the kitchen ran through the master bedroom.
+
+    CLAUDE.md already contains the argument against fixing that with a bigger number —
+    "a weight big enough today stops being big enough when the room count grows", which
+    is exactly what happens here as more rooms bring more preferences to outvote it. So
+    it is lexicographic, below `unbuildable` and above everything else: no quantity of
+    satisfied sectors buys a bedroom you have to walk through, and no broken corridor
+    justifies a room below its legal minimum.
+    """
+    return any(BROKEN_CIRCULATION in reason for reason in reasons)
 
 
 def _shared_wall_m(a, b) -> float:
