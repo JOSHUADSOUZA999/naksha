@@ -56,10 +56,38 @@ def effective_areas(rooms: list[RoomSpec], budget: float) -> dict[str, float]:
     # mean the minimums alone overflow — infeasible, which is stage ④'s to report,
     # not something to paper over with negative rooms.
     share = max(0.0, min(1.0, (budget - floor) / slack))
-    return {
+    allocated = {
         room.id: room.min_area_sq_m + (room.target_area_sq_m - room.min_area_sq_m) * share
         for room in rooms
     }
+
+    # **Surplus follows headroom, not proportion.** Above everyone's target the shares
+    # stop moving, and `place` then normalises them to fill the rectangle — which
+    # scales every room by the same factor, including the ones that should not grow at
+    # all. On a stilt level that put the car bay at 46.9 m² against an 18 m² ceiling
+    # and the staircase at 40.1 against 9.5, while the open ground it was all supposed
+    # to land in sat at 5.2.
+    #
+    # A room with no ceiling does not grow; one with a large ceiling takes what the
+    # others cannot. Anything still left over after every ceiling is full has nowhere
+    # to go and spreads as before — which is the surplus problem in DECISIONS question
+    # 7, and this does not pretend to solve it.
+    surplus = budget - sum(allocated.values())
+    if surplus <= 0:
+        return allocated
+
+    headroom = {
+        room.id: max(0.0, (room.max_target_sq_m or room.target_area_sq_m) - allocated[room.id])
+        for room in rooms
+    }
+    available = sum(headroom.values())
+    if available <= 0:
+        return allocated
+
+    taken = min(surplus, available)
+    for room in rooms:
+        allocated[room.id] += headroom[room.id] / available * taken
+    return allocated
 
 
 @dataclass(frozen=True, slots=True)

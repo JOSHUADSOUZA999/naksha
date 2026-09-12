@@ -78,6 +78,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--seed", type=int, default=0, help="layout seed; the same seed replays a plan"
     )
     parser.add_argument(
+        "--stilt",
+        action="store_true",
+        help="lift the house off its parking \u2014 a ground level of car bay, entrance "
+        "and stair, with the rooms above. What a 30x40 needs to fit a 3BHK",
+    )
+    parser.add_argument(
         "--porch-in-setback",
         action="store_true",
         help="build the car porch in the front setback instead of on the ground floor "
@@ -502,9 +508,10 @@ def _build_program(brief, envelope, args: argparse.Namespace, settings):
     if args.fallback_only:
         from app.program import expand
 
-        return expand(brief, envelope, porch_in_setback=args.porch_in_setback), (
-            "--fallback-only"
-        )
+        return expand(
+            brief, envelope,
+            porch_in_setback=args.porch_in_setback, stilt=args.stilt,
+        ), "--fallback-only"
 
     from app.llm.program import build_program
 

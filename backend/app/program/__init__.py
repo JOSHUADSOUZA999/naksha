@@ -53,6 +53,7 @@ def expand(
     envelope: Envelope | None = None,
     *,
     porch_in_setback: bool = False,
+    stilt: bool = False,
 ) -> Program:
     """Turn "3BHK with a pooja room" into every room a house actually needs.
 
@@ -115,6 +116,10 @@ def expand(
 
     _assign_floors(rooms, hints.floors, envelope, rules)
     _grow(rooms, envelope)
+
+    if stilt and envelope is not None:
+        rooms = build_stilt(rooms, envelope, rules)
+        _grow(rooms, envelope)
 
     return Program(
         rooms=rooms,
@@ -472,3 +477,78 @@ def _refuse_if_the_setback_is_too_shallow(
     if (depth >= short and along >= long) or (depth >= long and along >= short):
         return
     raise PorchDoesNotFit(depth_m=depth, along_m=along, needs=(short, long))
+
+
+# What stays on a stilt level: the car it exists for, the way in, and the way up.
+_ON_THE_STILT = {SpaceKind.CAR_PARKING, SpaceKind.FOYER, SpaceKind.STAIRCASE}
+
+
+def stilt_would_help(rooms: list[RoomSpec], envelope: Envelope | None) -> bool:
+    """Is this a plot where lifting the house off its parking is worth measuring?
+
+    Deliberately not a trigger. A 30x40 3BHK fails on its car bay while its ground
+    floor is only 65% packed by area — the bay is squeezed by the *tiling*, not by the
+    arithmetic, and stage ③ cannot see that from a sum of minimums. Guessing from the
+    area would have converted a 25x40 and a 30x40 2BHK that already work.
+
+    So this only says "worth trying", and stage ④ measures it the way it measures every
+    other option: by applying the change and running the solver. The signal is the bay's
+    share of the ground floor, which is what makes small plots different in kind — 24%
+    on a 30x40, 61% on a 20x30, 7% on a 50x80.
+    """
+    if envelope is None or envelope.max_footprint_sq_m <= 0:
+        return False
+    bay = sum(
+        room.min_area_sq_m for room in rooms
+        if room.kind is SpaceKind.CAR_PARKING and room.floor == 1
+    )
+    return bay / envelope.max_footprint_sq_m > 0.20
+
+
+def build_stilt(rooms: list[RoomSpec], envelope: Envelope, rules: dict) -> list[RoomSpec]:
+    """Lift the house off the ground and leave the car underneath.
+
+    Everything except the bay, the entrance and the stair moves up a level. The stilt
+    then carries a `STILT` space sized to whatever the level above occupies, because
+    stage ⑤ tiles exactly: with only three rooms to fill the rectangle it shrank the
+    rectangle instead, and the car bay came out at 17.1 m² clear against an 18 m²
+    minimum. The open ground *is* the stilt — giving it a name is what lets the bay
+    stay the size the bye-laws set.
+    """
+    lifted: list[RoomSpec] = []
+    for room in rooms:
+        if room.kind in _ON_THE_STILT and room.floor == 1:
+            lifted.append(room)
+        else:
+            lifted.append(room.model_copy(update={"floor": room.floor + 1}))
+
+    # A stair on every level it serves; the one on the stilt is already there.
+    taken = {room.id for room in lifted}
+    for floor in sorted({r.floor for r in lifted} - {1}):
+        if any(r.kind is SpaceKind.STAIRCASE and r.floor == floor for r in lifted):
+            continue
+        # `_stack` may already have made a `stairN`, and lifting renumbers the levels
+        # under it — so the id has to be found rather than derived from the floor.
+        name = next(
+            f"stair{n}" for n in range(1, 99) if f"stair{n}" not in taken
+        )
+        taken.add(name)
+        lifted.append(_spec(SpaceKind.STAIRCASE, name, rules, floor=floor))
+
+    # The open ground, sized so the stilt matches the storey it holds up. A building
+    # whose ground level is a different rectangle from the one above it is not a stilt,
+    # it is a cantilever.
+    above = max(
+        (sum(r.target_area_sq_m for r in lifted if r.floor == f)
+         for f in {r.floor for r in lifted} - {1}),
+        default=0.0,
+    )
+    standing = sum(r.target_area_sq_m for r in lifted if r.floor == 1)
+    open_ground = max(1.0, min(above - standing, envelope.max_footprint_sq_m - standing))
+    # Target only. Setting its *minimum* to the open area was tried and is wrong: the
+    # tiling handed the 46.9 m² rectangle to the car bay and the 18 m² one to the
+    # stilt, which then sat below a minimum it had no business having. The open ground
+    # is where surplus should *land*, not something the plan is illegal without.
+    stilt = _spec(SpaceKind.STILT, "stilt", rules, floor=1)
+    lifted.append(stilt.model_copy(update={"target_area_sq_m": open_ground}))
+    return lifted

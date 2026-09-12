@@ -293,6 +293,20 @@
       "source": "NBC 2016 Pt3 habitable room",
       "verified": false,
       "max_aspect": 2.5
+    },
+    "stilt": {
+      "min_area_sq_m": 1.0,
+      "target_area_sq_m": 1.0,
+      "max_target_sq_m": 400.0,
+      "min_width_m": 0.9,
+      "sector": null,
+      "exterior_wall": false,
+      "road_access": false,
+      "walk_in": true,
+      "through_route": true,
+      "max_aspect": 8.0,
+      "source": "Not a room. Open ground under a house built on a stilt — the level exists so a car can stand beneath the building and the stair can come down, and the rest is left open. It carries a nominal 1 m² minimum and a very large ceiling because its whole job is to take whatever area no room claims: stage ⑤ tiles exactly, and without it the tiling squeezes the car bay to make three rooms fill the rectangle. A wide aspect is expected, like a corridor's. Practice, not code; stilt area is commonly outside FAR, which naksha does not yet model.",
+      "verified": false
     }
   },
   "_aspect": "Longest side over shortest. 2.5 is a habitable room — beyond that it reads as a passage. Circulation is exempt because being long is its function: a corridor flagged as 'a corridor, not a corridor' is the rule mistaking the shape for the defect. Not a code figure; practice.",

@@ -486,3 +486,90 @@ class TestSmallPlotsGetASecondStorey:
         for text in ("25x40 2bhk in Bengaluru", "30x30 2bhk in Bengaluru"):
             program, envelope = self._case(text)
             assert assess(program, envelope, floor=1).feasible, text
+
+
+class TestStiltParking:
+    """The 30x40 3BHK failed on one room: the statutory 3.0 x 6.0 car bay, squeezed to
+    2.2 m² while its first floor came out clean. Lifting the house off its parking is
+    the ordinary answer on plots this size, and — unlike a porch in the setback — it is
+    a *design* answer rather than a permission, so it does not wait on VERIFY.md Q1.
+    """
+
+    @staticmethod
+    def _case(text: str):
+        from app.envelope import build_envelope
+        from app.llm import fallback
+
+        brief = fallback.parse(text)
+        envelope = build_envelope(brief, allow_unverified=True)
+        return brief, envelope
+
+    BRIEF = "30x40 east facing site in Whitefield, Bengaluru, 3BHK with pooja room"
+
+    def test_it_unblocks_the_plot_the_product_exists_for(self):
+        from app.refine import refine
+        from app.solver import plan
+        from app.validator import validate
+
+        brief, envelope = self._case(self.BRIEF)
+        grounded = expand(brief, envelope)
+        lifted = expand(brief, envelope, stilt=True)
+
+        def errors(program):
+            bundle = plan(brief, envelope, program, seed=7)
+            return sum(
+                validate(lay, program, refine(lay, program, envelope)).errors
+                for lay in bundle.layouts
+            )
+
+        assert errors(grounded) > 0, "the fixture must be a brief that fails on the ground"
+        assert errors(lifted) == 0
+
+    def test_only_the_car_the_entrance_and_the_stair_stay_down(self):
+        from app.ir.enums import SpaceKind
+
+        brief, envelope = self._case(self.BRIEF)
+        program = expand(brief, envelope, stilt=True)
+        ground = {r.kind for r in program.on_floor(1)}
+        assert ground <= {
+            SpaceKind.CAR_PARKING, SpaceKind.FOYER, SpaceKind.STAIRCASE, SpaceKind.STILT
+        }
+        assert SpaceKind.HALL not in ground and SpaceKind.KITCHEN not in ground
+
+    def test_the_open_ground_is_named(self):
+        """Stage ⑤ tiles exactly, so a stilt needs something to absorb the area no room
+        claims. Without it the tiling squeezed the bay to make three rooms fill the
+        rectangle, and the bay came out at 17.1 m² clear against an 18 m² minimum."""
+        from app.ir.enums import SpaceKind
+
+        brief, envelope = self._case(self.BRIEF)
+        program = expand(brief, envelope, stilt=True)
+        assert any(r.kind is SpaceKind.STILT for r in program.on_floor(1))
+
+    def test_every_storey_has_a_stair_and_no_id_repeats(self):
+        from app.ir.enums import SpaceKind
+
+        brief, envelope = self._case(self.BRIEF)
+        program = expand(brief, envelope, stilt=True)
+        ids = [r.id for r in program.rooms]
+        assert len(ids) == len(set(ids))
+        for floor in {r.floor for r in program.rooms}:
+            assert any(
+                r.kind is SpaceKind.STAIRCASE for r in program.all_on_floor(floor)
+            ), floor
+
+    def test_it_is_off_by_default(self):
+        brief, envelope = self._case(self.BRIEF)
+        assert expand(brief, envelope) != expand(brief, envelope, stilt=True)
+        assert len({r.floor for r in expand(brief, envelope).rooms}) == 2
+
+    def test_worth_measuring_tracks_the_bay_s_share_of_the_floor(self):
+        """Not a trigger. A 30x40's ground floor is only 65% packed by area and the bay
+        still fails — it is squeezed by the tiling, which an area sum cannot see. So
+        this only says the option is worth putting to stage ④."""
+        from app.program import stilt_would_help
+
+        small, small_env = self._case(self.BRIEF)
+        big, big_env = self._case("50x80 4bhk in Bengaluru with study")
+        assert stilt_would_help(expand(small, small_env).rooms, small_env)
+        assert not stilt_would_help(expand(big, big_env).rooms, big_env)

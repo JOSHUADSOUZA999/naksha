@@ -234,13 +234,24 @@ class TestUnbuildableDominates:
             weights[r.id] == pytest.approx(r.min_area_sq_m) for r in rooms
         )
 
-    def test_a_generous_budget_gives_everyone_their_target(self, case):
+    def test_a_generous_budget_squeezes_nobody_and_respects_every_ceiling(self, case):
+        """This asserted everyone lands exactly on their target, and that was right
+        while there was nowhere above a target to go.
+
+        Rooms now carry a ceiling, and surplus follows headroom rather than spreading
+        in proportion — because proportion scales the rooms that should not grow at
+        all. A stilt level put the car bay at 46.9 m² against an 18 m² ceiling while
+        the open ground it was meant to land in sat at 5.2. So the invariant is no
+        longer equality: nobody is squeezed below their target, and nobody passes the
+        ceiling the ruleset gives them.
+        """
         program, _ = case
         rooms = program.on_floor(1)
         weights = slicing.effective_areas(rooms, 10_000.0)
-        assert all(
-            weights[r.id] == pytest.approx(r.target_area_sq_m) for r in rooms
-        )
+        for room in rooms:
+            ceiling = room.max_target_sq_m or room.target_area_sq_m
+            assert weights[room.id] >= room.target_area_sq_m - 1e-6, room.id
+            assert weights[room.id] <= ceiling + 1e-6, room.id
 
 
 class TestFloatSlack:

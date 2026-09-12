@@ -117,6 +117,14 @@ class SpaceKind(StrEnum):
     VERANDA = "veranda"
     OFFICE = "office"
 
+    # Not a room, and it has no `RoomKind` counterpart because nobody asks for one.
+    # Open ground under a house built on a stilt: the level exists so a car can stand
+    # beneath the building and the stair can come down, and the rest of it is left
+    # open. It is a `SpaceKind` because stage ⑤ tiles *exactly* — a stilt level needs
+    # something to absorb the area no room claims, or the tiling squeezes the car bay
+    # to make three rooms fill the rectangle, which is how the first attempt failed.
+    STILT = "stilt"
+
     @classmethod
     def from_room_kind(cls, kind: RoomKind) -> SpaceKind:
         """A brief-stage room, as a plan space. Total by construction."""
