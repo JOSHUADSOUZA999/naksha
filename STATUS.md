@@ -12,11 +12,16 @@ Read in this order, then run the commands below:
 
 ```bash
 cd naksha
-.venv/bin/pytest -q                                  # 470 tests, no network, no key
+.venv/bin/pytest -q                                  # 643 tests, no network, no key
 
-# The whole pipeline as it stands: brief → questions → envelope → room list
+# The whole pipeline, to a drawing on disk: ①②③④⑤⑥⑦
 .venv/bin/python -m app.cli -s -e -P --allow-unverified --fallback-only \
-  "30x40 east facing site in Whitefield, 3BHK with pooja room"
+  --svg /tmp/plan.svg "40x60 3bhk in Bengaluru with pooja room"
+
+# The viewer. Needs Node 18+; nvm has 20 installed on this machine.
+.venv/bin/python -m app.cli --allow-unverified --fallback-only --seed 7 \
+  -L frontend/public/plan.json "40x60 3bhk in Bengaluru with pooja room"
+cd frontend && npm run dev
 
 .venv/bin/python -m app.cli -i                       # interactive, multi-line ok
 ```
@@ -42,30 +47,47 @@ strict vastu` · `20x30 2bhk in Bengaluru` (tight) · `30x40 north facing corner
 
 Where the build actually is.
 
-**Last updated:** 2026-09-06 · 470 tests passing, offline, no key ·
-~3,700 lines of app code, ~2,700 lines of tests
+**Last updated:** 2026-09-12 · 643 tests passing, offline, no key
 
-> **naksha has not yet produced a floor plan.** Rooms are sized but unplaced —
-> nothing has coordinates. Two and a half of eight stages are built. The
-> product's central claim — that a two-stage solver makes plans people accept — is
-> asserted in the design doc and tested by nothing in this repo.
+> **naksha draws floor plans.** Text in, a dimensioned drawing out: walls with
+> thickness, doors with swings, windows sized to the bye-laws, sanitaryware and beds,
+> and a list of what is wrong with the result. Seven of eight stages are built. Six of
+> eight reference plots come out legal; the one that does not is the one the product
+> exists for, and it fails on a single question nobody has answered yet.
 
----
+## What it produces, per plot
+
+| plot | storeys | result |
+|---|---|---|
+| 20x30 2BHK | G+2 | **refused** — 29.3 m² buildable and the statutory car bay is 18 of it |
+| 25x40 2BHK | G+1 | clean |
+| 30x30 2BHK | G+1 | legal, one warning |
+| 30x40 2BHK | G | clean |
+| **30x40 3BHK** | G+1 | **refused** — 4 errors, all of them the car bay. See blocker 1. |
+| 30x50 3BHK | G | legal, one circulation warning |
+| 40x60 3BHK | G | clean |
+| 50x80 4BHK | G | clean |
+
+"Clean" means every room above its statutory minimum measured *inside its walls*, every
+room reachable from the front door without walking through a bedroom, and every
+habitable room glazed to a tenth of its floor.
 
 ## Pipeline
 
 | Stage | Status | Notes |
 |---|---|---|
 | ① INTENT | **built** | `text → Brief` + ≤3 clarifying questions |
-| ② ENVELOPE | **built, gated** | Arithmetic done. Refuses to run — rule data unverified |
-| ③ PROGRAM | **deterministic done** | LLM version not started — `"my mother lives with us"` goes nowhere |
-| ④ FEASIBILITY | **done** | explains, and measures each option by running the solver |
-| ⑤ LAYOUT | **done** | slicing tree (A) + CP-SAT (B). ~4 s a plan |
-| ⑥ REFINE | not started | walls → doors → fixtures → windows → dims |
-| ⑦ VALIDATE | not started | geometry · NBC · circulation · vastu · fit |
-| ⑧ CRITIC | not started | rerank + rationale, behind a flag |
+| ② ENVELOPE | **built, gated** | Arithmetic done. Refuses without `--allow-unverified` |
+| ③ PROGRAM | **built ×2** | Deterministic expansion *and* an LLM version in `llm/program.py` |
+| ④ FEASIBILITY | **built** | Explains, and measures each option by running the solver |
+| ⑤ LAYOUT | **built** | Slicing tree (A) + CP-SAT (B). ~1 s a floor |
+| ⑥ REFINE | **built** | Walls, doors, windows, fixtures, porch in the setback |
+| ⑦ VALIDATE | **built** | Circulation · light · legality. Three checks, reported per storey |
+| ⑧ CRITIC | not started | rerank + rationale, behind a flag — optional by design |
 
----
+Also built since the last update: `--svg` export, the Konva viewer (runs, Node 20 via
+nvm), and `PlanBundle` carrying ⑥'s drawing and ⑦'s findings so both consumers read
+the same thing.
 
 ## ① INTENT — done
 
@@ -139,38 +161,45 @@ and surplus area is forced into rooms, producing a 30 m² bathroom on a 50x80
 
 ## Blockers
 
-**1. FAR is unresolved, and it is ③'s room budget.** Three candidate figures for one
-30×40 plot: **0.75** (BBMP Bye-laws 2003), **1.50** (RMP 2031 Vol. 6 Table 6 — what is
-encoded, read first-hand from the BDA PDF), **1.75** (widely reported for RMP 2015).
-Every page of the RMP 2031 document is stamped **"(Draft)"**; published for objections
-in 2017, notification not established. If it was never notified, Bengaluru still
-sanctions against RMP 2015 and the encoded numbers are wrong by ~2×. *Needs someone who
-has sanctioned a plan recently.*
+**1. The car porch, and it is now the only thing between naksha and its market.**
+A 30x40 3BHK comes out with its first floor clean and its ground floor failing on one
+room: the statutory 3.0 × 6.0 m bay, squeezed to 2.2 m². Everything else about that
+plan works.
+
+Moving the bay off the ground floor fixes it — 73.6 m² of minimums becomes 55.6, and
+the plot solves. `--porch-in-setback` does exactly that, and **refuses on every plot we
+model**, because the front setback cannot hold a car:
+
+| plot | front setback | a 3.0 × 6.0 bay |
+|---|---|---|
+| 30x40 | 1.46 m | no |
+| 30x50 | 1.83 m | no |
+| 40x60 | 2.19 m | no |
+| 50x80 | **2.93 m** | no — by seven centimetres |
+
+So VERIFY.md Q1 is no longer "may a porch sit in the setback" but "the setback cannot
+hold one, so which of these is wrong": the setback figures, the 3.0 × 6.0 bay, or the
+assumption that this is a porch at all rather than **stilt parking under the house**.
+The last is what I would bet on, and it is a design answer rather than a permission —
+meaning it is buildable without waiting for anyone.
 
 **2. All 19 rule bands are `verified: false`.** `build_envelope` raises
-`RulesetUnverified` unless passed `allow_unverified=True`. Deliberate: a wrong setback
-looks exactly like a right one, and the output is a number someone acts on.
+`RulesetUnverified` unless passed `allow_unverified=True`. The FAR conflict *is*
+resolved — RMP-2015 Table 10 gives 1.75, read first-hand — but the flags were never
+flipped and the setback bands remain unchecked.
 
-**3. Only Bengaluru is mapped.** Pune, Hyderabad, Chennai, Mysuru all return
+**3. Only Bengaluru is mapped.** Pune, Hyderabad, Chennai, Mysuru return
 `NoRulesetForCity`.
 
-**4. Secondary gaps.** BBMP Table 4 keys on site *depth*, not area — the area bands are
-an approximation. RMP Tables 6/7 split by Planning Zone A/B with no locality-to-zone
-map; Zone A assumed throughout.
+**4. Two new figures need an architect.** VERIFY.md Q6: window area as a fraction of
+floor area, encoded at 1/10, transcribed from practice and not read first-hand. At 1/6
+a hall window goes from 0.93 m to 1.6 m, which changes which walls can carry one.
 
-**5. ~~`claude_code` adapter misclassifies.~~ Investigated — not a bug.** The SDK
-documents `api_error_status` as carrying the HTTP status "when `is_error` is True and
-`subtype` is 'success'", so `error result: success` is the CLI's shape for a *failed
-API call* (429/500/529). `ProviderUnavailable` is the right classification and skipping
-schema retries is right — no number of them fixes a rate limit. **③ inherits no hole.**
-Only the wording was wrong, and is now translated: the raw text read "error result:
-success", which sent a reader hunting for a bug in their own brief. Subscription rate
-limits are the usual cause; use an API key provider for repeated runs.
+**5. The live golden set has never been run end to end.** `pytest -m live` still has
+not been executed as a suite.
 
-**6. The live golden set has never been run end to end.** Three cases were added and
-verified by hand; `pytest -m live` has not been executed as a suite.
-
----
+**6. The 20x30 is a real refusal, not a bug.** 29.3 m² buildable after setbacks, and
+the bay alone is 18 of it. It needs the same answer blocker 1 needs.
 
 ## Decisions taken, and why
 
@@ -192,31 +221,34 @@ verified by hand; `pytest -m live` has not been executed as a suite.
 
 ## Next
 
-**Recommended: a vertical slice to a rendered plan.** One hardcoded brief, straight
-through ③ → ⑤ → ⑥, to rectangles and walls on screen. Ugly is fine.
+**1. Stilt parking, and with it the 30x40 3BHK.** The measurement in blocker 1 says the
+setback cannot hold a bay on any plot this product serves, which leaves the stilt: a
+ground level that is parking, entry and stair, with the house above. It is a design
+answer rather than a permission, so it does not wait on VERIFY.md. It is also the only
+change that moves naksha from "serves 25x40 and 40x60" to "serves the plot the market
+is actually made of".
 
-The reasoning: ① and ② are the *least* risky third of the pipeline. An LLM reading
-"3BHK" is not where this product succeeds or fails. The real question is whether the
-slicing-tree + CP-SAT approach produces plans Indian plot owners accept — and finding
-that out costs one week now versus three months later.
+**2. DXF export.** v1 scope names it and `export/svg.py` is explicitly not it —
+DECISIONS is clear that SVG → DXF is the wrong path, because a wall in SVG is a stroke
+with a width while in DXF it is a centreline on a `WALLS` layer. `ir/refined.py` already
+stores exactly that, so the export writes from the IR. This is what makes the output
+something a draughtsman can open.
 
-Order:
-1. ~~Fix the `claude_code` misclassification.~~ Done — it was not a
-   misclassification; see blocker 5. Message translated, 3 tests.
-2. ~~`ir/plan.py` — `RoomSpec`, `AdjacencySpec`, `Program`.~~ **Done.** Plus
-   `SpaceKind` (20 members, superset of `RoomKind`), `Sector` (8 + brahmasthan) and
-   `Relation`. 22 tests, including one asserting no coordinates leak into the model.
-3. ~~`rules/spaces_v1.json` — NBC minimums.~~ **Done**, 20 spaces, all
-   `verified: false`.
-4. ~~③ deterministic expansion + feasibility gate.~~ **Done** — `-P` on the CLI.
-   The LLM version of ③ is still to write.
-5. ⑤ LAYOUT Stage A — slicing tree. **The real risk starts here.**
-4. ⑤ LAYOUT Stage A only — slicing tree, gap-free by construction. Skip CP-SAT tuning.
-5. ⑥ minimal — wall lines and a room-name label. SVG to a file.
-6. Look at it. Decide whether the thesis holds.
+**3. Flip the verified flags that are actually verified.** `spaces_v1` is 11/20 checked
+with clause references and the FAR question is resolved against a primary source. The
+`verified: false` on those is now lying in the other direction, and the warning it
+prints has become noise people learn to ignore.
 
-**Alternative, if stage ① is itself the artefact** rather than a step toward a product:
-verify the FAR figures, map the remaining cities, run the live golden set, and stop.
-That is roughly a week and leaves something coherent and finished.
+**4. ⑧ CRITIC**, if ever. Optional by design and behind a flag.
 
-*This fork is still open and shapes everything after it.*
+## Known imperfections, in priority order
+
+- The **30x50** has one circulation warning: its tiling admits no self-contained
+  circulation spine, so the corridor is reached through a bedroom. Stage ⑤ scores it
+  and ⑥ takes that route only as a last resort. Roughly 15% of tilings admit a clean
+  spine on a 40x60; on tighter plots it is rarer, and legality correctly wins the
+  tie-break. This is DECISIONS question 6's adjacency ceiling from a new direction.
+- The **30x30** has one warning on its upper floor.
+- **Sector (Vastu) satisfaction is the biggest remaining penalty term** on every plan.
+  Nothing has been done about it deliberately: it is a preference, and every other
+  defect outranked it.
