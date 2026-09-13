@@ -39,8 +39,30 @@ actually requires. The big staircase is the solver correctly preferring a 40-poi
 oversize penalty to a 90-point broken shaft.
 
 This is the same wall as question 6 from a third direction: the representation cannot
-express "this room, here". Stage B could — CP-SAT can pin a leaf's coordinates — and
-doing so for shafts only would be a bounded change, unlike relaxing the tiling.
+express "this room, here".
+
+**I said Stage B could, and that pinning shafts there would be a bounded change. It is
+not, and the attempt is worth recording.** A leaf's extent is already a pair of
+expressions in the CP-SAT model, so requiring one to cover a core rectangle is four
+linear constraints — the mechanism is as easy as it looked. What it costs is the
+problem.
+
+*Pinned to the floor below's shaft*, the position is an accident of one storey's tiling
+that every floor above inherits. Topologies that cannot reach it tune infeasible, fall
+back to the un-tuned Stage A path, and come out at **0% overlap** — worse than the
+75%-of-the-smaller rule it replaced.
+
+*Pinned to one core in the zone every storey shares*, chosen once, it works: the shaft
+genuinely stacks at 90% and 91% on a 30x40 stilt, and the oversized staircase halves
+from 42.7 m² to 21.3. But a hard constraint is a hard constraint. **A 30x30 that had
+been clean came back with a room below its minimum**, because the topologies that
+satisfy the pin are not the topologies that dimension well, and when none does the
+fallback is unpinned.
+
+So the cost is not paid by the plan being fixed; it is paid by other plans. Both
+attempts are reverted. What this needs is for the pin to be a *preference Stage B can
+trade* rather than a constraint it must meet — an objective term, which is a change to
+what Stage B optimises rather than to what it is allowed to return.
 
 
 **8. ~~Every plan we call legal has rooms below their statutory minimums.~~ Fixed —
