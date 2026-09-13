@@ -54,30 +54,31 @@ Where the build actually is.
 
 > **naksha draws floor plans.** Text in, a dimensioned drawing out: walls with
 > thickness, doors with swings, windows sized to the bye-laws, sanitaryware and beds,
-> and a list of what is wrong with the result. Seven of eight stages are built, and
-> every reference plot from 25x40 up comes out legal — the 30x40 3BHK, the plot the
-> product exists for, with `--stilt`.
+> and a list of what is wrong with the result. Seven of eight stages are built. **Of the
+> reference plots, one is clean, three are legal with named defects, and five are
+> refused** — and that is the honest count only since 2026-09-13, when looking at the
+> drawings showed stage ⑦ had been calling bad plans clean.
 
 ## What it produces, per plot
 
-Measured 2026-09-13, seed 7, `--fallback-only`.
+Measured 2026-09-13, seed 7, `--fallback-only`, with ⑦'s six checks.
 
 | plot | storeys | result |
 |---|---|---|
-| 20x30 2BHK | G+2 | **refused** — 8 errors. 29.3 m² buildable, and the car bay alone is 18 |
-| 25x40 2BHK | G+1 | clean |
-| 30x30 2BHK | G+1 | legal · 1 warning: upper-floor circulation runs through a bedroom |
-| 30x40 2BHK | G | clean |
-| 30x40 3BHK | G+1 | **refused** — 4 errors, all of them the car bay on the ground floor |
-| **30x40 3BHK `--stilt`** | stilt+2 | **legal** · 2 circulation warnings, one on each upper level |
-| 30x50 3BHK | G | legal · 1 circulation warning |
-| 40x60 3BHK | G | clean |
-| 50x80 4BHK | G | clean |
+| 20x30 2BHK | G+2 | **refused** — 29.3 m² buildable, and the car bay alone is 18 |
+| 25x40 2BHK | G+1 | **clean** |
+| 30x30 2BHK | G+1 | **refused** — car bay off the road · stairs only through the kitchen · upstairs corridor only through a bedroom |
+| 30x40 2BHK | G | **refused** — car bay off the road · second bedroom only through the master |
+| 30x40 3BHK | G+1 | **refused** — the car bay, squeezed to 2.2 m² |
+| 30x40 3BHK `--stilt` | stilt+2 | legal · 4 warnings — living room only through the master bedroom · no bathroom on the top floor · 40 m² staircase |
+| 30x50 3BHK | G | **refused** — car bay off the road · the house is entered through a bedroom |
+| 40x60 3BHK | G | legal · 1 warning — every bedroom only through the kitchen |
+| 50x80 4BHK | G | legal · 3 warnings — a 27.7 m² bathroom and an 11.2 m² one · study only through a bedroom |
 
-"Clean" means every room above its statutory minimum measured *inside its walls*, every
-room reachable from the front door (or the stair, upstairs) without walking through a
-bedroom, and every habitable room glazed to a tenth of its floor. A warning is a plan
-that is legal and worth a second look; an error is a plan naksha refuses.
+An **error** is a plan naksha refuses: a room below its statutory minimum measured inside
+its walls, a room with no route to it, or a car bay no driveway reaches. A **warning** is
+legal and wrong: a route through a bedroom or the kitchen, a bedroom floor with no
+bathroom, a room more than twice the size it should ever be, a room short of daylight.
 
 ## Pipeline
 
@@ -217,29 +218,30 @@ of it; `--stilt` improves it from 8 errors to 6 and does not make it legal.
 
 ## Next
 
-**1. DXF export.** v1 scope names it and `export/svg.py` is explicitly not it — DECISIONS
-is clear that SVG → DXF is the wrong path, because a wall in SVG is a stroke with a width
-while in DXF it is a centreline on a `WALLS` layer. `ir/refined.py` already stores exactly
-that, so the export writes from the IR. Open choice: add `ezdxf`, or write ASCII DXF R12
-directly and take no new dependency.
+**1. Fix what ⑦ now reports, in the generators.** Stage ⑦ is honest as of 2026-09-13;
+stages ⑤ and ⑥ are not yet good enough to satisfy it. In order of what it costs a user:
+the car bay off the road (three plots refused) — ⑤ scores it and the penalty loses;
+entering the house through a bedroom; living rooms reached through the master bedroom
+on the stilt plan; bedrooms reached through the kitchen; oversized bathrooms.
 
-**2. PDF export**, the other half of v1's export line.
+**2. An editor.** The Konva viewer draws and selects; it does not edit. Decision 3 says
+an edit becomes a *constraint* and the plan is re-solved — never a stored coordinate —
+so this needs `api/` (the viewer reads a static `plan.json` today) and a constraint type
+in the IR before any drag handle is worth building.
 
-**3. Stage B shaft preference.** DECISIONS question 9: a stilt level still labels its
-open ground as staircase. Pinning shafts as a hard constraint was built, measured and
-reverted — it broke a clean 30x30. The fix it points at is an objective term the tuner
-can trade, not a constraint it must meet.
+**3. DXF export.** v1 scope. `ir/refined.py` already stores centrelines, which is what
+DXF wants. Open choice: add `ezdxf`, or write ASCII DXF R12 with no new dependency.
 
-**4. ⑧ CRITIC**, if ever. Optional by design and behind a flag.
+**4. PDF export**, and **5. Stage B shaft preference** (DECISIONS question 9).
 
 ## Known imperfections, in priority order
 
-- **The stilt level mislabels its largest room.** On the 30x40 3BHK `--stilt`, the ground
-  level shows a 40 m² staircase beside 5 m² of open ground, when the figures belong the
-  other way round. Zero errors; wrong drawing. Question 9.
-- **Circulation warnings on four plots** — the 30x50, the 30x30's upper floor, and both
-  upper levels of the stilt plan. Each tiling admits no self-contained circulation spine,
-  so a corridor is reached through a bedroom. Stage ⑤ scores it and ⑥ takes that route
-  only as a last resort; legality correctly wins the tie. Question 6's adjacency ceiling.
-- **Sector (Vastu) satisfaction is the largest remaining penalty term** on every plan.
-  Untouched on purpose: it is a preference, and every other defect outranked it.
+- **Five of nine reference plans are refused and three more carry warnings.** Every
+  defect in the table above is real and was confirmed in the plan data, not only by eye.
+- **The stilt level mislabels its largest room** — a 40 m² staircase beside 5 m² of open
+  ground. Question 9.
+- **Every car bay is drawn with a window** where a vehicle opening belongs. Stage ⑥ has
+  no opening type for one yet.
+- **Room names are drawn over bed and WC symbols**, which makes labels hard to read.
+- **Sector (Vastu) satisfaction is the largest remaining penalty term.** Untouched on
+  purpose: it is a preference, and every other defect outranked it.

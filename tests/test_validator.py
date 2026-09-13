@@ -12,6 +12,7 @@ import pytest
 
 from app.envelope import build_envelope
 from app.ir.enums import OpeningKind, Relation, Severity, SpaceKind
+from app.ir.layout import TOLERANCE_M
 from app.llm import fallback
 from app.program import expand
 from app.refine import refine
@@ -151,7 +152,10 @@ class TestTheOtherChecks:
         assert not report.ok
 
     def test_a_legal_plan_reports_no_errors(self, plans):
-        for name in ("30x50", "40x60", "50x80"):
+        """The 30x50 used to be in this list, and the list was wrong: its car bay does
+        not touch the road, so no car can reach it. That was true all along — ⑦ simply
+        had no check for it until the drawings were looked at."""
+        for name in ("40x60", "50x80"):
             _, _, _, report = plans[name]
             assert report.ok, [f.message for f in report.findings if f.severity is Severity.ERROR]
 
@@ -338,30 +342,15 @@ class TestCirculationDoesNotRunThroughBedrooms:
     reachable, every check passing, and a plan nobody would live in.
     """
 
-    def test_an_en_suite_is_not_a_defect(self, plans):
-        """The narrowing that makes the rule usable.
+    def test_a_room_is_reported_once_not_as_both_unreachable_and_detoured(self, plans):
+        """Severing every circulation door strands rooms outright.
 
-        A bathroom off its bedroom is reached *through* that bedroom, and that is what
-        an en-suite is. A first version flagged every one of them — the rule is about
-        the circulation spine, not about private rooms having neighbours.
+        This test used to expect those rooms to *also* be reported as "reached through
+        a bedroom", and the old corridor-only rule obliged. That was double-counting: a
+        room with no route at all is one defect — unreachable, an error — and calling
+        it a detour as well makes one problem look like two. Rooms that still have a
+        route, and only a bad one, are the detours.
         """
-        from app.ir.enums import SpaceKind
-
-        for _, program, _, report in plans.values():
-            flagged = {r for f in report.by_check("circulation") for r in f.rooms}
-            kinds = {r.id: r.kind for r in program.rooms}
-            for room in flagged:
-                assert kinds[room] not in (SpaceKind.BATHROOM, SpaceKind.WC), room
-
-    def test_the_finding_names_circulation_spaces_only(self, plans):
-        for _, program, _, report in plans.values():
-            through = {r.id for r in program.rooms if r.is_through_route}
-            for finding in report.by_check("circulation"):
-                if finding.severity is Severity.WARNING:
-                    assert set(finding.rooms) <= through, finding.message
-
-    def test_a_corridor_reached_through_a_bedroom_is_reported(self, plans):
-        """Built by severing the spine rather than by finding a bad brief."""
         layout, program, floor, _ = plans["50x80"]
         through = {r.id for r in program.rooms if r.is_through_route}
         spine_doors = [
@@ -374,7 +363,15 @@ class TestCirculationDoesNotRunThroughBedrooms:
             update={"openings": [o for o in floor.openings if o not in spine_doors]}
         )
         findings = validate(layout, program, severed).by_check("circulation")
-        assert any("through a bedroom" in f.message for f in findings)
+        assert findings, "severing the circulation must be reported"
+
+        stranded = {
+            r for f in findings if f.severity is Severity.ERROR for r in f.rooms
+        }
+        detoured = {
+            r for f in findings if "through a bedroom" in f.message for r in f.rooms
+        }
+        assert not stranded & detoured
 
     def test_stage_five_scores_the_same_property_on_the_tiling(self, plans):
         """Before any door exists. ⑤ has to prefer tilings ⑥ can wire honestly — the
@@ -392,3 +389,186 @@ class TestCirculationDoesNotRunThroughBedrooms:
 
         merged = _interleave([("a", 1), ("a", 2)], [("b", 2), ("b", 3)], [("c", 4)])
         assert [row[1] for row in merged] == [1, 2, 4, 3]
+
+
+class TestEveryDefectTheDrawingsShowed:
+    """Each of these was found by looking at the drawings, on plots ⑦ called clean.
+
+    Every test breaks a plan on purpose — none waits for a brief that happens to be bad,
+    because that test goes vacuous the day the pipeline stops producing the defect.
+    """
+
+    @staticmethod
+    def _row(*rooms, through=()):
+        """A strip of rooms side by side, 2 m each, with a programme to match."""
+        from app.ir.layout import Layout, PlacedRoom
+        from app.ir.plan import Program, RoomSpec
+
+        placed = [
+            PlacedRoom(room_id=rid, x_min_m=2.0 * i, y_min_m=0, x_max_m=2.0 * (i + 1), y_max_m=3)
+            for i, (rid, _) in enumerate(rooms)
+        ]
+        layout = Layout(rooms=placed, x_min_m=0, y_min_m=0, x_max_m=2.0 * len(rooms), y_max_m=3)
+        specs = [
+            RoomSpec(
+                id=rid, kind=kind, min_area_sq_m=1.0, target_area_sq_m=2.0,
+                min_width_m=0.5, max_aspect=10.0, is_through_route=rid in through,
+            )
+            for rid, kind in rooms
+        ]
+        return layout, specs
+
+    def test_a_bedroom_reached_only_through_another_bedroom_is_reported(self):
+        """The 30x40 2BHK: bed2 was only reachable through the master bedroom."""
+        from app.ir.plan import Program
+        from app.validator import _through_private_rooms
+
+        layout, specs = self._row(
+            ("foyer", SpaceKind.FOYER), ("bed1", SpaceKind.MASTER_BEDROOM),
+            ("bed2", SpaceKind.BEDROOM), through={"foyer"},
+        )
+        graph = {"foyer": {"bed1"}, "bed1": {"foyer", "bed2"}, "bed2": {"bed1"}}
+        findings = _through_private_rooms(layout, Program(rooms=specs), None, graph, "foyer")
+        assert any("bed2" in f.rooms and "through a bedroom" in f.message for f in findings)
+
+    def test_an_en_suite_is_not_a_defect(self):
+        """A bathroom reached through the bedroom stage ③ connected it to is what an
+        en-suite is. The first version of this rule flagged every one."""
+        from app.ir.enums import Relation
+        from app.ir.plan import AdjacencySpec, Program
+        from app.validator import _through_private_rooms
+
+        layout, specs = self._row(
+            ("foyer", SpaceKind.FOYER), ("bed1", SpaceKind.MASTER_BEDROOM),
+            ("bath1", SpaceKind.BATHROOM), through={"foyer"},
+        )
+        program = Program(
+            rooms=specs,
+            adjacencies=[AdjacencySpec(a="bed1", b="bath1", relation=Relation.CONNECTED)],
+        )
+        graph = {"foyer": {"bed1"}, "bed1": {"foyer", "bath1"}, "bath1": {"bed1"}}
+        assert _through_private_rooms(layout, program, None, graph, "foyer") == []
+
+    def test_a_bathroom_behind_someone_else_s_bedroom_is_not_an_en_suite(self):
+        """The exception is the edge stage ③ drew, not any bathroom next to a bed."""
+        from app.ir.plan import Program
+        from app.validator import _through_private_rooms
+
+        layout, specs = self._row(
+            ("foyer", SpaceKind.FOYER), ("bed1", SpaceKind.BEDROOM),
+            ("bath2", SpaceKind.BATHROOM), through={"foyer"},
+        )
+        graph = {"foyer": {"bed1"}, "bed1": {"foyer", "bath2"}, "bath2": {"bed1"}}
+        findings = _through_private_rooms(layout, Program(rooms=specs), None, graph, "foyer")
+        assert any("bath2" in f.rooms for f in findings)
+
+    def test_a_house_entered_through_a_bedroom_is_reported(self):
+        """The 30x50: the front door opened into a bedroom and every room lay beyond it."""
+        from app.ir.plan import Program
+        from app.validator import _through_private_rooms
+
+        layout, specs = self._row(
+            ("foyer", SpaceKind.FOYER), ("bed3", SpaceKind.BEDROOM),
+            ("hall", SpaceKind.HALL), ("kitchen", SpaceKind.KITCHEN),
+            through={"foyer", "hall", "kitchen"},
+        )
+        graph = {
+            "foyer": {"bed3"}, "bed3": {"foyer", "hall"},
+            "hall": {"bed3", "kitchen"}, "kitchen": {"hall"},
+        }
+        findings = _through_private_rooms(layout, Program(rooms=specs), None, graph, "foyer")
+        flagged = {r for f in findings for r in f.rooms}
+        assert {"hall", "kitchen"} <= flagged
+
+    def test_a_bedroom_behind_the_kitchen_is_reported(self):
+        """The 40x60: every bedroom lay beyond the kitchen. A kitchen is somewhere you
+        walk through to a utility, not the way to the bedrooms."""
+        from app.ir.plan import Program
+        from app.validator import _through_private_rooms
+
+        layout, specs = self._row(
+            ("foyer", SpaceKind.FOYER), ("kitchen", SpaceKind.KITCHEN),
+            ("bed1", SpaceKind.BEDROOM), through={"foyer", "kitchen"},
+        )
+        graph = {"foyer": {"kitchen"}, "kitchen": {"foyer", "bed1"}, "bed1": {"kitchen"}}
+        findings = _through_private_rooms(layout, Program(rooms=specs), None, graph, "foyer")
+        assert any("through the kitchen" in f.message and "bed1" in f.rooms for f in findings)
+
+    def test_a_second_honest_route_clears_the_room(self):
+        """Every route, not the shortest. One good way in is enough."""
+        from app.ir.plan import Program
+        from app.validator import _through_private_rooms
+
+        layout, specs = self._row(
+            ("foyer", SpaceKind.FOYER), ("bed1", SpaceKind.BEDROOM),
+            ("hall", SpaceKind.HALL), through={"foyer", "hall"},
+        )
+        graph = {
+            "foyer": {"bed1", "hall"}, "bed1": {"foyer", "hall"}, "hall": {"foyer", "bed1"},
+        }
+        assert _through_private_rooms(layout, Program(rooms=specs), None, graph, "foyer") == []
+
+    def test_a_car_bay_off_the_road_is_an_error(self, plans):
+        """A bay no driveway reaches does not satisfy the parking requirement. Built by
+        moving the road, so the test does not depend on a plan getting this wrong."""
+        from app.ir.enums import Facing
+
+        layout, program, floor, report = plans["40x60"]
+        assert not report.by_check("access"), "fixture must start with a reachable bay"
+
+        bay = next(
+            r for r in layout.rooms
+            if next(s for s in program.rooms if s.id == r.room_id).kind is SpaceKind.CAR_PARKING
+        )
+        sides = {
+            Facing.NORTH: abs(bay.y_max_m - layout.y_max_m) <= TOLERANCE_M,
+            Facing.SOUTH: abs(bay.y_min_m - layout.y_min_m) <= TOLERANCE_M,
+            Facing.EAST: abs(bay.x_max_m - layout.x_max_m) <= TOLERANCE_M,
+            Facing.WEST: abs(bay.x_min_m - layout.x_min_m) <= TOLERANCE_M,
+        }
+        elsewhere = next(side for side, touches in sides.items() if not touches)
+        moved = layout.model_copy(update={"road_edges": [elsewhere]})
+
+        findings = validate(moved, program, floor).by_check("access")
+        assert findings and findings[0].severity is Severity.ERROR
+        assert bay.room_id in findings[0].rooms
+
+    def test_a_bedroom_floor_with_no_bathroom_is_reported(self, plans):
+        """The 30x40 stilt house's top floor: two bedrooms, no toilet."""
+        layout, program, floor, _ = plans["50x80"]
+        no_baths = program.model_copy(
+            update={
+                "rooms": [
+                    r.model_copy(update={"kind": SpaceKind.STORE})
+                    if r.kind in (SpaceKind.BATHROOM, SpaceKind.WC) else r
+                    for r in program.rooms
+                ]
+            }
+        )
+        findings = validate(layout, no_baths, floor).by_check("sanitation")
+        assert findings and findings[0].severity is Severity.WARNING
+
+    def test_a_grossly_oversized_room_is_reported(self, plans):
+        """The 50x80's 27.7 m² bathroom passed because ⑦ only measured rooms that were
+        too small. Built by lowering a room's ceiling below the space it was given."""
+        layout, program, floor, _ = plans["40x60"]
+        biggest = max(
+            (r for r in layout.rooms),
+            key=lambda r: floor.clear_area_sq_m(r.room_id) or 0,
+        )
+        spec = next(s for s in program.rooms if s.id == biggest.room_id)
+        area = floor.clear_area_sq_m(biggest.room_id)
+        assert area > 2 * spec.min_area_sq_m + 3, "fixture room must be well above its minimum"
+
+        shrunk = program.model_copy(
+            update={
+                "rooms": [
+                    r.model_copy(update={
+                        "target_area_sq_m": r.min_area_sq_m, "max_target_sq_m": None,
+                    }) if r.id == biggest.room_id else r
+                    for r in program.rooms
+                ]
+            }
+        )
+        findings = validate(layout, shrunk, floor).by_check("size")
+        assert any(biggest.room_id in f.rooms for f in findings)

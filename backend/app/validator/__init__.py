@@ -16,19 +16,30 @@ from __future__ import annotations
 
 from collections import defaultdict, deque
 
-from app.ir.enums import OpeningKind, Severity, SpaceKind
-from app.ir.layout import Layout
+from app.ir.enums import Facing, OpeningKind, Relation, Severity, SpaceKind
+from app.ir.layout import TOLERANCE_M, Layout
 from app.ir.plan import Program
 from app.ir.refined import RefinedFloor
 from app.ir.validation import Finding, Report
 
-CHECKS = ["circulation", "light", "legality"]
+CHECKS = ["circulation", "access", "sanitation", "size", "light", "legality"]
+
+# Where a person sleeps or bathes. A route may end in one of these; it may not pass
+# through one — except into a bathroom its own bedroom was built to serve.
+_BEDROOMS = {
+    SpaceKind.BEDROOM, SpaceKind.MASTER_BEDROOM, SpaceKind.GUEST_ROOM,
+    SpaceKind.SERVANT_ROOM,
+}
+_BATHS = {SpaceKind.BATHROOM, SpaceKind.WC}
 
 
 def validate(layout: Layout, program: Program, floor: RefinedFloor) -> Report:
     """Every check, against the drawn plan."""
     findings: list[Finding] = []
     findings += _circulation(layout, program, floor)
+    findings += _access(layout, program)
+    findings += _sanitation(layout, program)
+    findings += _size(layout, program, floor)
     findings += _light(program, floor)
     findings += _legality(program, floor)
     return Report(floor=layout.floor, findings=findings, checks_run=list(CHECKS))
@@ -204,44 +215,223 @@ def check(bundle):
 
 
 def _through_private_rooms(layout, program, floor, graph, start) -> list[Finding]:
-    """Circulation spaces reachable only by walking through somewhere private.
+    """Rooms you can only get to by walking through a bedroom, a bathroom, or the kitchen.
 
-    Narrower than "a private room is never a passage", deliberately. An en-suite is
-    reached through its bedroom and that is what an en-suite is — a first version
-    flagged every one of them as a defect. What is wrong is a *corridor* you reach
-    through a bedroom, which makes that bedroom a passage.
+    **This used to check only the corridor, and ⑦ called five bad plans clean.** It was
+    narrowed that way to stop it flagging en-suites, and the narrowing threw out
+    everything else: a 30x50 you entered *through a bedroom*, a second bedroom reachable
+    only through the master, a stilt house where the stairs led through the master
+    bedroom to the living room. All of them passed, because none of them routed the
+    corridor itself through a bedroom.
 
-    Walks the doors ⑥ actually drew, where `score._unwalkable` walks the tiling before
-    any exist. The two can disagree, and the disagreement is the useful part: ⑥ hangs a
-    door off a bedroom as a last resort when the alternative is a room with no way in.
+    The en-suite is handled as what it is instead: a bathroom reached through the
+    bedroom stage ③ connected it to. Every other passage through a private room is
+    reported, and so is a bedroom, stair or corridor that can only be reached through
+    the kitchen — a kitchen is a room you may walk through to a utility behind it, not
+    the way to the bedrooms.
+
+    Walks every route, not the shortest one. A room is only reported if *no* door-route
+    avoids the room in question — a plan with one bad route and one good one is fine.
     """
-    through = {r.id for r in program.rooms if r.is_through_route and r.needs_door}
-    seen = {start}
+    kinds = {r.id: r.kind for r in program.rooms}
+    through = {r.id for r in program.rooms if r.is_through_route}
+    walk_in = {r.id for r in program.rooms if r.needs_door}
+    en_suites = {
+        frozenset({edge.a, edge.b})
+        for edge in program.adjacencies
+        if edge.relation is Relation.CONNECTED
+        and {kinds.get(edge.a), kinds.get(edge.b)} & _BATHS
+        and {kinds.get(edge.a), kinds.get(edge.b)} & _BEDROOMS
+    }
+
+    def walk(kitchen_passable: bool) -> set[str]:
+        seen = {start}
+        stack = [start]
+        while stack:
+            here = stack.pop()
+            passable = here == start or (
+                here in through
+                and (kitchen_passable or kinds.get(here) is not SpaceKind.KITCHEN)
+            )
+            for neighbour in graph.get(here, ()):
+                if neighbour in seen:
+                    continue
+                if passable or (
+                    frozenset({here, neighbour}) in en_suites
+                    and kinds.get(neighbour) in _BATHS
+                ):
+                    seen.add(neighbour)
+                    stack.append(neighbour)
+        return seen
+
+    everything = {start}
     stack = [start]
+    parents: dict[str, str] = {}
     while stack:
-        for neighbour in graph.get(stack.pop(), ()):
-            # Spine to spine only: a private room is where the walk stops.
-            if neighbour in through and neighbour not in seen:
-                seen.add(neighbour)
+        here = stack.pop()
+        for neighbour in graph.get(here, ()):
+            if neighbour not in everything:
+                everything.add(neighbour)
+                parents[neighbour] = here
                 stack.append(neighbour)
 
-    detoured = sorted(
-        r.room_id for r in layout.rooms if r.room_id in through and r.room_id not in seen
+    placed = [r.room_id for r in layout.rooms if r.room_id in walk_in]
+    honest = walk(kitchen_passable=True)
+    no_kitchen = walk(kitchen_passable=False)
+    findings: list[Finding] = []
+
+    detoured = sorted(r for r in placed if r in everything and r not in honest)
+    if detoured:
+        via = sorted({
+            node
+            for room in detoured
+            for node in _ancestors(room, parents, start)
+            if node not in through
+        })
+        findings.append(
+            Finding(
+                check="circulation",
+                severity=Severity.WARNING,
+                message=(
+                    f"{', '.join(detoured)} can only be reached by walking through a "
+                    f"bedroom or bathroom ({', '.join(via)})"
+                ),
+                rooms=detoured,
+            )
+        )
+
+    via_kitchen = sorted(
+        r for r in placed
+        if r in honest and r not in no_kitchen
+        and kinds.get(r) in _BEDROOMS | _BATHS | {SpaceKind.STAIRCASE, SpaceKind.CORRIDOR}
     )
-    if not detoured:
+    if via_kitchen:
+        findings.append(
+            Finding(
+                check="circulation",
+                severity=Severity.WARNING,
+                message=f"{', '.join(via_kitchen)} can only be reached through the kitchen",
+                rooms=via_kitchen,
+            )
+        )
+    return findings
+
+
+def _ancestors(room: str, parents: dict[str, str], start: str) -> list[str]:
+    """The rooms between the entrance and this one, on the route the walk found."""
+    out: list[str] = []
+    here = parents.get(room)
+    while here is not None and here != start:
+        out.append(here)
+        here = parents.get(here)
+    return out
+
+
+def _access(layout: Layout, program: Program) -> list[Finding]:
+    """Can a car actually reach the car bay?
+
+    An error, not a warning: a bay no driveway reaches does not satisfy the parking
+    requirement that put it in the programme. Stage ⑤ penalises this and the penalty
+    can lose — a 30x50, a 30x30 and a 30x40 2BHK all came out with the bay against a
+    side boundary, and ⑦ called two of them clean because nothing here asked.
+
+    Recomputed from the layout rather than imported from `score`, for the reason
+    `refine.breaches` is: a check that shares its implementation with what it checks
+    cannot catch it going wrong.
+    """
+    kinds = {r.id: r.kind for r in program.rooms}
+    outside = {r.id for r in program.rooms if r.outside_envelope}
+    findings: list[Finding] = []
+    for placed in layout.rooms:
+        if kinds.get(placed.room_id) is not SpaceKind.CAR_PARKING:
+            continue
+        if placed.room_id in outside or not layout.road_edges:
+            continue
+        if not _on_a_road_boundary(placed, layout):
+            roads = "/".join(edge.value for edge in layout.road_edges)
+            findings.append(
+                Finding(
+                    check="access",
+                    severity=Severity.ERROR,
+                    message=(
+                        f"{placed.room_id} does not touch the {roads} road, so no car can "
+                        f"reach it"
+                    ),
+                    rooms=[placed.room_id],
+                )
+            )
+    return findings
+
+
+def _on_a_road_boundary(placed, layout: Layout) -> bool:
+    reaches = {
+        Facing.NORTH: abs(placed.y_max_m - layout.y_max_m) <= TOLERANCE_M,
+        Facing.SOUTH: abs(placed.y_min_m - layout.y_min_m) <= TOLERANCE_M,
+        Facing.EAST: abs(placed.x_max_m - layout.x_max_m) <= TOLERANCE_M,
+        Facing.WEST: abs(placed.x_min_m - layout.x_min_m) <= TOLERANCE_M,
+    }
+    return any(reaches.get(edge, False) for edge in layout.road_edges)
+
+
+def _sanitation(layout: Layout, program: Program) -> list[Finding]:
+    """A floor people sleep on, with nowhere on it to wash.
+
+    A warning rather than an error: the house still works, via the stairs, and on a
+    small plot that may be the trade an owner chooses. It is reported because stage ③
+    stacks bedrooms upstairs and bathrooms down, and a 30x40 stilt house came out with
+    its top floor holding two bedrooms and no toilet while ⑦ said nothing.
+    """
+    kinds = {r.id: r.kind for r in program.rooms}
+    here = {placed.room_id: kinds.get(placed.room_id) for placed in layout.rooms}
+    sleeping = sorted(rid for rid, kind in here.items() if kind in _BEDROOMS)
+    if not sleeping or any(kind in _BATHS for kind in here.values()):
         return []
     return [
         Finding(
-            check="circulation",
+            check="sanitation",
             severity=Severity.WARNING,
             message=(
-                f"{', '.join(detoured)} can only be reached by walking through a "
-                f"bedroom or bathroom \u2014 circulation should not run through a "
-                f"private room"
+                f"floor {layout.floor} has bedrooms ({', '.join(sleeping)}) and no "
+                f"bathroom"
             ),
-            rooms=detoured,
+            rooms=sleeping,
         )
     ]
+
+
+def _size(layout: Layout, program: Program, floor: RefinedFloor) -> list[Finding]:
+    """A room more than twice the largest it should ever be.
+
+    `score` penalises this and the penalty loses whenever exact tiling has surplus with
+    nowhere better to go — a 50x80 shipped a 27.7 m² bathroom, and a stilt level a
+    40 m² "staircase", both passing ⑦ because it only measured rooms that were too
+    *small*. Measured on the clear floor, and only when the excess is also more than
+    3 m², so a 5 m² pooja room against a 2.5 m² target is not a defect.
+
+    The open ground under a stilt is excluded: absorbing surplus is its job.
+    """
+    specs = {r.id: r for r in program.rooms}
+    findings: list[Finding] = []
+    for placed in layout.rooms:
+        spec = specs.get(placed.room_id)
+        if spec is None or spec.kind is SpaceKind.STILT:
+            continue
+        ceiling = spec.max_target_sq_m or spec.target_area_sq_m
+        area = floor.clear_area_sq_m(placed.room_id) or placed.area_sq_m
+        if area > 2 * ceiling and area - ceiling > 3.0:
+            findings.append(
+                Finding(
+                    check="size",
+                    severity=Severity.WARNING,
+                    message=(
+                        f"{placed.room_id} is {area:.1f} m², {area / ceiling:.1f}x the "
+                        f"{ceiling:.1f} m² a {spec.kind.value.replace('_', ' ')} should "
+                        f"ever be"
+                    ),
+                    rooms=[placed.room_id],
+                )
+            )
+    return findings
 
 
 def program_kind(program: Program, room_id: str):

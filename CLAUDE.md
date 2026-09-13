@@ -49,7 +49,7 @@ text ──① INTENT ─────► Brief          schema-locked, 2 retries
      ──④ FEASIBILITY ─✗─► explain, with options that were measured  ← BUILT
      ──⑤ LAYOUT ─────► Stage A slicing tree → Stage B CP-SAT        ← BUILT
      ──⑥ REFINE ─────► walls → doors → windows → fixtures           ← BUILT
-     ──⑦ VALIDATE ───► circulation · light · legality               ← BUILT
+     ──⑦ VALIDATE ───► circulation · access · sanitation · size · light · legality ← BUILT
      ──⑧ CRITIC ─────► rerank + rationale (optional, behind a flag)
 ```
 
@@ -77,7 +77,7 @@ naksha/
     feasibility/ __init__.py  ④ explain + measured options
     solver/      slicing.py (Stage A) · tuning.py (Stage B, CP-SAT) · score.py
     refine/      __init__.py  ⑥ walls · doors · windows · fixtures
-    validator/   __init__.py  ⑦ circulation · light · legality
+    validator/   __init__.py  ⑦ circulation · access · sanitation · size · light · legality
     export/      svg.py                                   ← DXF/PDF still to come
   frontend/      Vite + React + react-konva viewer        ← NODE 18+ (20 via nvm)
   tests/         test_ir_brief · test_ir_plan · test_units · test_fallback
@@ -346,6 +346,18 @@ means "checked and clean" rather than "nothing ran". One finding per defect, not
 room: twelve "cannot reach the kitchen" lines make one large problem look like twelve
 small ones. **Test a check by breaking a plan on purpose**, never by waiting for a brief
 that happens to fail — that test goes vacuous the day the pipeline improves.
+
+- **Look at the drawings.** ⑦ once had three checks and called five bad plans clean: a
+  house entered through a bedroom, a second bedroom reached only through the master, a
+  27.7 m² bathroom, car bays no driveway reaches. Every one was invisible to the suite
+  and obvious in the picture. A check that has never failed on a real plan is not yet
+  known to work.
+- **A route may end in a private room, never pass through one** — except into the
+  bathroom stage ③ connected to that bedroom, which is what an en-suite is. Narrowing
+  the rule to "is the corridor reached through a bedroom" is what hid the defects above.
+- **Walk every route, not the shortest.** One honest way into a room is enough.
+- **A car bay off the road is an error**, not a warning: it does not satisfy the parking
+  requirement that put it in the programme.
 
 ### `llm/`
 

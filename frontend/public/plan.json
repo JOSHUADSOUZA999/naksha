@@ -1415,9 +1415,25 @@
   "reports": [
     {
       "floor": 1,
-      "findings": [],
+      "findings": [
+        {
+          "check": "circulation",
+          "severity": "warning",
+          "message": "bath1, bath2, bed1, bed2, corridor can only be reached through the kitchen",
+          "rooms": [
+            "bath1",
+            "bath2",
+            "bed1",
+            "bed2",
+            "corridor"
+          ]
+        }
+      ],
       "checks_run": [
         "circulation",
+        "access",
+        "sanitation",
+        "size",
         "light",
         "legality"
       ],
