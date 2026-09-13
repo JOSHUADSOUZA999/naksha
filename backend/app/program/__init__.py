@@ -239,6 +239,47 @@ def _stack(
         rooms.append(_spec(SpaceKind.CORRIDOR, "corridor2", rules, floor=2))
 
 
+def spec_for(kind: SpaceKind, room_id: str, *, floor: int = 1) -> RoomSpec:
+    """One room exactly as the rules define its kind: sizes, growth ceiling, every flag.
+
+    Public because stage ③ has two front ends, and they must build a room the same way.
+    The model's merge once built its `RoomSpec`s by hand and copied one flag of the
+    five: every hall and corridor came out a private room, no foyer or car bay needed
+    the street, and every model-built plan tried had no front door.
+    """
+    rules = load_ruleset(SPACE_RULES).data["spaces"]
+    return _spec(kind, room_id, rules, floor=floor)
+
+
+def apply_site_choices(
+    rooms: list[RoomSpec],
+    envelope: Envelope | None,
+    *,
+    porch_in_setback: bool = False,
+    stilt: bool = False,
+) -> list[RoomSpec]:
+    """The user's site decisions and the growth pass, on a room list stage ③'s model wrote.
+
+    The same steps in the same order as the tail of `expand`, for a programme whose
+    floors are already decided. Without it the model path ignored `--stilt` and
+    `--porch-in-setback` without a word — and a 30x40 3BHK needs the stilt to fit.
+    """
+    rules = load_ruleset(SPACE_RULES).data["spaces"]
+    rooms = list(rooms)
+    parking = {room.id for room in rooms if room.kind is SpaceKind.CAR_PARKING}
+    if porch_in_setback and parking:
+        _refuse_if_the_setback_is_too_shallow(envelope, rules)
+        rooms = [
+            room.model_copy(update={"outside_envelope": True}) if room.id in parking else room
+            for room in rooms
+        ]
+    _grow(rooms, envelope)
+    if stilt and envelope is not None:
+        rooms = build_stilt(rooms, envelope, rules)
+        _grow(rooms, envelope)
+    return rooms
+
+
 def _spec(kind: SpaceKind, room_id: str, rules: dict[str, Any], *, floor: int) -> RoomSpec:
     rule = rules[kind.value]
     sector = rule["sector"]

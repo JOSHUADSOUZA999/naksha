@@ -63,7 +63,7 @@ uv venv --python 3.12 && source .venv/bin/activate
 uv pip install -e ".[dev]"
 cp .env.example .env          # one API key, or NAKSHA_INTENT_PROVIDER=claude_code
 
-pytest                        # 675 tests: no network, no key, independent of your .env
+pytest                        # 688 tests: no network, no key, independent of your .env
 pytest -m live                # the golden set against a real model; needs credentials
 ```
 

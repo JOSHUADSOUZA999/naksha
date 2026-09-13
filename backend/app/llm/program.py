@@ -22,7 +22,7 @@ from typing import Any
 from app.config import Settings, get_settings
 from app.ir.envelope import Envelope
 from app.ir.models import Brief
-from app.ir.plan import Program, ProgramDraft, RoomSpec
+from app.ir.plan import Program, ProgramDraft
 from app.llm.client import Prompt, load_prompt
 from app.llm.errors import SchemaRetriesExhausted
 from app.llm.providers import (
@@ -32,8 +32,7 @@ from app.llm.providers import (
     build_provider,
 )
 from app.llm.trace import trace_span
-from app.program import SPACE_RULES, expand
-from app.rules import load_ruleset
+from app.program import apply_site_choices, expand, spec_for
 
 PROMPT_VERSION = "program_v1"
 
@@ -45,6 +44,8 @@ def build_program(
     provider: StructuredCaller | None = None,
     settings: Settings | None = None,
     allow_fallback: bool = True,
+    porch_in_setback: bool = False,
+    stilt: bool = False,
 ) -> tuple[Program, str]:
     """The room graph, and how it was obtained — `"model"` or a fallback reason.
 
@@ -54,12 +55,14 @@ def build_program(
     """
     settings = settings or get_settings()
     prompt = load_prompt(PROMPT_VERSION)
+    # The user's site decisions travel with every exit, the fallback's included.
+    site = {"porch_in_setback": porch_in_setback, "stilt": stilt}
 
     if provider is None:
         try:
             provider = build_provider(settings)
         except Exception as exc:
-            return _fallback(brief, envelope, f"provider: {exc}", allow_fallback)
+            return _fallback(brief, envelope, f"provider: {exc}", allow_fallback, **site)
 
     messages: list[dict[str, Any]] = [{"role": "user", "content": _describe(brief, envelope)}]
     errors: list[str] = []
@@ -75,22 +78,29 @@ def build_program(
             ]
             continue
         except ProviderRefused as exc:
-            return _fallback(brief, envelope, f"refusal: {exc.category}", allow_fallback)
+            return _fallback(brief, envelope, f"refusal: {exc.category}", allow_fallback, **site)
         except Exception as exc:
             return _fallback(
-                brief, envelope, f"{type(exc).__name__}: {exc}", allow_fallback
+                brief, envelope, f"{type(exc).__name__}: {exc}", allow_fallback, **site
             )
 
         try:
-            return _merge(draft), "model"
+            program = _merge(draft)
         except Exception as exc:
             # The draft validated but the merge did not — a room kind with no rule, or
             # an adjacency the Program rejects. Retryable: the model can fix it.
             errors.append(f"merge: {exc}")
             messages = [messages[0], {"role": "user", "content": f"That did not work: {exc}"}]
+            continue
+        # After the merge and outside the retry: a porch the setback cannot hold is the
+        # user's refusal to hear, not a schema error the model could correct.
+        rooms = apply_site_choices(
+            program.rooms, envelope, porch_in_setback=porch_in_setback, stilt=stilt
+        )
+        return Program(rooms=rooms, adjacencies=program.adjacencies), "model"
 
     exhausted = SchemaRetriesExhausted(settings.max_schema_retries + 1, errors)
-    return _fallback(brief, envelope, f"schema: {exhausted}", allow_fallback)
+    return _fallback(brief, envelope, f"schema: {exhausted}", allow_fallback, **site)
 
 
 def _describe(brief: Brief, envelope: Envelope | None) -> str:
@@ -145,24 +155,20 @@ def _one_attempt(provider, settings, prompt: Prompt, messages) -> ProgramDraft:
 
 
 def _merge(draft: ProgramDraft) -> Program:
-    """The model's graph plus the rules' sizes. Neither side sees the other's job."""
-    rules = load_ruleset(SPACE_RULES).data["spaces"]
-    rooms = []
-    for request in draft.rooms:
-        rule = rules[request.kind.value]
-        rooms.append(
-            RoomSpec(
-                id=request.id,
-                kind=request.kind,
-                min_area_sq_m=rule["min_area_sq_m"],
-                target_area_sq_m=rule["target_area_sq_m"],
-                min_width_m=rule["min_width_m"],
-                max_aspect=rule["max_aspect"],
-                sector=request.sector,
-                needs_exterior_wall=rule["exterior_wall"],
-                floor=request.floor,
-            )
+    """The model's graph plus the rules' rooms. Neither side sees the other's job.
+
+    **Every room is built by `spec_for`, as the deterministic expansion builds it.** This
+    used to construct `RoomSpec`s by hand and copied one flag of five, which went unseen
+    until the model path first ran end to end: halls and corridors were private rooms,
+    the foyer and car bay never needed the street, and both plans tried had no front
+    door. The model contributes a room's id, kind, floor and sector — nothing else.
+    """
+    rooms = [
+        spec_for(request.kind, request.id, floor=request.floor).model_copy(
+            update={"sector": request.sector}
         )
+        for request in draft.rooms
+    ]
     return Program(rooms=rooms, adjacencies=draft.adjacencies)
 
 
@@ -185,10 +191,18 @@ def _correction(exc: ProviderOutputInvalid) -> str:
 
 
 def _fallback(
-    brief: Brief, envelope: Envelope | None, reason: str, allow_fallback: bool
+    brief: Brief,
+    envelope: Envelope | None,
+    reason: str,
+    allow_fallback: bool,
+    *,
+    porch_in_setback: bool = False,
+    stilt: bool = False,
 ) -> tuple[Program, str]:
     if not allow_fallback:
         from app.llm.intent import FallbackRefused
 
         raise FallbackRefused(reason, 1)
-    return expand(brief, envelope), reason
+    return expand(
+        brief, envelope, porch_in_setback=porch_in_setback, stilt=stilt
+    ), reason

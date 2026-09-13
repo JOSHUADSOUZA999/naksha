@@ -553,6 +553,36 @@ different incumbent. **Not fixed.** CP-SAT's deterministic time limit
 (`max_deterministic_time`) is the likely answer and is untested. Until then, measure one
 plot at a time.
 
+### The model path had never run end to end, and every plan it drew had no front door
+
+Stage ③'s model version was built, and never exercised offline. It first ran end to end
+on 2026-09-13 through the `claude_code` provider: three briefs, three refused plans, the
+same defect each time — no front door. The model was not the cause.
+
+`_merge` built each `RoomSpec` by hand and copied `needs_exterior_wall` from the rules,
+but not `needs_road_access`, `needs_door`, `is_through_route` or `max_target_sq_m`. Every
+foyer and car bay was indifferent to the street, so the solver never put the foyer on it
+and ⑥ found no road-facing wall for a door; every hall and corridor was a private room,
+so ⑦ reported corridors as rooms you walk through a bedroom to reach. Rooms are now built
+by `program.spec_for`, the offline expansion's own function, keeping only what is the
+model's to decide: id, kind, floor and sector.
+
+Two more on the same path. `--stilt` and `--porch-in-setback` reached the offline
+expansion and nowhere else, so the model path dropped them without a word; both paths now
+apply them through `program.apply_site_choices`, outside ③'s retry loop so a porch the
+setback cannot hold is refused rather than sent back to the model. And the CLI called ③
+once for `-P` and again for `-L`: a 30x50 was printed with `mbed` and a WC and drawn with
+`master` and none, at twice the cost.
+
+The model's answers are recorded in `tests/golden/program_drafts.json` and replayed
+through a scripted provider — how the fix was measured without spending the subscription.
+All four plans (the 30x40 as G+1 and on a stilt, the 30x50, the joint-family 40x60) come
+out with no errors and no warnings on any floor.
+
+*Lesson: a second front end to a stage needs the same construction function, not a copy
+of some of its arguments. And a path that only runs with credentials needs a recorded
+replay, or nothing offline ever exercises it.*
+
 ---
 
 ## Corrections to things I got wrong

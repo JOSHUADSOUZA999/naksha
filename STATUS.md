@@ -12,7 +12,7 @@ Read in this order, then run the commands below:
 
 ```bash
 cd naksha
-.venv/bin/pytest -q                                  # 675 tests, no network, no key
+.venv/bin/pytest -q                                  # 688 tests, no network, no key
 
 # The whole pipeline, to a drawing on disk: ①②③④⑤⑥⑦
 .venv/bin/python -m app.cli -s -e -P --allow-unverified --fallback-only \
@@ -50,7 +50,7 @@ strict vastu` · `20x30 2bhk in Bengaluru` (tight) · `30x40 north facing corner
 
 Where the build actually is.
 
-**Last updated:** 2026-09-13 · 675 tests passing, offline, no key
+**Last updated:** 2026-09-13 · 688 tests passing, offline, no key
 
 > **naksha draws floor plans.** Text in, a dimensioned drawing out: walls with
 > thickness, doors with swings, windows sized to the bye-laws, sanitaryware and beds,
@@ -103,13 +103,41 @@ plots still refused for their car bay:
    30x50. A floor whose minimums exceed its footprint skips the search, and roomy plots
    never reach it.
 
+## The model path — first end-to-end runs, 2026-09-13
+
+Three briefs through `-p claude_code` (claude-opus-5 on a Claude subscription, no API key),
+full pipeline. ① answered first time on every brief, and ③ read what the rules cannot:
+"40x60 for a joint family" became a 4BHK for six with two car bays, a ground-floor bedroom
+with its own bathroom, and a family room and balcony upstairs.
+
+**All three plans were refused — no ground floor had a front door — and the cause was
+ours, not the model's.** Three defects on that path, all fixed:
+
+1. `llm/program.py`'s merge built rooms by hand and copied one rule flag of five. Halls
+   and corridors became private rooms; the foyer and the car bays never needed the street.
+   Rooms are now built by `program.spec_for`, the function the offline path uses.
+2. `--stilt` and `--porch-in-setback` never reached the model path.
+3. `-P` and `-L` each called ③, so the room list printed was not the one drawn, at twice
+   the cost.
+
+Replayed offline through the fixes — `tests/golden/program_drafts.json` records the
+model's answers — **all four model plans have no errors and no warnings on any floor**:
+the 30x40 3BHK as G+1 and on a stilt, the 30x50, and the joint-family 40x60. The offline
+expansion has warnings on every one of those plots. One recorded answer per brief at
+seed 7 is a small sample, and the drawings show things ⑦ does not check: a 16.7 m²
+staircase on the joint family's first floor, a 30x40 entered through the stair hall, and
+a bathroom and a pooja room opening off a staircase.
+
+Each live brief took 150–200 s end to end, most of it two ③ calls. One of those calls is
+now gone; the saving has not been re-measured live.
+
 ## Pipeline
 
 | Stage | Status | Notes |
 |---|---|---|
 | ① INTENT | **built** | `text → Brief` + ≤3 clarifying questions |
 | ② ENVELOPE | **built, gated** | Arithmetic done. Refuses without `--allow-unverified` |
-| ③ PROGRAM | **built ×2** | Deterministic expansion *and* an LLM version in `llm/program.py` |
+| ③ PROGRAM | **built ×2** | Deterministic expansion *and* an LLM version in `llm/program.py`, first run end to end 2026-09-13 |
 | ④ FEASIBILITY | **built** | Explains, and measures each option by running the solver |
 | ⑤ LAYOUT | **built** | Slicing tree (A) + CP-SAT (B), deeper on thin floors. 1.7–4.8 s a plot end to end |
 | ⑥ REFINE | **built** | Walls, doors, windows, fixtures, porch in the setback |
@@ -250,20 +278,29 @@ bathroom on the stilt plan's top floor; a bathroom reached through the study (50
 The judge counts findings rather than weighing them, so one warning naming six rooms ties
 with one naming one.
 
-**2. An editor.** The Konva viewer draws and selects; it does not edit. Decision 3 says
+**2. Run the model path live again.** Its fixes were measured by replaying recorded
+answers, not by a new live run, and only three briefs have ever been through the model.
+The model's plans beat the offline expansion on all four replays; if that holds over more
+briefs, the offline expansion is the fallback it was meant to be, and the reference
+table above should be measured on the model path.
+
+**3. An editor.** The Konva viewer draws and selects; it does not edit. Decision 3 says
 an edit becomes a *constraint* and the plan is re-solved — never a stored coordinate —
 so this needs `api/` (the viewer reads a static `plan.json` today) and a constraint type
 in the IR before any drag handle is worth building.
 
-**3. DXF export.** v1 scope. `ir/refined.py` already stores centrelines, which is what
+**4. DXF export.** v1 scope. `ir/refined.py` already stores centrelines, which is what
 DXF wants. Open choice: add `ezdxf`, or write ASCII DXF R12 with no new dependency.
 
-**4. PDF export**, and **5. Stage B shaft preference** (DECISIONS question 9).
+**5. PDF export**, and **6. Stage B shaft preference** (DECISIONS question 9).
 
 ## Known imperfections, in priority order
 
 - **Two of nine reference plans are refused and six more carry warnings.** Every
   defect in the table above is real and was confirmed in the plan data, not only by eye.
+- **Upper-floor staircases absorb surplus area** — 16.7 m² on the joint-family plan's
+  first floor. ⑦ says nothing below twice a room's growth ceiling, and a staircase's is
+  9.5 m², so the 19 m² line was not crossed.
 - **Results depend on machine load.** Stage B stops each CP-SAT solve at 0.15 s, so a
   busy machine can return a different plan for the same seed: the 40x60 changed when
   nine plots ran at once. Unloaded, three runs gave identical layouts. Measure one plot

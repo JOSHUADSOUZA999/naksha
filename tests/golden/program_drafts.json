@@ -1,0 +1,712 @@
+{
+  "_about": "Stage ③ answers recorded from the model, replayed offline by tests/test_llm_program.py. claude-opus-5 via claude_code, prompt program_v1, 2026-09-13. The room ids, kinds, floors, sectors and graph are the model's; `why` was not kept. `envelopes` holds the buildable rectangle each was sized against, from the model's own reading of the brief.",
+  "drafts": {
+    "30x40 east facing site in Whitefield, Bengaluru, 3BHK with pooja room": {
+      "rooms": [
+        {
+          "id": "foyer",
+          "kind": "foyer",
+          "floor": 1,
+          "sector": "east"
+        },
+        {
+          "id": "park1",
+          "kind": "car_parking",
+          "floor": 1,
+          "sector": "east"
+        },
+        {
+          "id": "hall",
+          "kind": "hall",
+          "floor": 1,
+          "sector": "north"
+        },
+        {
+          "id": "kitchen",
+          "kind": "kitchen",
+          "floor": 1,
+          "sector": "south_east"
+        },
+        {
+          "id": "pooja",
+          "kind": "pooja",
+          "floor": 1,
+          "sector": "north_east"
+        },
+        {
+          "id": "bath1",
+          "kind": "bathroom",
+          "floor": 1,
+          "sector": "north_west"
+        },
+        {
+          "id": "corr1",
+          "kind": "corridor",
+          "floor": 1,
+          "sector": null
+        },
+        {
+          "id": "stair1",
+          "kind": "staircase",
+          "floor": 1,
+          "sector": "south"
+        },
+        {
+          "id": "mbed",
+          "kind": "master_bedroom",
+          "floor": 2,
+          "sector": "south_west"
+        },
+        {
+          "id": "bed2",
+          "kind": "bedroom",
+          "floor": 2,
+          "sector": "west"
+        },
+        {
+          "id": "bed3",
+          "kind": "bedroom",
+          "floor": 2,
+          "sector": "north"
+        },
+        {
+          "id": "bath2",
+          "kind": "bathroom",
+          "floor": 2,
+          "sector": "north_west"
+        },
+        {
+          "id": "corr2",
+          "kind": "corridor",
+          "floor": 2,
+          "sector": null
+        },
+        {
+          "id": "stair2",
+          "kind": "staircase",
+          "floor": 2,
+          "sector": "south"
+        }
+      ],
+      "adjacencies": [
+        {
+          "a": "foyer",
+          "b": "hall",
+          "relation": "connected",
+          "hard": true
+        },
+        {
+          "a": "park1",
+          "b": "foyer",
+          "relation": "connected",
+          "hard": false
+        },
+        {
+          "a": "hall",
+          "b": "kitchen",
+          "relation": "connected",
+          "hard": true
+        },
+        {
+          "a": "hall",
+          "b": "corr1",
+          "relation": "connected",
+          "hard": true
+        },
+        {
+          "a": "hall",
+          "b": "pooja",
+          "relation": "connected",
+          "hard": false
+        },
+        {
+          "a": "corr1",
+          "b": "bath1",
+          "relation": "connected",
+          "hard": true
+        },
+        {
+          "a": "corr1",
+          "b": "stair1",
+          "relation": "connected",
+          "hard": true
+        },
+        {
+          "a": "kitchen",
+          "b": "bath1",
+          "relation": "separated",
+          "hard": true
+        },
+        {
+          "a": "kitchen",
+          "b": "pooja",
+          "relation": "separated",
+          "hard": false
+        },
+        {
+          "a": "corr2",
+          "b": "stair2",
+          "relation": "connected",
+          "hard": true
+        },
+        {
+          "a": "corr2",
+          "b": "mbed",
+          "relation": "connected",
+          "hard": true
+        },
+        {
+          "a": "corr2",
+          "b": "bed2",
+          "relation": "connected",
+          "hard": true
+        },
+        {
+          "a": "corr2",
+          "b": "bed3",
+          "relation": "connected",
+          "hard": true
+        },
+        {
+          "a": "corr2",
+          "b": "bath2",
+          "relation": "connected",
+          "hard": true
+        },
+        {
+          "a": "mbed",
+          "b": "bath2",
+          "relation": "adjacent",
+          "hard": false
+        }
+      ]
+    },
+    "30x50 3bhk in Bengaluru": {
+      "rooms": [
+        {
+          "id": "foyer",
+          "kind": "foyer",
+          "floor": 1,
+          "sector": null
+        },
+        {
+          "id": "hall",
+          "kind": "hall",
+          "floor": 1,
+          "sector": "east"
+        },
+        {
+          "id": "dining",
+          "kind": "dining",
+          "floor": 1,
+          "sector": "west"
+        },
+        {
+          "id": "kitchen",
+          "kind": "kitchen",
+          "floor": 1,
+          "sector": "south_east"
+        },
+        {
+          "id": "utility",
+          "kind": "utility",
+          "floor": 1,
+          "sector": "north_west"
+        },
+        {
+          "id": "corr1",
+          "kind": "corridor",
+          "floor": 1,
+          "sector": null
+        },
+        {
+          "id": "stair1",
+          "kind": "staircase",
+          "floor": 1,
+          "sector": "south"
+        },
+        {
+          "id": "park1",
+          "kind": "car_parking",
+          "floor": 1,
+          "sector": null
+        },
+        {
+          "id": "master",
+          "kind": "master_bedroom",
+          "floor": 2,
+          "sector": "south_west"
+        },
+        {
+          "id": "bed2",
+          "kind": "bedroom",
+          "floor": 2,
+          "sector": "north"
+        },
+        {
+          "id": "bed3",
+          "kind": "bedroom",
+          "floor": 2,
+          "sector": "east"
+        },
+        {
+          "id": "bath1",
+          "kind": "bathroom",
+          "floor": 2,
+          "sector": "west"
+        },
+        {
+          "id": "bath2",
+          "kind": "bathroom",
+          "floor": 2,
+          "sector": "north_west"
+        },
+        {
+          "id": "corr2",
+          "kind": "corridor",
+          "floor": 2,
+          "sector": null
+        },
+        {
+          "id": "stair2",
+          "kind": "staircase",
+          "floor": 2,
+          "sector": "south"
+        }
+      ],
+      "adjacencies": [
+        {
+          "a": "foyer",
+          "b": "hall",
+          "relation": "connected",
+          "hard": true
+        },
+        {
+          "a": "foyer",
+          "b": "park1",
+          "relation": "adjacent",
+          "hard": false
+        },
+        {
+          "a": "hall",
+          "b": "kitchen",
+          "relation": "connected",
+          "hard": true
+        },
+        {
+          "a": "hall",
+          "b": "dining",
+          "relation": "connected",
+          "hard": true
+        },
+        {
+          "a": "hall",
+          "b": "corr1",
+          "relation": "connected",
+          "hard": true
+        },
+        {
+          "a": "dining",
+          "b": "kitchen",
+          "relation": "connected",
+          "hard": false
+        },
+        {
+          "a": "kitchen",
+          "b": "utility",
+          "relation": "connected",
+          "hard": true
+        },
+        {
+          "a": "corr1",
+          "b": "stair1",
+          "relation": "connected",
+          "hard": true
+        },
+        {
+          "a": "kitchen",
+          "b": "bath1",
+          "relation": "separated",
+          "hard": true
+        },
+        {
+          "a": "kitchen",
+          "b": "bath2",
+          "relation": "separated",
+          "hard": true
+        },
+        {
+          "a": "corr2",
+          "b": "stair2",
+          "relation": "connected",
+          "hard": true
+        },
+        {
+          "a": "corr2",
+          "b": "master",
+          "relation": "connected",
+          "hard": true
+        },
+        {
+          "a": "corr2",
+          "b": "bed2",
+          "relation": "connected",
+          "hard": true
+        },
+        {
+          "a": "corr2",
+          "b": "bed3",
+          "relation": "connected",
+          "hard": true
+        },
+        {
+          "a": "corr2",
+          "b": "bath2",
+          "relation": "connected",
+          "hard": true
+        },
+        {
+          "a": "master",
+          "b": "bath1",
+          "relation": "connected",
+          "hard": true
+        }
+      ]
+    },
+    "40x60 for a joint family in Bengaluru": {
+      "rooms": [
+        {
+          "id": "foyer",
+          "kind": "foyer",
+          "floor": 1,
+          "sector": null
+        },
+        {
+          "id": "hall",
+          "kind": "hall",
+          "floor": 1,
+          "sector": "north"
+        },
+        {
+          "id": "dining",
+          "kind": "dining",
+          "floor": 1,
+          "sector": "west"
+        },
+        {
+          "id": "kitchen",
+          "kind": "kitchen",
+          "floor": 1,
+          "sector": "south_east"
+        },
+        {
+          "id": "utility",
+          "kind": "utility",
+          "floor": 1,
+          "sector": null
+        },
+        {
+          "id": "bed1",
+          "kind": "bedroom",
+          "floor": 1,
+          "sector": "south_west"
+        },
+        {
+          "id": "bath1",
+          "kind": "bathroom",
+          "floor": 1,
+          "sector": "west"
+        },
+        {
+          "id": "corridor1",
+          "kind": "corridor",
+          "floor": 1,
+          "sector": null
+        },
+        {
+          "id": "stair1",
+          "kind": "staircase",
+          "floor": 1,
+          "sector": "south"
+        },
+        {
+          "id": "park1",
+          "kind": "car_parking",
+          "floor": 1,
+          "sector": null
+        },
+        {
+          "id": "park2",
+          "kind": "car_parking",
+          "floor": 1,
+          "sector": null
+        },
+        {
+          "id": "corridor2",
+          "kind": "corridor",
+          "floor": 2,
+          "sector": null
+        },
+        {
+          "id": "stair2",
+          "kind": "staircase",
+          "floor": 2,
+          "sector": "south"
+        },
+        {
+          "id": "master",
+          "kind": "master_bedroom",
+          "floor": 2,
+          "sector": "south_west"
+        },
+        {
+          "id": "bed2",
+          "kind": "bedroom",
+          "floor": 2,
+          "sector": "south"
+        },
+        {
+          "id": "bed3",
+          "kind": "bedroom",
+          "floor": 2,
+          "sector": "north"
+        },
+        {
+          "id": "bath2",
+          "kind": "bathroom",
+          "floor": 2,
+          "sector": "west"
+        },
+        {
+          "id": "bath3",
+          "kind": "bathroom",
+          "floor": 2,
+          "sector": "north_west"
+        },
+        {
+          "id": "balcony",
+          "kind": "balcony",
+          "floor": 2,
+          "sector": "north_east"
+        }
+      ],
+      "adjacencies": [
+        {
+          "a": "foyer",
+          "b": "hall",
+          "relation": "connected",
+          "hard": true
+        },
+        {
+          "a": "hall",
+          "b": "kitchen",
+          "relation": "connected",
+          "hard": true
+        },
+        {
+          "a": "hall",
+          "b": "dining",
+          "relation": "connected",
+          "hard": true
+        },
+        {
+          "a": "dining",
+          "b": "kitchen",
+          "relation": "connected",
+          "hard": true
+        },
+        {
+          "a": "kitchen",
+          "b": "utility",
+          "relation": "connected",
+          "hard": true
+        },
+        {
+          "a": "hall",
+          "b": "corridor1",
+          "relation": "connected",
+          "hard": true
+        },
+        {
+          "a": "corridor1",
+          "b": "bed1",
+          "relation": "connected",
+          "hard": true
+        },
+        {
+          "a": "bed1",
+          "b": "bath1",
+          "relation": "connected",
+          "hard": true
+        },
+        {
+          "a": "corridor1",
+          "b": "bath1",
+          "relation": "connected",
+          "hard": false
+        },
+        {
+          "a": "corridor1",
+          "b": "stair1",
+          "relation": "connected",
+          "hard": true
+        },
+        {
+          "a": "foyer",
+          "b": "park1",
+          "relation": "adjacent",
+          "hard": false
+        },
+        {
+          "a": "park1",
+          "b": "park2",
+          "relation": "adjacent",
+          "hard": false
+        },
+        {
+          "a": "kitchen",
+          "b": "bath1",
+          "relation": "separated",
+          "hard": true
+        },
+        {
+          "a": "kitchen",
+          "b": "bath2",
+          "relation": "separated",
+          "hard": true
+        },
+        {
+          "a": "kitchen",
+          "b": "bath3",
+          "relation": "separated",
+          "hard": true
+        },
+        {
+          "a": "corridor2",
+          "b": "stair2",
+          "relation": "connected",
+          "hard": true
+        },
+        {
+          "a": "corridor2",
+          "b": "master",
+          "relation": "connected",
+          "hard": true
+        },
+        {
+          "a": "corridor2",
+          "b": "bed2",
+          "relation": "connected",
+          "hard": true
+        },
+        {
+          "a": "corridor2",
+          "b": "bed3",
+          "relation": "connected",
+          "hard": true
+        },
+        {
+          "a": "master",
+          "b": "bath2",
+          "relation": "connected",
+          "hard": true
+        },
+        {
+          "a": "corridor2",
+          "b": "bath3",
+          "relation": "connected",
+          "hard": true
+        },
+        {
+          "a": "corridor2",
+          "b": "balcony",
+          "relation": "connected",
+          "hard": false
+        }
+      ]
+    }
+  },
+  "envelopes": {
+    "30x40 east facing site in Whitefield, Bengaluru, 3BHK with pooja room": {
+      "x_min_m": 0.97536,
+      "y_min_m": 0.7315200000000001,
+      "x_max_m": 10.72896,
+      "y_max_m": 8.41248,
+      "setbacks": {
+        "north": 0.7315200000000001,
+        "east": 1.4630400000000001,
+        "south": 0.7315200000000001,
+        "west": 0.97536
+      },
+      "plot_area_sq_m": 111.483648,
+      "max_coverage": 0.75,
+      "max_far": 1.75,
+      "max_floors": 4,
+      "road_width_m": 9.0,
+      "road_edges": [
+        "east"
+      ],
+      "ruleset": "setbacks_v1@90b243",
+      "authority": "BBMP",
+      "east_west_m": 9.7536,
+      "north_south_m": 7.680960000000001,
+      "area_sq_m": 74.91701145600001,
+      "max_footprint_sq_m": 74.91701145600001,
+      "max_built_area_sq_m": 195.096384
+    },
+    "30x50 3bhk in Bengaluru": {
+      "x_min_m": 1.2192,
+      "y_min_m": 0.7315200000000001,
+      "x_max_m": 13.411200000000001,
+      "y_max_m": 8.41248,
+      "setbacks": {
+        "north": 0.7315200000000001,
+        "east": 1.8288,
+        "south": 0.7315200000000001,
+        "west": 1.2192
+      },
+      "plot_area_sq_m": 139.35456,
+      "max_coverage": 0.75,
+      "max_far": 1.75,
+      "max_floors": 4,
+      "road_width_m": 9.0,
+      "road_edges": [
+        "east"
+      ],
+      "ruleset": "setbacks_v1@90b243",
+      "authority": "BBMP",
+      "east_west_m": 12.192,
+      "north_south_m": 7.680960000000001,
+      "area_sq_m": 93.64626432000001,
+      "max_footprint_sq_m": 93.64626432000001,
+      "max_built_area_sq_m": 243.87048
+    },
+    "40x60 for a joint family in Bengaluru": {
+      "x_min_m": 1.4630400000000001,
+      "y_min_m": 0.97536,
+      "x_max_m": 16.09344,
+      "y_max_m": 11.21664,
+      "setbacks": {
+        "north": 0.97536,
+        "east": 2.19456,
+        "south": 0.97536,
+        "west": 1.4630400000000001
+      },
+      "plot_area_sq_m": 222.967296,
+      "max_coverage": 0.75,
+      "max_far": 1.75,
+      "max_floors": 4,
+      "road_width_m": 9.0,
+      "road_edges": [
+        "east"
+      ],
+      "ruleset": "setbacks_v1@90b243",
+      "authority": "BBMP",
+      "east_west_m": 14.630400000000002,
+      "north_south_m": 10.24128,
+      "area_sq_m": 149.83402291200002,
+      "max_footprint_sq_m": 149.83402291200002,
+      "max_built_area_sq_m": 390.192768
+    }
+  }
+}

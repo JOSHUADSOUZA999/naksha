@@ -110,6 +110,34 @@ def test_provider_override_is_passed_through(capsys, monkeypatch):
     assert seen == {"provider": "openai", "model": "gpt-5.2"}
 
 
+def test_the_programme_shown_is_the_programme_drawn(capsys, monkeypatch, tmp_path):
+    """`-P` and `-L` each asked the model for a programme, and a model does not return
+    the same room list twice: a 30x50 was printed with `mbed` and a WC and drawn with
+    `master` and none, at twice the cost. One stage ③ per brief, shared."""
+    from app.ir.models import IntentResult, Provenance
+    from app.llm import fallback
+    from app.program import expand
+
+    def brief(text, *, settings=None, **kw):
+        return IntentResult(brief=fallback.parse(text), provenance=Provenance())
+
+    calls = []
+
+    def program(brief, envelope=None, **kw):
+        calls.append(kw)
+        return expand(brief, envelope), "model"
+
+    monkeypatch.setattr("app.cli.extract_brief", brief)
+    monkeypatch.setattr("app.llm.program.build_program", program)
+    path = tmp_path / "plan.json"
+    argv = ["-s", "-P", "--allow-unverified", "-L", str(path), "30x40 2bhk in Bengaluru"]
+    assert main(argv) == 0
+    assert len(calls) == 1
+    shown = capsys.readouterr().out
+    drawn = json.loads(path.read_text(encoding="utf-8"))["program"]["rooms"]
+    assert all(room["id"] in shown for room in drawn)
+
+
 def test_unknown_provider_is_rejected_before_any_work():
     with pytest.raises(SystemExit):
         build_parser().parse_args(["-p", "gemini", "x"])

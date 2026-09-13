@@ -193,14 +193,15 @@ def _run_one(text: str, args: argparse.Namespace, settings) -> int:
                 print(f"           → {hint}", file=sys.stderr)
             return 1
 
+    programs: dict = {}  # one stage ③ per brief, shared by -P and -L — see _build_program
     if args.summary:
         print(_summarise(result))
         if args.envelope:
             print(_envelope_summary(result, args))
         if args.program:
-            print(_program_summary(result, args, settings))
+            print(_program_summary(result, args, settings, programs))
     if args.layout or args.svg:
-        _write_layout(result, args, settings)
+        _write_layout(result, args, settings, programs)
     else:
         print(json.dumps(result.model_dump(mode="json"), indent=2, ensure_ascii=False))
 
@@ -367,7 +368,9 @@ def _envelope_summary(result: IntentResult, args: argparse.Namespace) -> str:
     )
 
 
-def _write_layout(result: IntentResult, args: argparse.Namespace, settings) -> None:
+def _write_layout(
+    result: IntentResult, args: argparse.Namespace, settings, programs: dict | None = None
+) -> None:
     """Solve and write the bundle. `-` means stdout, so it pipes into `jq`."""
     from app.envelope import EnvelopeError, build_envelope
     from app.program import expand
@@ -382,7 +385,7 @@ def _write_layout(result: IntentResult, args: argparse.Namespace, settings) -> N
     from app.program import PorchDoesNotFit
 
     try:
-        program, how = _build_program(result.brief, envelope, args, settings)
+        program, how = _build_program(result.brief, envelope, args, settings, programs)
     except PorchDoesNotFit as exc:
         # Refused rather than drawn. Moving the bay off the ground floor is what makes
         # a 30x40 3BHK feasible, and shipping that without checking the strip can hold
@@ -508,30 +511,49 @@ def _write_svg(bundle, path: str) -> None:
         )
 
 
-def _build_program(brief, envelope, args: argparse.Namespace, settings):
+def _build_program(
+    brief, envelope, args: argparse.Namespace, settings, programs: dict | None = None
+):
     """Stage ③ through the model unless the run is explicitly offline.
 
     `--fallback-only` means "no model anywhere", so it governs ③ as well as ①.
+
+    **Once per brief.** `-P` printed one programme and `-L` laid out another, because
+    each asked the model separately and a model does not return the same room list
+    twice: a 30x50 was shown with `mbed` and a WC and drawn with `master` and none, at
+    twice the cost. `programs` is the memo both callers share, keyed by the envelope
+    the programme was sized against.
     """
+    key = envelope.model_dump_json() if envelope is not None else None
+    if programs is not None and key in programs:
+        return programs[key]
+
     if args.fallback_only:
         from app.program import expand
 
-        return expand(
+        built = expand(
             brief, envelope,
             porch_in_setback=args.porch_in_setback, stilt=args.stilt,
         ), "--fallback-only"
+    else:
+        from app.llm.program import build_program
 
-    from app.llm.program import build_program
+        built = build_program(
+            brief,
+            envelope,
+            settings=settings,
+            allow_fallback=settings.allow_fallback and not args.no_fallback,
+            porch_in_setback=args.porch_in_setback,
+            stilt=args.stilt,
+        )
+    if programs is not None:
+        programs[key] = built
+    return built
 
-    return build_program(
-        brief,
-        envelope,
-        settings=settings,
-        allow_fallback=settings.allow_fallback and not args.no_fallback,
-    )
 
-
-def _program_summary(result: IntentResult, args: argparse.Namespace, settings) -> str:
+def _program_summary(
+    result: IntentResult, args: argparse.Namespace, settings, programs: dict | None = None
+) -> str:
     """Stage \u2462: what "3BHK with a pooja room" actually means in rooms.
 
     The feasibility line is the point of showing it next to the envelope — a room list
@@ -547,7 +569,9 @@ def _program_summary(result: IntentResult, args: argparse.Namespace, settings) -
         )
     except EnvelopeError:
         envelope_for_program = None
-    program, _ = _build_program(result.brief, envelope_for_program, args, settings)
+    program, _ = _build_program(
+        result.brief, envelope_for_program, args, settings, programs
+    )
     lines = [
         f"\n  program   {len(program.rooms)} rooms, {len(program.adjacencies)} "
         f"relationships \u00b7 min {program.min_area_sq_m:.1f} m\u00b2 \u00b7 "

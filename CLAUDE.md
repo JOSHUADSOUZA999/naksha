@@ -84,7 +84,7 @@ naksha/
                  test_intent · test_providers · test_config · test_cli
                  test_clarify · test_envelope · test_schema_enforcement
                  test_program · test_feasibility · test_solver
-                 test_refine · test_validator · golden/
+                 test_refine · test_validator · test_llm_program · golden/
 ```
 
 Not yet built, at their eventual paths: `store/` · `api/`.
@@ -100,7 +100,7 @@ uv venv --python 3.12 && source .venv/bin/activate
 uv pip install -e ".[dev]"
 cp .env.example .env          # set one key, or NAKSHA_INTENT_PROVIDER=claude_code
 
-pytest                        # 675 tests, no network, no key, and independent
+pytest                        # 688 tests, no network, no key, and independent
                               # of whatever is in your .env — see conftest
 pytest -m live                # real model; needs credentials
 
@@ -425,6 +425,16 @@ that happens to fail — that test goes vacuous the day the pipeline improves.
   by name *and* sha256 — a silent prompt edit must be detectable.
 - 2 retries on schema failure, then **deterministic fallback**. The LLM being
   down must never break generation entirely.
+- **Stage ③'s model path builds rooms with `program.spec_for`**, the offline expansion's
+  own function, and keeps only the model's id, kind, floor and sector. A hand-built
+  `RoomSpec` copied one rule flag of five, and every model-drawn plan had no front door.
+  The user's site choices (`--stilt`, `--porch-in-setback`) go through
+  `program.apply_site_choices` on both paths.
+- **The CLI runs ③ once per brief**, and `-P` and `-L` share the result. Two calls
+  printed one programme and drew another.
+- **A path that needs credentials gets a recorded replay.** `tests/golden/program_drafts.json`
+  holds real ③ answers and `tests/test_llm_program.py` replays them through a scripted
+  provider — the only way that path runs offline.
 - **The suite is isolated from your `.env`.** An autouse fixture clears `NAKSHA_*`
   from `os.environ` *and* neutralises pydantic-settings' own `env_file` read — they
   are independent sources and clearing one fixes nothing. Without it a single
