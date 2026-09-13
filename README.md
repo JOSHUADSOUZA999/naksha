@@ -12,26 +12,34 @@ editable output. Built for plot owners and small builders in tier-1/2 India — 
 
 ## What actually works today
 
-`text → Brief → buildable envelope → room graph → placed rectangles → SVG`
+`text → Brief → buildable envelope → room graph → placed rooms → walls, doors, windows,
+fixtures → a list of what is wrong with it`
 
 ```bash
-naksha-intent -s -e -P --allow-unverified \
-  "30x40 east facing site in Whitefield, Bengaluru. 3BHK with pooja room and car parking."
+naksha-intent -s -e -P --allow-unverified --fallback-only \
+  --svg /tmp/plan.svg "40x60 3bhk in Bengaluru with pooja room"
 ```
 
-Stages ①②③④⑤ run end to end and produce a legal, gap-free plan per storey. Stages
-⑥ REFINE (walls, doors, windows), ⑦ VALIDATE and ⑧ CRITIC are designed but unbuilt, so
-what comes out is rectangles with names — not yet a drawing anyone would hand to a
-draughtsman.
+Stages ①–⑦ run end to end and produce a drawing per storey: walls at their real
+thickness, doors with swings, windows sized to a tenth of the floor they light,
+sanitaryware and beds, and stage ⑦'s findings — every room reachable from the front door
+without walking through a bedroom, every room above its statutory minimum *measured
+inside its walls*. Only ⑧ CRITIC is unbuilt, and it is optional by design.
+
+Plots from **25x40 up** come out legal. The **30x40 3BHK** — the commonest site in
+south-Indian layouts — needs `--stilt`: the statutory 3.0 × 6.0 m car bay is a quarter
+of its ground floor, and lifting the house off its parking is what makes it fit. A 20x30
+is refused outright; 29.3 m² is buildable and the bay alone is 18.
 
 **The rule data is the honest weak point.** Room minimums in `spaces_v1.json` are
 verified first-hand against the Karnataka Model Building Bye-Laws 2017 with clause
-references; the setback and FAR figures in `setbacks_v1.json` are **not**, so
-`build_envelope` refuses to run without `--allow-unverified`. Three different FAR
-figures are defensible for the same 30x40 plot and I could not establish which is
-operative. That, and whether a car porch may sit in the front setback, are the two
-questions that currently decide whether a 3BHK fits at all. Both are written up in
-`DECISIONS.md`.
+references; the setback figures in `setbacks_v1.json` are **not**, so `build_envelope`
+refuses to run without `--allow-unverified`. The FAR question is resolved — 1.75, read
+first-hand from RMP-2015 Table 10 — but the setback bands and the window-area fraction
+still need someone who has sanctioned a plan. `VERIFY.md` is the sheet for them.
+
+This is **schematic, concept-stage** output. Nothing here is a sanction drawing, and
+DXF/PDF export — what a registered architect would actually open — is not built yet.
 
 ---
 
@@ -55,7 +63,7 @@ uv venv --python 3.12 && source .venv/bin/activate
 uv pip install -e ".[dev]"
 cp .env.example .env          # one API key, or NAKSHA_INTENT_PROVIDER=claude_code
 
-pytest                        # 470 tests: no network, no key, independent of your .env
+pytest                        # 649 tests: no network, no key, independent of your .env
 pytest -m live                # the golden set against a real model; needs credentials
 ```
 
@@ -89,19 +97,22 @@ Only stages ①③⑧ use a model. Everything else is deterministic.
 
 ```
 backend/app/
-  ir/           models · enums · units · envelope · plan · layout   ← THE CONTRACT
+  ir/           models · enums · units · envelope · plan · layout
+                refined · validation                                ← THE CONTRACT
   llm/          intent · program · fallback · prompts/ · providers/
-  rules/        clarify_v1 · setbacks_v1 · spaces_v1.json           ← VERSIONED DATA
+  rules/        clarify_v1 · setbacks_v1 · spaces_v1 · refine_v1    ← VERSIONED DATA
   envelope/     ② setback + FAR arithmetic, deterministic
-  program/      ③ deterministic expansion, the floor under the LLM version
+  program/      ③ deterministic expansion, stacking, stilt
   feasibility/  ④ explain, with options that were actually measured
   solver/       ⑤ slicing.py (Stage A) · tuning.py (Stage B, CP-SAT) · score.py
-  export/       svg.py
-frontend/       Vite + React + react-konva viewer   ← needs Node 18+, never yet run
+  refine/       ⑥ walls · doors · windows · fixtures · setback spaces
+  validator/    ⑦ circulation · light · legality
+  export/       svg.py                                ← DXF/PDF still to come
+frontend/       Vite + React + react-konva viewer     ← runs on Node 20 (nvm)
 ```
 
-`store/`, `refine/`, `validator/` and `api/` are not built. The tree matches the full
-intended layout so nothing has to move later.
+`store/` and `api/` are not built. The tree matches the full intended layout so nothing
+has to move later.
 
 ---
 

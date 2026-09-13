@@ -3,13 +3,13 @@
 AI floor-plan generation for Indian residential plots. Vastu-aware, NBC-compliant,
 editable output. Target users: plot owners and small builders in tier-1/2 India.
 
-**What exists right now: stages ① INTENT and ② ENVELOPE** (`text → Brief → buildable
-rect`), plus the slice of `ir/` they need. Everything else below is designed but
-unbuilt — **naksha has not yet produced a floor plan**. This file is how to work
-here, not where we are: **`STATUS.md`** tracks what is done, blocked and next (start
-there when resuming), and **`DECISIONS.md`** records why the code is shaped this way,
-every bug found, and the open questions that need a human. When you add a stage, add it at its real path — the tree here matches the full
-naksha layout so nothing has to move later.
+**What exists right now: stages ① through ⑦** — text in, a drawing out: walls with
+thickness, doors, windows, fixtures, and a list of what is wrong with the plan. Only ⑧
+CRITIC is unbuilt, and it is optional by design. This file is how to work here, not
+where we are: **`STATUS.md`** tracks what is done, blocked and next (start there when
+resuming), and **`DECISIONS.md`** records why the code is shaped this way, every bug
+found, and the open questions that need a human. When you add a stage, add it at its
+real path — the tree here matches the full naksha layout so nothing has to move later.
 
 ---
 
@@ -45,11 +45,11 @@ and flag it rather than working around it.
 text ──① INTENT ─────► Brief          schema-locked, 2 retries      ← BUILT
                         + Questions   tier-gated, ≤3, never blocking  ← BUILT
      ──② ENVELOPE ───► buildable rect  setback ruleset lookup       ← BUILT*
-     ──③ PROGRAM ────► rooms + adjacency graph + sector prefs  (LLM)
-     ──④ FEASIBILITY ─✗─► explain, re-plan ×2, STOP with options
-     ──⑤ LAYOUT ─────► Stage A 200 topologies ~5ms → Stage B ×8 ~1s
-     ──⑥ REFINE ─────► walls → doors → fixtures → windows → furniture → dims
-     ──⑦ VALIDATE ───► geometry · NBC · circulation · vastu · fit
+     ──③ PROGRAM ────► rooms + adjacency graph + sector prefs      ← BUILT ×2
+     ──④ FEASIBILITY ─✗─► explain, with options that were measured  ← BUILT
+     ──⑤ LAYOUT ─────► Stage A slicing tree → Stage B CP-SAT        ← BUILT
+     ──⑥ REFINE ─────► walls → doors → windows → fixtures           ← BUILT
+     ──⑦ VALIDATE ───► circulation · light · legality               ← BUILT
      ──⑧ CRITIC ─────► rerank + rationale (optional, behind a flag)
 ```
 
@@ -65,25 +65,29 @@ naksha/
     config.py    settings + the .env bridge
     cli.py       naksha-intent entry point
     ir/          models.py · enums.py · units.py · envelope.py · plan.py
-                                                       ← THE CONTRACT
-    llm/         intent.py · fallback.py · client.py · trace.py · errors.py
+                 layout.py · refined.py · validation.py      ← THE CONTRACT
+    llm/         intent.py · program.py · fallback.py · client.py · trace.py
                  prompts/    versioned, hashed into provenance
                  providers/  base.py (the seam) · anthropic_api
                              openai_api · claude_code
-    rules/       clarify_v1 · setbacks_v1 · spaces_v1.json  ← VERSIONED DATA
+    rules/       clarify_v1 · setbacks_v1 · spaces_v1 · refine_v1.json
+                                                             ← VERSIONED DATA
     envelope/    geometry.py (pure) · __init__.py (lookup + build)
-    program/     __init__.py  deterministic ③ expansion + feasibility
+    program/     __init__.py  ③ expansion · stacking · stilt
     feasibility/ __init__.py  ④ explain + measured options
     solver/      slicing.py (Stage A) · tuning.py (Stage B, CP-SAT) · score.py
+    refine/      __init__.py  ⑥ walls · doors · windows · fixtures
+    validator/   __init__.py  ⑦ circulation · light · legality
     export/      svg.py                                   ← DXF/PDF still to come
-  frontend/      Vite + React + react-konva viewer        ← NEEDS NODE 18+
-    program/     __init__.py  deterministic ③ expansion + feasibility
+  frontend/      Vite + React + react-konva viewer        ← NODE 18+ (20 via nvm)
   tests/         test_ir_brief · test_ir_plan · test_units · test_fallback
                  test_intent · test_providers · test_config · test_cli
-                 test_clarify · test_envelope · test_schema_enforcement · golden/
+                 test_clarify · test_envelope · test_schema_enforcement
+                 test_program · test_feasibility · test_solver
+                 test_refine · test_validator · golden/
 ```
 
-Not yet built, at their eventual paths: `store/` · `refine/` · `validator/` · `api/`.
+Not yet built, at their eventual paths: `store/` · `api/`.
 
 ---
 
@@ -96,7 +100,7 @@ uv venv --python 3.12 && source .venv/bin/activate
 uv pip install -e ".[dev]"
 cp .env.example .env          # set one key, or NAKSHA_INTENT_PROVIDER=claude_code
 
-pytest                        # 470 tests, no network, no key, and independent
+pytest                        # 649 tests, no network, no key, and independent
                               # of whatever is in your .env — see conftest
 pytest -m live                # real model; needs credentials
 
@@ -248,7 +252,7 @@ house.
   building the bay from that choice swung the programme 14% between identical inputs.
   `extra_rooms` records what the user *asked for*; the count says what to build.
 
-### `solver/` — stage ⑤ Stage A only
+### `solver/` — stage ⑤, Stage A and Stage B
 
 Slicing trees: a binary tree of cuts whose leaves are rooms. Placing it divides one
 rectangle recursively, so **the tiling is gap-free by construction** — no solver is
@@ -312,6 +316,36 @@ makes 11 of 60 layouts legal" is a decision they can take.
   that is the number a user should hear.
 - **Nothing is silently reduced.** A plot owner who asked for a separate dining room
   is told what dropping it costs, not quietly deprived of it.
+
+### `refine/` — stage ⑥, deterministic
+
+- **Walls are IR geometry, never a rendering trick.** A `Wall` is a centreline plus a
+  thickness, stored in `ir/refined.py`, because a wall in SVG is a stroke while in DXF
+  it is a centreline on a layer. Every renderer reads the IR; none invents thickness.
+- **Legality is measured inside the walls.** Stage ⑤'s rectangles run to wall
+  centrelines; the bye-laws mean clear internal size. `refine.breaches` recomputes it
+  independently of the scorer — a guard that shares its implementation with what it
+  guards catches nothing.
+- **The adjacency graph is the door schedule, and a minimum, not the whole of it.**
+  `CONNECTED` edges get doors; `_connect` adds what circulation needs on top.
+  **Join the circulation spine first, then attach private rooms** — a single greedy
+  pass once reached the corridor through a bedroom via a perfectly reasonable
+  kitchen → bedroom door.
+- **`SEPARATED` is hard, checked before anything is weighed.** An edit once left it
+  behind an unconditional `continue` and a bathroom got a door into a kitchen.
+- **Upper storeys are entered off the stair, not a front door.** Both ⑥ and ⑦ once
+  started their walk at the entrance and gave up upstairs.
+- **Openings narrow before they give up.** Missing a doorway by three centimetres is a
+  reason to draw a narrower door, not a house with no way in.
+
+### `validator/` — stage ⑦
+
+Runs once, on the drawing — which is what separates it from `score`, which ranks
+candidates tens of thousands of times. `Report.checks_run` exists so that no findings
+means "checked and clean" rather than "nothing ran". One finding per defect, not per
+room: twelve "cannot reach the kitchen" lines make one large problem look like twelve
+small ones. **Test a check by breaking a plan on purpose**, never by waiting for a brief
+that happens to fail — that test goes vacuous the day the pipeline improves.
 
 ### `llm/`
 

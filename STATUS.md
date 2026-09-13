@@ -12,7 +12,7 @@ Read in this order, then run the commands below:
 
 ```bash
 cd naksha
-.venv/bin/pytest -q                                  # 643 tests, no network, no key
+.venv/bin/pytest -q                                  # 649 tests, no network, no key
 
 # The whole pipeline, to a drawing on disk: ①②③④⑤⑥⑦
 .venv/bin/python -m app.cli -s -e -P --allow-unverified --fallback-only \
@@ -38,6 +38,9 @@ evaluating the model. **Always check the stderr line:** `[model] …` means Clau
 answered, `[fallback] …` means you are looking at regex output. `--allow-unverified`
 is required for `-e` because the bye-law figures are unchecked — see blocker 1.
 
+**The target-market plot** needs `--stilt`:
+`.venv/bin/python -m app.cli -s --allow-unverified --fallback-only --stilt --svg /tmp/p.svg "30x40 east facing site in Whitefield, Bengaluru, 3BHK with pooja room"`
+
 **Briefs worth trying:** `40x60 4bhk g+1 in Bengaluru with study and car parking,
 strict vastu` · `20x30 2bhk in Bengaluru` (tight) · `30x40 north facing corner plot
 3bhk in Bengaluru` (two road setbacks) · `make me a house` (no city → no envelope) ·
@@ -47,30 +50,34 @@ strict vastu` · `20x30 2bhk in Bengaluru` (tight) · `30x40 north facing corner
 
 Where the build actually is.
 
-**Last updated:** 2026-09-12 · 643 tests passing, offline, no key
+**Last updated:** 2026-09-13 · 649 tests passing, offline, no key
 
 > **naksha draws floor plans.** Text in, a dimensioned drawing out: walls with
 > thickness, doors with swings, windows sized to the bye-laws, sanitaryware and beds,
-> and a list of what is wrong with the result. Seven of eight stages are built. Six of
-> eight reference plots come out legal; the one that does not is the one the product
-> exists for, and it fails on a single question nobody has answered yet.
+> and a list of what is wrong with the result. Seven of eight stages are built, and
+> every reference plot from 25x40 up comes out legal — the 30x40 3BHK, the plot the
+> product exists for, with `--stilt`.
 
 ## What it produces, per plot
 
+Measured 2026-09-13, seed 7, `--fallback-only`.
+
 | plot | storeys | result |
 |---|---|---|
-| 20x30 2BHK | G+2 | **refused** — 29.3 m² buildable and the statutory car bay is 18 of it |
+| 20x30 2BHK | G+2 | **refused** — 8 errors. 29.3 m² buildable, and the car bay alone is 18 |
 | 25x40 2BHK | G+1 | clean |
-| 30x30 2BHK | G+1 | legal, one warning |
+| 30x30 2BHK | G+1 | legal · 1 warning: upper-floor circulation runs through a bedroom |
 | 30x40 2BHK | G | clean |
-| **30x40 3BHK** | G+1 | **refused** — 4 errors, all of them the car bay. See blocker 1. |
-| 30x50 3BHK | G | legal, one circulation warning |
+| 30x40 3BHK | G+1 | **refused** — 4 errors, all of them the car bay on the ground floor |
+| **30x40 3BHK `--stilt`** | stilt+2 | **legal** · 2 circulation warnings, one on each upper level |
+| 30x50 3BHK | G | legal · 1 circulation warning |
 | 40x60 3BHK | G | clean |
 | 50x80 4BHK | G | clean |
 
 "Clean" means every room above its statutory minimum measured *inside its walls*, every
-room reachable from the front door without walking through a bedroom, and every
-habitable room glazed to a tenth of its floor.
+room reachable from the front door (or the stair, upstairs) without walking through a
+bedroom, and every habitable room glazed to a tenth of its floor. A warning is a plan
+that is legal and worth a second look; an error is a plan naksha refuses.
 
 ## Pipeline
 
@@ -161,45 +168,34 @@ and surplus area is forced into rooms, producing a 30 m² bathroom on a 50x80
 
 ## Blockers
 
-**1. The car porch, and it is now the only thing between naksha and its market.**
-A 30x40 3BHK comes out with its first floor clean and its ground floor failing on one
-room: the statutory 3.0 × 6.0 m bay, squeezed to 2.2 m². Everything else about that
-plan works.
+**1. The car porch — answered in practice, not in law.** A 30x40 3BHK fails on one
+room: the statutory 3.0 × 6.0 m bay, squeezed to 2.2 m² on a ground floor that is
+otherwise fine. The front setback cannot take the bay on any plot naksha models — 1.46 m
+on a 30x40, 2.93 m on a 50x80, against the 3.0 m a bay needs — so `--porch-in-setback`
+refuses with those numbers. `--stilt` lifts the house off its parking instead and the
+plan comes out legal. A stilt is a design answer rather than a permission, which is why
+it does not wait on VERIFY.md Q1. What Q1 still has to settle is whether stilt area sits
+outside FAR, which naksha does not model.
 
-Moving the bay off the ground floor fixes it — 73.6 m² of minimums becomes 55.6, and
-the plot solves. `--porch-in-setback` does exactly that, and **refuses on every plot we
-model**, because the front setback cannot hold a car:
-
-| plot | front setback | a 3.0 × 6.0 bay |
-|---|---|---|
-| 30x40 | 1.46 m | no |
-| 30x50 | 1.83 m | no |
-| 40x60 | 2.19 m | no |
-| 50x80 | **2.93 m** | no — by seven centimetres |
-
-So VERIFY.md Q1 is no longer "may a porch sit in the setback" but "the setback cannot
-hold one, so which of these is wrong": the setback figures, the 3.0 × 6.0 bay, or the
-assumption that this is a porch at all rather than **stilt parking under the house**.
-The last is what I would bet on, and it is a design answer rather than a permission —
-meaning it is buildable without waiting for anyone.
-
-**2. All 19 rule bands are `verified: false`.** `build_envelope` raises
-`RulesetUnverified` unless passed `allow_unverified=True`. The FAR conflict *is*
-resolved — RMP-2015 Table 10 gives 1.75, read first-hand — but the flags were never
-flipped and the setback bands remain unchecked.
+**2. Unverified rule data, by file.** `setbacks_v1`: 0 of 10 bands verified, so
+`build_envelope` raises `RulesetUnverified` without `allow_unverified=True`. The FAR
+figure *is* resolved — RMP-2015 Table 10 gives 1.75, read first-hand — but the setback
+bands behind it are not. `spaces_v1`: 11 verified with clause references, 10 not.
+`refine_v1`: 0 of 4 — wall thickness, door widths, window fraction, fixture sizes are
+all practice.
 
 **3. Only Bengaluru is mapped.** Pune, Hyderabad, Chennai, Mysuru return
 `NoRulesetForCity`.
 
-**4. Two new figures need an architect.** VERIFY.md Q6: window area as a fraction of
-floor area, encoded at 1/10, transcribed from practice and not read first-hand. At 1/6
-a hall window goes from 0.93 m to 1.6 m, which changes which walls can carry one.
+**4. Two figures need an architect.** VERIFY.md Q6: window area as a fraction of floor
+area, encoded at 1/10 and transcribed from practice. At 1/6 a hall window goes from
+0.93 m to 1.6 m, which changes which walls can carry one.
 
 **5. The live golden set has never been run end to end.** `pytest -m live` still has
 not been executed as a suite.
 
-**6. The 20x30 is a real refusal, not a bug.** 29.3 m² buildable after setbacks, and
-the bay alone is 18 of it. It needs the same answer blocker 1 needs.
+**6. The 20x30 is a real refusal.** 29.3 m² buildable after setbacks and the bay is 18
+of it; `--stilt` improves it from 8 errors to 6 and does not make it legal.
 
 ## Decisions taken, and why
 
@@ -221,34 +217,29 @@ the bay alone is 18 of it. It needs the same answer blocker 1 needs.
 
 ## Next
 
-**1. Stilt parking, and with it the 30x40 3BHK.** The measurement in blocker 1 says the
-setback cannot hold a bay on any plot this product serves, which leaves the stilt: a
-ground level that is parking, entry and stair, with the house above. It is a design
-answer rather than a permission, so it does not wait on VERIFY.md. It is also the only
-change that moves naksha from "serves 25x40 and 40x60" to "serves the plot the market
-is actually made of".
+**1. DXF export.** v1 scope names it and `export/svg.py` is explicitly not it — DECISIONS
+is clear that SVG → DXF is the wrong path, because a wall in SVG is a stroke with a width
+while in DXF it is a centreline on a `WALLS` layer. `ir/refined.py` already stores exactly
+that, so the export writes from the IR. Open choice: add `ezdxf`, or write ASCII DXF R12
+directly and take no new dependency.
 
-**2. DXF export.** v1 scope names it and `export/svg.py` is explicitly not it —
-DECISIONS is clear that SVG → DXF is the wrong path, because a wall in SVG is a stroke
-with a width while in DXF it is a centreline on a `WALLS` layer. `ir/refined.py` already
-stores exactly that, so the export writes from the IR. This is what makes the output
-something a draughtsman can open.
+**2. PDF export**, the other half of v1's export line.
 
-**3. Flip the verified flags that are actually verified.** `spaces_v1` is 11/20 checked
-with clause references and the FAR question is resolved against a primary source. The
-`verified: false` on those is now lying in the other direction, and the warning it
-prints has become noise people learn to ignore.
+**3. Stage B shaft preference.** DECISIONS question 9: a stilt level still labels its
+open ground as staircase. Pinning shafts as a hard constraint was built, measured and
+reverted — it broke a clean 30x30. The fix it points at is an objective term the tuner
+can trade, not a constraint it must meet.
 
 **4. ⑧ CRITIC**, if ever. Optional by design and behind a flag.
 
 ## Known imperfections, in priority order
 
-- The **30x50** has one circulation warning: its tiling admits no self-contained
-  circulation spine, so the corridor is reached through a bedroom. Stage ⑤ scores it
-  and ⑥ takes that route only as a last resort. Roughly 15% of tilings admit a clean
-  spine on a 40x60; on tighter plots it is rarer, and legality correctly wins the
-  tie-break. This is DECISIONS question 6's adjacency ceiling from a new direction.
-- The **30x30** has one warning on its upper floor.
-- **Sector (Vastu) satisfaction is the biggest remaining penalty term** on every plan.
-  Nothing has been done about it deliberately: it is a preference, and every other
-  defect outranked it.
+- **The stilt level mislabels its largest room.** On the 30x40 3BHK `--stilt`, the ground
+  level shows a 40 m² staircase beside 5 m² of open ground, when the figures belong the
+  other way round. Zero errors; wrong drawing. Question 9.
+- **Circulation warnings on four plots** — the 30x50, the 30x30's upper floor, and both
+  upper levels of the stilt plan. Each tiling admits no self-contained circulation spine,
+  so a corridor is reached through a bedroom. Stage ⑤ scores it and ⑥ takes that route
+  only as a last resort; legality correctly wins the tie. Question 6's adjacency ceiling.
+- **Sector (Vastu) satisfaction is the largest remaining penalty term** on every plan.
+  Untouched on purpose: it is a preference, and every other defect outranked it.
