@@ -484,6 +484,75 @@ ranks candidates it is an objective, and the optimiser finds its holes. ⑤'s pe
 failed the same way. Every signal the judge reads needs a test that breaks a plan on
 purpose, including plans it would call clean.*
 
+### The hill-climb traded the front door for points
+
+On the two plots still refused for their car bay, the 30x40 2BHK and the 30x50, the one
+road-first topology that dimensioned was a plan ⑦ passed *before* hill-climbing — no
+errors, two warnings — and refused after it. A swap moved the foyer off the street and
+the penalty fell 400 → 285 and 410 → 325: sector and adjacency wins outweighed the
+`INACCESSIBLE` weight. `improve` now ranks `(unbuildable, off_the_road, penalty)`. Road
+access sits after unbuildable and never before it — ahead of it, the shortlist once
+traded legal rooms for it.
+
+*Lesson: enough small wins beat any weight eventually, which CLAUDE.md already says about
+unbuildable rooms. A defect ⑦ refuses belongs in the key, not in the sum.*
+
+### A house entered through a bathroom scored one warning
+
+With the climb fixed, the 30x50 came out "legal": front door → foyer → bath2 → corridor →
+hall, with two bedrooms opening off the dining room. ⑦ counted it as one warning of two,
+so the judge ranked it above a plan refused for its car bay. A hall, kitchen or dining
+room reachable only through a bedroom or bathroom is now an **error**, because the way in
+does not lead into the house. A bedroom reached through another bedroom stays a warning:
+bad, and livable.
+
+Looking at the plans that passed next found one more hole. Both newly legal plots were
+entered foyer → kitchen → hall and ⑦ said nothing, because its through-the-kitchen list
+named bedrooms, baths, stairs and corridors but not the hall. Now it names the hall (a
+warning). A dining room behind the kitchen is ordinary and stays unreported.
+
+*Lesson, again: once ⑦ chooses the plan, every severity is a weight — and each plan the
+judge newly accepts is where the next hole is.*
+
+### Refusing a tree costs under a millisecond, and the search stopped at the shortlist
+
+Why the two plots stayed refused after the climb fix: `solve` tunes only its shortlist,
+and on these floors two or three topologies in it dimensioned. Tuning 6000 trees per
+group instead, seed 12345:
+
+| plot | random trees that dimension | road-first trees that dimension | of those, passed by ⑦ outright |
+|---|---|---|---|
+| 30x40 2BHK | 11 | 60 (1 in 100) | 21 |
+| 30x50 | 5 | 22 (1 in 270) | 14 |
+
+at about 0.9 ms a tree, the ones that dimension included. So `solve` now carries on past
+the shortlist with `deeper` — up to 2000 road-first trees on their own seeded stream — but
+only when the shortlist dimensioned fewer layouts than it wants. Roomy plots never reach
+it (the 50x80 stayed at 2.7 s end to end); the 30x50 went from 1.2 s to 3.0 s, and both
+plots came out legal.
+
+On the two hopeless plots it bought nothing for 0.9–1.5 s a solve. `tuning.cannot_fit`
+now skips a floor whose rooms' gross minimums exceed the footprint. The skip is exact:
+tiling makes the leaf areas sum to the footprint, and the model gives every leaf at least
+`gross_minimum_cm2`, which the bound and the model share. The reference floors separate
+cleanly — 166% and 101% for the hopeless two, 89–91% for the thin floors that solve,
+41–58% for the roomy ones.
+
+Stage ④'s probe walks the same generator when the shortlist holds no legal plan, since
+the probe and the solver have drifted apart twice. It mattered at once: on the 30x40
+3BHK, ④ now reports that folding the dining area into the hall gives a legal layout past
+the shortlist — an option the shortlist-only probe would have called "still no legal
+layout".
+
+### The same seed can give a different plan on a busy machine
+
+Stage B stops each CP-SAT solve at 0.15 s. On an idle machine the result replays — three
+sequential runs of the 40x60 produced identical layouts — but with nine plots measured at
+once the 40x60 came back as a different plan, because a solve cut short by load keeps a
+different incumbent. **Not fixed.** CP-SAT's deterministic time limit
+(`max_deterministic_time`) is the likely answer and is untested. Until then, measure one
+plot at a time.
+
 ---
 
 ## Corrections to things I got wrong

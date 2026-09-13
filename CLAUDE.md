@@ -100,7 +100,7 @@ uv venv --python 3.12 && source .venv/bin/activate
 uv pip install -e ".[dev]"
 cp .env.example .env          # set one key, or NAKSHA_INTENT_PROVIDER=claude_code
 
-pytest                        # 667 tests, no network, no key, and independent
+pytest                        # 675 tests, no network, no key, and independent
                               # of whatever is in your .env — see conftest
 pytest -m live                # real model; needs credentials
 
@@ -308,6 +308,17 @@ CP-SAT fail decision 2's twenty-second test.
   candidates per floor and takes the minimum of `validator.judge`. The solver imports
   neither ⑥ nor ⑦; the judge is passed in. The lowest penalty had picked a 30x50 with no
   front door.
+- **A swap may not take the car bay or the front door off the street.** `improve` ranks
+  `(unbuildable, off_the_road, penalty)`. On the 30x40 2BHK and the 30x50 the one
+  road-first plan that dimensioned was legal before the climb and refused after it: a
+  swap bought 85–115 points of sector and adjacency with the foyer's street wall.
+- **Refusing a tree is nearly free, so a thin floor searches past its shortlist.** CP-SAT
+  proves a topology undimensionable in well under a millisecond. When the shortlist
+  dimensions fewer layouts than `solve` wants, `deeper` feeds it up to 2000 more
+  road-first trees — that is what made the 30x40 2BHK and the 30x50 legal. A roomy plot
+  never pays. **`tuning.cannot_fit` skips floors whose minimums exceed the footprint**
+  (166% and 101% on the two hopeless plots; the thin ones that solve sit at 89–91%), and
+  it shares `gross_minimum_cm2` with the model so the bound cannot drift from it.
 
 `max_aspect` is per-kind data, not a constant. A corridor is *supposed* to be
 elongated; flagging one as "a corridor, not a corridor" was the rule mistaking the
@@ -327,6 +338,10 @@ makes 11 of 60 layouts legal" is a decision they can take.
   that is the number a user should hear.
 - **Nothing is silently reduced.** A plot owner who asked for a separate dining room
   is told what dropping it costs, not quietly deprived of it.
+- **The probe searches as deep as ⑤ does.** Twice the probe and the solver drifted apart
+  and ④ called plots infeasible that ⑤ then solved. `_probe(past_the_shortlist=True)`
+  walks `solver.deeper` and stops at the first legal plan, and an option that is legal
+  only there says so in words rather than as a count out of 24.
 
 ### `refine/` — stage ⑥, deterministic
 
@@ -375,6 +390,14 @@ that happens to fail — that test goes vacuous the day the pipeline improves.
   the house clean, and the judge preferred it to every house you could enter. The
   staircase start is for upper storeys only. `judge` ranks unreachable rooms worst among
   refusals.
+- **Living rooms behind a private room are an error, not a warning.** A second bedroom
+  reached through the master is bad and livable. A hall, kitchen or dining room reached
+  only through a bedroom or bathroom means the way in does not lead into the house — a
+  30x50 went front door, foyer, *bathroom*, corridor, hall — and as one warning the judge
+  preferred it to a plan refused for its car bay.
+- **The hall behind the kitchen is reported.** Both plots the deeper search made legal
+  were entered foyer → kitchen → hall and ⑦ said nothing. A dining room behind the
+  kitchen is an ordinary arrangement and stays unreported.
 
 ### `llm/`
 

@@ -23,7 +23,8 @@ from app.ir.enums import SpaceKind
 from app.ir.plan import AdjacencySpec, Program, RoomSpec
 from app.ir.layout import Layout
 from app.solver import (
-    TUNE_SHORTLIST, footprint, improve, shortlist_for, slicing, tuning,
+    ROAD_FIRST_DEPTH, TUNE_SHORTLIST, deeper, footprint, improve, shortlist_for,
+    slicing, tuning,
 )
 from app.solver.score import score
 
@@ -54,17 +55,21 @@ class Option:
     because: str
     feasible_after: int
     probes: int
+    # Legal only past the shortlist, where stage ⑤ keeps searching on a floor that ran
+    # short. A real plan, and no margin: said in words, not as a count out of 24.
+    deeper: bool = False
 
     @property
     def helps(self) -> bool:
-        return self.feasible_after > 0
+        return self.feasible_after > 0 or self.deeper
 
     def __str__(self) -> str:
-        verdict = (
-            f"{self.feasible_after}/{self.probes} layouts become legal"
-            if self.helps
-            else "still no legal layout"
-        )
+        if self.feasible_after:
+            verdict = f"{self.feasible_after}/{self.probes} layouts become legal"
+        elif self.deeper:
+            verdict = "a legal layout exists only past the shortlist, with no margin"
+        else:
+            verdict = "still no legal layout"
         return f"{self.change} — {verdict}. {self.because}"
 
 
@@ -123,6 +128,17 @@ def assess(program: Program, envelope: Envelope, *, floor: int = 1) -> Verdict:
             [],
         )
 
+    # Stage ⑤ does not stop at its shortlist on a floor that runs short, so neither does
+    # the verdict: "none in the shortlist" is not "none that ⑤ finds".
+    if _probe(rooms, envelope, program, past_the_shortlist=True):
+        return Verdict(
+            True, floor,
+            f"none of the {TUNE_SHORTLIST} arrangements stage \u2464 tries first comes "
+            f"out legal ({packed:.0%} packed), but one past them does — solvable, with "
+            f"no margin",
+            [],
+        )
+
     # "None found" is not "none exists", and the difference started to matter once
     # minimums were measured inside the walls: the rate on a marginal floor fell far
     # enough that 0 in 60 became a normal result for a plot stage ⑤ still solves. A
@@ -133,11 +149,24 @@ def assess(program: Program, envelope: Envelope, *, floor: int = 1) -> Verdict:
         f"needs {needed:.1f} m² of rooms at legal minimums and only "
         f"{envelope.max_footprint_sq_m:.1f} m² is buildable ({packed:.0%} packed) — "
         f"none of the {TUNE_SHORTLIST} arrangements stage \u2464 tries came out legal"
+        + (
+            f", nor any of the {ROAD_FIRST_DEPTH} it tries past them"
+            if envelope.road_edges
+            and any(room.kind is SpaceKind.CAR_PARKING for room in rooms)
+            and not tuning.cannot_fit(rooms, footprint(envelope, rooms))
+            else ""
+        )
     )
     return Verdict(False, floor, reason, _options(rooms, envelope, program))
 
 
-def _probe(rooms: list[RoomSpec], envelope: Envelope, program: Program | None = None) -> int:
+def _probe(
+    rooms: list[RoomSpec],
+    envelope: Envelope,
+    program: Program | None = None,
+    *,
+    past_the_shortlist: bool = False,
+) -> int:
     """How many of the arrangements stage ⑤ will try come out as legal plans.
 
     The *rate* is the useful quantity, not just whether it is zero. A floor at 1/60 is
@@ -155,6 +184,11 @@ def _probe(rooms: list[RoomSpec], envelope: Envelope, program: Program | None = 
     One advancing generator, not a fresh `Random(i)` per candidate — seeding afresh
     each time samples a far narrower set of trees, which is how an earlier measurement
     of this same floor came out at 0/150 when the true rate is nearer 1 in 60.
+
+    **And as deep as stage ⑤ searches.** ⑤ keeps trying road-first trees past its
+    shortlist on a floor that ran short. `past_the_shortlist` asks that question of the
+    same generator and stops at the first legal plan, because one is all the answer
+    needs — without it ④ would say "still no legal layout" about a change ⑤ can lay out.
     """
     if not rooms:
         return 0
@@ -181,6 +215,24 @@ def _probe(rooms: list[RoomSpec], envelope: Envelope, program: Program | None = 
         ],
     )
 
+    def legal_plan(tree) -> bool:
+        dimensioned = tuning.tune(tree, bounds, weights, time_limit_s=0.15)
+        if dimensioned is None:
+            return False
+        try:
+            layout = Layout(
+                rooms=dimensioned, x_min_m=x_min_m, y_min_m=y_min_m,
+                x_max_m=x_max_m, y_max_m=y_max_m, floor=rooms[0].floor,
+                road_edges=envelope.road_edges,
+            )
+        except ValueError:
+            return False
+        return improve(layout, reduced).unbuildable == 0
+
+    if past_the_shortlist:
+        trees = deeper(rooms, weights, envelope, bounds=bounds, seed=0)
+        return int(any(legal_plan(tree) for tree in trees))
+
     shortlist = shortlist_for(
         reduced, rooms, bounds, weights, envelope, floor=rooms[0].floor, seed=0,
     )
@@ -196,22 +248,7 @@ def _probe(rooms: list[RoomSpec], envelope: Envelope, program: Program | None = 
     # the result has a room below a minimum. The rate that comes out is the probability
     # a topology yields a *legal plan*, which is the quantity the verdict formula was
     # always assuming it had.
-    legal = 0
-    for _, _, _, tree in shortlist[:TUNE_SHORTLIST]:
-        dimensioned = tuning.tune(tree, bounds, weights, time_limit_s=0.15)
-        if dimensioned is None:
-            continue
-        try:
-            layout = Layout(
-                rooms=dimensioned, x_min_m=x_min_m, y_min_m=y_min_m,
-                x_max_m=x_max_m, y_max_m=y_max_m, floor=rooms[0].floor,
-                road_edges=envelope.road_edges,
-            )
-        except ValueError:
-            continue
-        if improve(layout, reduced).unbuildable == 0:
-            legal += 1
-    return legal
+    return sum(legal_plan(tree) for _, _, _, tree in shortlist[:TUNE_SHORTLIST])
 
 
 def _options(
@@ -244,7 +281,11 @@ def _options(
         reduced = transform(rooms)
         if len(reduced) == len(rooms):
             continue  # nothing to remove; the option does not apply here
-        found.append(Option(change, because, _probe(reduced, envelope, program), TUNE_SHORTLIST))
+        legal = _probe(reduced, envelope, program)
+        past = not legal and bool(
+            _probe(reduced, envelope, program, past_the_shortlist=True)
+        )
+        found.append(Option(change, because, legal, TUNE_SHORTLIST, deeper=past))
     return found
 
 

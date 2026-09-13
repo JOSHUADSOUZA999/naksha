@@ -58,6 +58,10 @@ JUDGED_KEEP = 12
 # pool. Generation and scoring are microseconds each; the cost is in tuning, and only the
 # best TUNE_SHORTLIST of these are ever tuned.
 ROAD_FIRST_CANDIDATES = 300
+# Road-first trees tried one at a time past the shortlist, and only on a floor where the
+# shortlist dimensioned fewer layouts than `solve` wants. A count rather than a clock,
+# so a seed still replays. About 1.7 s at the full budget; a roomy plot never spends it.
+ROAD_FIRST_DEPTH = 2000
 TUNE_SECONDS = 0.15
 
 # Tuned candidates to collect before choosing. Was 3, and 3 is too few now that the
@@ -251,6 +255,38 @@ def shortlist_for(
     return shortlist
 
 
+def deeper(
+    rooms: list,
+    weights: dict,
+    envelope: Envelope,
+    *,
+    bounds: tuple[float, float, float, float],
+    seed: int = 0,
+):
+    """Road-first trees past the shortlist, for a floor that dimensioned too few plans.
+
+    Shared by `solve` and stage ④'s probe for the reason `shortlist_for` is: a probe that
+    searches less deeply than the solver calls plots infeasible that the solver then
+    lays out.
+
+    Its own generator, seeded from `seed`, so the shortlist's stream — and with it every
+    candidate a roomier plot has ever produced — is untouched.
+
+    **Nothing at all on a floor whose rooms cannot fit.** The 20x30's minimums come to
+    166% of its footprint and the 30x40 3BHK's to 101%, so CP-SAT refused all 2000 trees
+    one at a time — 0.9 to 1.5 s a solve, spent proving a certain no. The thin floors
+    that do solve sit at 89–91%, and `tuning.cannot_fit` is exact about the difference.
+    """
+    road = envelope.road_edges[0] if envelope.road_edges else None
+    if road is None or not any(room.kind is SpaceKind.CAR_PARKING for room in rooms):
+        return
+    if tuning.cannot_fit(rooms, bounds):
+        return
+    rng = random.Random(f"road-first depth {seed}")
+    for _ in range(ROAD_FIRST_DEPTH):
+        yield slicing.road_first_tree(rooms, rng, weights, road)
+
+
 def _shaft_zone(
     program: Program, envelope: Envelope, floors: list[int]
 ) -> tuple[float, float, float, float] | None:
@@ -316,9 +352,19 @@ def improve(layout: Layout, program: Program, rounds: int = 4) -> Layout:
 
     Greedy and first-improvement rather than best-improvement: with a dozen rooms the
     difference in quality is small and the difference in cost is not.
+
+    **Road access ranks between the two.** On the 30x40 2BHK and the 30x50 the only
+    road-first topology that dimensioned legally was a plan stage ⑦ passed before the
+    climb — no errors, two warnings — and refused after it: a swap moved the foyer off
+    the street, buying 85–115 points of sector and adjacency with the front door. The
+    `INACCESSIBLE` weight lost that trade, as any weight eventually does. Not folded into
+    `unbuildable`, which means a room below a statutory minimum, and not ranked ahead of
+    it: putting road-legality first in the shortlist was tried and traded legal rooms
+    for it.
     """
     best = layout
     best_hard, best_soft, best_reasons = _score.score(best, program)
+    best_off = _score.off_the_road(best, program)
 
     for _ in range(rounds):
         moved = False
@@ -326,10 +372,13 @@ def improve(layout: Layout, program: Program, rounds: int = 4) -> Layout:
             for j in range(i + 1, len(best.rooms)):
                 swapped = _swap(best, i, j)
                 hard, soft, reasons = _score.score(swapped, program)
+                off = _score.off_the_road(swapped, program)
                 # Lexicographic: never accept a swap that makes a room unbuildable,
-                # however many preferences it satisfies in exchange.
-                if (hard, soft) < (best_hard, best_soft - 1e-9):
+                # however many preferences it satisfies in exchange — and after that,
+                # never one that takes the car bay or the front door off the street.
+                if (hard, off, soft) < (best_hard, best_off, best_soft - 1e-9):
                     best, best_hard, best_soft, best_reasons = swapped, hard, soft, reasons
+                    best_off = off
                     moved = True
         if not moved:
             break
@@ -393,13 +442,15 @@ def solve(
     # generated topologies on a tight ground floor, 0% broke a minimum area and 100%
     # broke a minimum width.
     tuned: list[tuple[tuple[int, float], int, Layout]] = []
-    for _, index, _, tree in shortlist:
+    enough = max(keep, TUNE_KEEP)
+
+    def dimension(tree) -> Layout | None:
         dimensioned = tuning.tune(
             tree, (x_min_m, y_min_m, x_max_m, y_max_m), weights,
             time_limit_s=tune_seconds,
         )
         if dimensioned is None:
-            continue  # this topology cannot be dimensioned legally; try the next
+            return None  # this topology cannot be dimensioned legally; try the next
         try:
             layout = Layout(
                 rooms=dimensioned,
@@ -413,7 +464,7 @@ def solve(
                 shaft_zone=shaft_zone,
             )
         except ValueError:
-            continue
+            return None
         # Hill-climb the tuned layout too. This was missing rather than decided: the
         # tuned path never ran (see `tuning.snap`), so everything fell through to the
         # Stage A path below, which does climb — and the omission here was invisible
@@ -424,12 +475,37 @@ def solve(
         # ones: swapping occupants leaves the geometry alone, and the acceptance test
         # is lexicographic, so a swap that makes a room unbuildable is refused however
         # many preferences it wins.
-        layout = improve(layout, program)
+        return improve(layout, program)
+
+    for _, index, _, tree in shortlist:
+        layout = dimension(tree)
+        if layout is None:
+            continue
         tuned.append(((layout.unbuildable, layout.score), index, layout))
         # Enough to choose between. Every further attempt costs a full solve, and the
         # marginal candidate rarely wins.
-        if len(tuned) >= max(keep, TUNE_KEEP):
+        if len(tuned) >= enough:
             break
+
+    # **Past the shortlist, on a floor that ran short.** A topology that cannot be
+    # dimensioned costs CP-SAT well under a millisecond to refuse, so capping the search
+    # at the shortlist was rationing something cheap. On the 30x40 2BHK and the 30x50 the
+    # shortlist dimensioned two or three layouts, all refused, while road-first trees
+    # past it dimensioned about 1 in 100 and 1 in 270 — and a third to two thirds of
+    # those passed stage ⑦ outright. Only a floor that comes up short pays for this.
+    if len(tuned) < enough:
+        past = candidates + ROAD_FIRST_CANDIDATES
+        trees = deeper(
+            rooms, weights, envelope,
+            bounds=(x_min_m, y_min_m, x_max_m, y_max_m), seed=seed,
+        )
+        for offset, tree in enumerate(trees):
+            layout = dimension(tree)
+            if layout is None:
+                continue
+            tuned.append(((layout.unbuildable, layout.score), past + offset, layout))
+            if len(tuned) >= enough:
+                break
 
     if tuned:
         tuned.sort(key=lambda row: (row[0], row[1]))

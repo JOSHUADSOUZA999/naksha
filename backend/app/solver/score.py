@@ -384,6 +384,24 @@ def _overlap(a, b) -> float:
     return (wide * tall) / min(a.area_sq_m, b.area_sq_m)
 
 
+def off_the_road(layout: Layout, program: Program) -> int:
+    """How many rooms that must meet the street do not.
+
+    A count, not a weight, because `improve` ranks by it. Stage ⑦ refuses both cases it
+    covers — a car bay no driveway reaches, and a foyer with no road-facing wall, which
+    leaves the house with no front door — so for a plan ⑦ will judge, road access is not
+    a preference a swap may trade away.
+    """
+    if not layout.road_edges:
+        return 0
+    street = {room.id for room in program.rooms if room.needs_road_access}
+    return sum(
+        1
+        for placed in layout.rooms
+        if placed.room_id in street and not _on_a_road_edge(placed, layout)
+    )
+
+
 def _on_a_road_edge(placed, layout: Layout) -> bool:
     """Does the room touch one of the boundaries that fronts a road?
 

@@ -131,6 +131,52 @@ class TestHillClimbing:
         assert (layout.score > 0) == bool(layout.violations)
 
 
+    def test_a_swap_never_takes_the_front_door_off_the_street(self, monkeypatch):
+        """On the 30x40 2BHK and the 30x50 the one road-first plan that dimensioned was
+        legal before the climb and refused after it: a swap moved the foyer off the
+        street for 85–115 points of sector and adjacency. Built here with a scorer that
+        pays for exactly that swap, so no brief has to happen to produce it."""
+        from app.ir.enums import Facing, SpaceKind
+        from app.ir.layout import Layout, PlacedRoom
+        from app.ir.plan import Program, RoomSpec
+        from app.solver import score as scoring
+
+        layout = Layout(
+            rooms=[
+                PlacedRoom(room_id="hall", x_min_m=0, y_min_m=0, x_max_m=4, y_max_m=3),
+                PlacedRoom(room_id="foyer", x_min_m=0, y_min_m=3, x_max_m=4, y_max_m=5),
+            ],
+            x_min_m=0, y_min_m=0, x_max_m=4, y_max_m=5, road_edges=[Facing.NORTH],
+        )
+        program = Program(
+            rooms=[
+                RoomSpec(
+                    id="hall", kind=SpaceKind.HALL, min_area_sq_m=1.0,
+                    target_area_sq_m=2.0, min_width_m=0.5, max_aspect=10.0,
+                ),
+                RoomSpec(
+                    id="foyer", kind=SpaceKind.FOYER, min_area_sq_m=1.0,
+                    target_area_sq_m=2.0, min_width_m=0.5, max_aspect=10.0,
+                    needs_road_access=True,
+                ),
+            ]
+        )
+
+        def pays_for_the_swap(candidate, _program):
+            foyer = next(r for r in candidate.rooms if r.room_id == "foyer")
+            return 0, (0.0 if foyer.y_max_m < 5 else 200.0), []
+
+        monkeypatch.setattr(scoring, "score", pays_for_the_swap)
+
+        def foyer_top(result):
+            return next(r for r in result.rooms if r.room_id == "foyer").y_max_m
+
+        # The scorer really does pay for the swap: with no street to lose, it is taken.
+        assert foyer_top(improve(layout.model_copy(update={"road_edges": []}), program)) == 3
+        # With the street, it is refused however much it pays.
+        assert foyer_top(improve(layout, program)) == 5
+
+
 class TestEmptyFloors:
     def test_a_floor_with_no_rooms_returns_nothing(self, case):
         """Rather than an empty layout, which would draw as a blank page instead of
@@ -870,6 +916,94 @@ class TestRoadFirstTreesKeepTheCarOnTheStreet:
         random_only = [row[1] for row in without]
         kept = [row[1] for row in with_group if row[1] < solver_module.DEFAULT_CANDIDATES]
         assert set(random_only) <= set(kept)
+
+
+class TestTheSearchGoesDeeperWhenTheShortlistRunsShort:
+    """Proving a topology cannot be dimensioned costs CP-SAT under a millisecond, so
+    stage ⑤ keeps trying road-first trees past its shortlist — but only on a floor that
+    ran short. On the 30x40 2BHK and the 30x50 the shortlist dimensioned two or three
+    layouts, every one refused, while the trees past it held legal plans for both."""
+
+    @staticmethod
+    def _case(text):
+        brief = fallback.parse(text)
+        envelope = build_envelope(brief, allow_unverified=True)
+        return expand(brief, envelope), envelope
+
+    def test_a_floor_that_runs_short_keeps_searching(self, monkeypatch):
+        """Broken on purpose: an empty shortlist, so only the deeper search can produce
+        a plan at all."""
+        import app.solver as solver_module
+        from app.ir.enums import SpaceKind
+        from app.solver.score import _on_a_road_edge
+
+        monkeypatch.setattr(solver_module, "shortlist_for", lambda *a, **k: [])
+        program, envelope = self._case("30x40 2bhk in Bengaluru")
+        layouts = solve(program, envelope, seed=7)
+        assert layouts, "nothing past the shortlist could be dimensioned"
+        kinds = {room.id: room.kind for room in program.rooms}
+        bay = next(r for r in layouts[0].rooms if kinds[r.room_id] is SpaceKind.CAR_PARKING)
+        assert _on_a_road_edge(bay, layouts[0])
+
+    def test_a_floor_the_shortlist_serves_never_goes_deeper(self, monkeypatch):
+        """The cost lands only where it buys something. A roomy plot fills its pool from
+        the shortlist, and must not pay for trees it will never use."""
+        import app.solver as solver_module
+
+        def refuse(*args, **kwargs):
+            raise AssertionError("searched past a shortlist that already had enough")
+            yield  # a generator, so this fires only if `solve` iterates it
+
+        monkeypatch.setattr(solver_module, "deeper", refuse)
+        program, envelope = self._case("50x80 4bhk in Bengaluru with study")
+        assert solve(program, envelope, seed=7)
+
+    def test_a_floor_whose_rooms_cannot_fit_is_not_searched_at_all(self):
+        """The 20x30's minimums come to 166% of its footprint: no tree can be
+        dimensioned, so trying 2000 of them bought a certain no for a second a solve.
+        The 30x50, at 91%, is exactly the floor the search exists for."""
+        from app.solver import deeper, footprint
+
+        for text, searched in (
+            ("20x30 2bhk in Bengaluru", False),
+            ("30x50 3bhk in Bengaluru", True),
+        ):
+            program, envelope = self._case(text)
+            rooms = program.on_floor(1)
+            bounds = footprint(envelope, rooms)
+            area = (bounds[2] - bounds[0]) * (bounds[3] - bounds[1])
+            weights = slicing.effective_areas(rooms, area)
+            trees = deeper(rooms, weights, envelope, bounds=bounds, seed=0)
+            assert (next(trees, None) is not None) is searched, text
+
+    def test_the_bound_never_contradicts_cp_sat(self):
+        """Necessary, not sufficient — so wherever it says the rooms cannot fit, no tree
+        may dimension. The 30x40 3BHK sits at 101%, the closest call in the set."""
+        from app.solver import footprint, tuning
+
+        program, envelope = self._case(
+            "30x40 east facing site in Whitefield, Bengaluru, 3BHK with pooja room"
+        )
+        rooms = program.on_floor(1)
+        bounds = footprint(envelope, rooms)
+        area = (bounds[2] - bounds[0]) * (bounds[3] - bounds[1])
+        weights = slicing.effective_areas(rooms, area)
+        assert tuning.cannot_fit(rooms, bounds)
+        rng = random.Random(0)
+        for _ in range(40):
+            tree = slicing.random_tree(rooms, rng, weights)
+            assert tuning.tune(tree, bounds, weights, time_limit_s=0.15) is None
+
+    def test_the_deeper_search_replays_from_its_seed(self, monkeypatch):
+        """Its own generator, seeded from `seed`: a plan found past the shortlist has to
+        replay like any other, or two people cannot discuss it."""
+        import app.solver as solver_module
+
+        monkeypatch.setattr(solver_module, "shortlist_for", lambda *a, **k: [])
+        program, envelope = self._case("30x40 2bhk in Bengaluru")
+        a = solve(program, envelope, seed=7)[0]
+        b = solve(program, envelope, seed=7)[0]
+        assert a.model_dump() == b.model_dump()
 
 
 class TestAJudgeChoosesTheFinishedPlan:

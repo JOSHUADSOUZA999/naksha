@@ -31,6 +31,9 @@ _BEDROOMS = {
     SpaceKind.SERVANT_ROOM,
 }
 _BATHS = {SpaceKind.BATHROOM, SpaceKind.WC}
+# The rooms a house is lived in. Reached only through a private room, the plan has no
+# honest way in at all — see `_through_private_rooms`.
+_COMMON = {SpaceKind.HALL, SpaceKind.DINING, SpaceKind.KITCHEN}
 
 
 def validate(layout: Layout, program: Program, floor: RefinedFloor) -> Report:
@@ -332,14 +335,28 @@ def _through_private_rooms(layout, program, floor, graph, start) -> list[Finding
             for node in _ancestors(room, parents, start)
             if node not in through
         })
+        message = (
+            f"{', '.join(detoured)} can only be reached by walking through a "
+            f"bedroom or bathroom ({', '.join(via)})"
+        )
+        # **Behind a private room, the living rooms are an error, not a warning.** A
+        # second bedroom reached through the master is a bad plan somebody could live
+        # in. A hall, kitchen or dining room reached only that way means the way in does
+        # not lead into the house: the 30x50 went front door, foyer, *bathroom*, and only
+        # then corridor and hall. As one warning among others, the judge ranked that
+        # above a plan refused for its car bay.
+        common = [room for room in detoured if kinds.get(room) in _COMMON]
+        if common:
+            among = (
+                "" if len(common) == len(detoured)
+                else f", the {', '.join(common)} among them"
+            )
+            message += f"{among} — so every way in passes through one"
         findings.append(
             Finding(
                 check="circulation",
-                severity=Severity.WARNING,
-                message=(
-                    f"{', '.join(detoured)} can only be reached by walking through a "
-                    f"bedroom or bathroom ({', '.join(via)})"
-                ),
+                severity=Severity.ERROR if common else Severity.WARNING,
+                message=message,
                 rooms=detoured,
             )
         )
@@ -347,7 +364,13 @@ def _through_private_rooms(layout, program, floor, graph, start) -> list[Finding
     via_kitchen = sorted(
         r for r in placed
         if r in honest and r not in no_kitchen
-        and kinds.get(r) in _BEDROOMS | _BATHS | {SpaceKind.STAIRCASE, SpaceKind.CORRIDOR}
+        # The hall too. Both plots the deeper search made legal were entered foyer →
+        # kitchen → hall, and this said nothing, because the list stopped at bedrooms,
+        # baths, stairs and corridors. A dining room behind the kitchen is an ordinary
+        # arrangement; the room a visitor is received in is not.
+        and kinds.get(r) in _BEDROOMS | _BATHS | {
+            SpaceKind.STAIRCASE, SpaceKind.CORRIDOR, SpaceKind.HALL,
+        }
     )
     if via_kitchen:
         findings.append(

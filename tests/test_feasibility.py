@@ -84,8 +84,12 @@ class TestOptionsAreMeasuredNotGuessed:
             # An option that buys nothing says so in words. "0/60 become legal" is
             # technically the count and reads as though something happened.
             rendered = str(option)
-            if option.helps:
+            if option.feasible_after:
                 assert f"{option.feasible_after}/{option.probes}" in rendered
+            elif option.deeper:
+                # Found only where ⑤ searches past its shortlist: a plan, with no margin,
+                # and not dressed up as a count out of the shortlist it was not in.
+                assert "past the shortlist" in rendered and "/" not in rendered
             else:
                 assert "still no legal layout" in rendered
 

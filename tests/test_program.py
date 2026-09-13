@@ -507,16 +507,22 @@ class TestStiltParking:
     BRIEF = "30x40 east facing site in Whitefield, Bengaluru, 3BHK with pooja room"
 
     def test_it_unblocks_the_plot_the_product_exists_for(self):
+        """Measured on the path the product runs, with ⑦ choosing the plan as the CLI
+        does. Unjudged, this took the lowest-penalty candidate, whose floor 2 reached the
+        hall, kitchen and dining only through bed1 — refused once ⑦ made that an error —
+        while the plan the CLI ships has no errors at all."""
         from app.refine import refine
         from app.solver import plan
-        from app.validator import validate
+        from app.validator import judge, validate
 
         brief, envelope = self._case(self.BRIEF)
         grounded = expand(brief, envelope)
         lifted = expand(brief, envelope, stilt=True)
 
         def errors(program):
-            bundle = plan(brief, envelope, program, seed=7)
+            bundle = plan(
+                brief, envelope, program, seed=7, judge=judge(program, envelope)
+            )
             return sum(
                 validate(lay, program, refine(lay, program, envelope)).errors
                 for lay in bundle.layouts

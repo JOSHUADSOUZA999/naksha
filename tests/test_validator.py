@@ -49,13 +49,16 @@ class TestYouCanWalkThroughTheHouse:
         only a door in it lets anyone through. This held on none of the four briefs
         when it was first measured.
 
-        Errors only. A warning here is the narrower defect — circulation running
-        through a bedroom — which ⑥ accepts as a last resort when the alternative is a
-        room with no way in, and which stage ⑤ separately scores on the tiling.
+        Errors only, and only this error. Circulation running through a bedroom is the
+        narrower defect — ⑥ accepts it as a last resort when the alternative is a room
+        with no way in — and it has tests of its own. Once the living rooms are behind
+        it that defect is an error too, but every room on such a route can still be
+        *reached*, and reaching is the claim this test makes.
         """
         layout, program, floor, report = plans[name]
         errors = [
-            f for f in report.by_check("circulation") if f.severity is Severity.ERROR
+            f for f in report.by_check("circulation")
+            if f.severity is Severity.ERROR and "by walking through" not in f.message
         ]
         if not any(o.kind is OpeningKind.ENTRANCE for o in floor.openings):
             # Stage ⑤ put the foyer off the street, so there is no front door to walk
@@ -435,6 +438,8 @@ class TestEveryDefectTheDrawingsShowed:
         graph = {"foyer": {"bed1"}, "bed1": {"foyer", "bed2"}, "bed2": {"bed1"}}
         findings = _through_private_rooms(layout, Program(rooms=specs), None, graph, "foyer")
         assert any("bed2" in f.rooms and "through a bedroom" in f.message for f in findings)
+        # A bad plan somebody could still live in: reported, not refused.
+        assert all(f.severity is Severity.WARNING for f in findings)
 
     def test_an_en_suite_is_not_a_defect(self):
         """A bathroom reached through the bedroom stage ③ connected it to is what an
@@ -484,6 +489,10 @@ class TestEveryDefectTheDrawingsShowed:
         findings = _through_private_rooms(layout, Program(rooms=specs), None, graph, "foyer")
         flagged = {r for f in findings for r in f.rooms}
         assert {"hall", "kitchen"} <= flagged
+        # With the hall and kitchen behind it, the front door does not lead into the
+        # house at all — refused, so the judge can never prefer it to a plan with a
+        # smaller defect.
+        assert any(f.severity is Severity.ERROR for f in findings)
 
     def test_a_ground_floor_with_no_front_door_is_refused_even_with_a_stair(self):
         """The 25x40 once listed as the one clean plot had no entrance. The walk fell back
@@ -533,6 +542,22 @@ class TestEveryDefectTheDrawingsShowed:
         graph = {"foyer": {"kitchen"}, "kitchen": {"foyer", "bed1"}, "bed1": {"kitchen"}}
         findings = _through_private_rooms(layout, Program(rooms=specs), None, graph, "foyer")
         assert any("through the kitchen" in f.message and "bed1" in f.rooms for f in findings)
+
+    def test_the_hall_behind_the_kitchen_is_reported(self):
+        """The 30x40 2BHK and the 30x50, once the deeper search made them legal: both
+        were entered foyer → kitchen → hall, and ⑦ listed only the bedrooms beyond it."""
+        from app.ir.plan import Program
+        from app.validator import _through_private_rooms
+
+        layout, specs = self._row(
+            ("foyer", SpaceKind.FOYER), ("kitchen", SpaceKind.KITCHEN),
+            ("hall", SpaceKind.HALL), through={"foyer", "kitchen", "hall"},
+        )
+        graph = {"foyer": {"kitchen"}, "kitchen": {"foyer", "hall"}, "hall": {"kitchen"}}
+        findings = _through_private_rooms(layout, Program(rooms=specs), None, graph, "foyer")
+        assert any("through the kitchen" in f.message and "hall" in f.rooms for f in findings)
+        # A kitchen is a room people do walk through: reported, not refused.
+        assert all(f.severity is Severity.WARNING for f in findings)
 
     def test_a_second_honest_route_clears_the_room(self):
         """Every route, not the shortest. One good way in is enough."""

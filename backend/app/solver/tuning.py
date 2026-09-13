@@ -46,6 +46,33 @@ def _exterior_half() -> float:
     return load_ruleset("refine_v1").data["walls"]["exterior_thickness_m"] / 2
 
 
+def gross_minimum_cm2(spec) -> int:
+    """The least gross area, in cm², the model will accept for this room.
+
+    The clear area of a w x d room is (w - allow)(d - allow), which a bound on gross
+    area cannot express, so the floor is the minimum grown by the allowance on the
+    squarest room that could satisfy it. One function, so `cannot_fit` asks exactly the
+    question `_build` enforces.
+    """
+    side = math.sqrt(spec.min_area_sq_m)
+    allow = 2 * _exterior_half()
+    return round((side + allow) * (side + allow) * _PER_M * _PER_M)
+
+
+def cannot_fit(rooms, bounds: tuple[float, float, float, float]) -> bool:
+    """True when no slicing tree over these rooms can be dimensioned inside `bounds`.
+
+    Exact tiling makes the rooms' areas sum to the footprint, and every leaf must reach
+    `gross_minimum_cm2` — so when those minimums already exceed the footprint, every
+    tree is infeasible and asking CP-SAT about each one only proves it again. Necessary,
+    not sufficient: passing says nothing about whether a tree exists.
+    """
+    x_min_m, y_min_m, x_max_m, y_max_m = bounds
+    width = math.floor(x_max_m * _PER_M) - math.ceil(x_min_m * _PER_M)
+    depth = math.floor(y_max_m * _PER_M) - math.ceil(y_min_m * _PER_M)
+    return sum(gross_minimum_cm2(room) for room in rooms) > width * depth
+
+
 def tune(
     tree: Node,
     bounds: tuple[float, float, float, float],
@@ -176,9 +203,7 @@ def _build(model, node: Node, x0, x1, y0, y1, leaves: list) -> None:
         # area alone cannot express that, so the floor is the minimum grown by the
         # allowance on the squarest room that could satisfy it — enough to keep CP-SAT
         # honest, with `score` doing the exact per-side check afterwards.
-        side = math.sqrt(spec.min_area_sq_m)
-        gross_min = (side + allow) * (side + allow)
-        model.Add(area >= round(gross_min * _PER_M * _PER_M))
+        model.Add(area >= gross_minimum_cm2(spec))
 
         # Aspect both ways, scaled to stay integral. Linear, unlike area.
         ratio = max(1, round(spec.max_aspect * 100))
