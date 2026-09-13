@@ -549,6 +549,12 @@ def build_stilt(rooms: list[RoomSpec], envelope: Envelope, rules: dict) -> list[
     # tiling handed the 46.9 m² rectangle to the car bay and the 18 m² one to the
     # stilt, which then sat below a minimum it had no business having. The open ground
     # is where surplus should *land*, not something the plan is illegal without.
+    # Target only, and the alternative is recorded in DECISIONS rather than left as a
+    # comment: giving the stilt a *minimum* does make the tiling label it correctly,
+    # and it costs the shaft. Forcing the staircase into the small rectangle it ought
+    # to occupy moved it out from under the storey above — `stair3 does not land on
+    # the staircase on the floor below`, which is a house you cannot get upstairs in.
+    # A mislabelled room is the lesser defect.
     stilt = _spec(SpaceKind.STILT, "stilt", rules, floor=1)
     lifted.append(stilt.model_copy(update={"target_area_sq_m": open_ground}))
     return lifted

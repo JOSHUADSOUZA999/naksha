@@ -7,6 +7,42 @@ Append-only. Why the code is shaped the way it is, what broke, and what is still
 
 ## Open questions — these need you, not me
 
+**9. A stilt level cannot get both its labels and its staircase right, and the reason
+is structural.**
+
+`--stilt` unblocks the 30x40 3BHK — three levels, zero unbuildable, zero errors. The
+drawing of its ground level is still wrong in one place: the staircase is 40.1 m² and
+the open ground beside it is 5.2, when those two figures belong the other way round.
+
+**Three fixes were tried and each traded the defect for a worse one.**
+
+*Give the stilt a large minimum so the tiling cannot raid it.* The tiling handed the
+large rectangle to the car bay instead and the stilt fell below a floor it had no
+business having — one room unbuildable.
+
+*Fix the allocator so surplus follows headroom rather than proportion.* This was a real
+bug and the fix was kept: rooms with no ceiling no longer grow, which is why the car bay
+sits at 20 m² and not 46.9. It did not move the staircase, because the staircase's
+rectangle is not chosen by the allocator.
+
+*Give the stilt a minimum of 60% of the open ground.* This labels the level correctly —
+stilt 42.7, staircase 6.2 — and breaks the shaft: `stair3 does not land on the staircase
+on the floor below`. A house you cannot get upstairs in is worse than a mislabelled
+room, so this was reverted.
+
+**The conflict is real and it is not a weighting problem.** On a stilt the staircase
+must be *small* (it is a stair, not a hall) and *positioned under the stair above* (it
+is one shaft). The slicing tree can satisfy either: a large stair rectangle overlaps the
+upper stair easily, and a small one rarely lands beneath it. What it has no mechanism
+for is placing a rectangle of a given size at a given position, which is what a shaft
+actually requires. The big staircase is the solver correctly preferring a 40-point
+oversize penalty to a 90-point broken shaft.
+
+This is the same wall as question 6 from a third direction: the representation cannot
+express "this room, here". Stage B could — CP-SAT can pin a leaf's coordinates — and
+doing so for shafts only would be a bounded change, unlike relaxing the tiling.
+
+
 **8. ~~Every plan we call legal has rooms below their statutory minimums.~~ Fixed —
 and it did not need the decision I asked for.**
 
