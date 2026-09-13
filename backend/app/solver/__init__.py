@@ -48,6 +48,16 @@ IMPROVE_SHORTLIST = 24
 # usually proven infeasible in milliseconds. The time went entirely into models that
 # are merely *hard to disprove*, which buy nothing: the next topology is free.
 TUNE_SHORTLIST = 24
+
+# Finished candidates per floor handed to a `judge`. Twelve is where the reference plots
+# stopped improving: the candidate ⑦ passes is almost always within the first handful,
+# and each one costs a refine and a validate on top of its tuning.
+JUDGED_KEEP = 12
+
+# Road-first topologies generated per floor that has a car bay, on top of the random
+# pool. Generation and scoring are microseconds each; the cost is in tuning, and only the
+# best TUNE_SHORTLIST of these are ever tuned.
+ROAD_FIRST_CANDIDATES = 300
 TUNE_SECONDS = 0.15
 
 # Tuned candidates to collect before choosing. Was 3, and 3 is too few now that the
@@ -152,8 +162,21 @@ def shortlist_for(
     rng = random.Random(seed)
     scored: list[tuple[tuple[int, float], int, Layout, slicing.Node]] = []
 
-    for index in range(candidates):
-        tree = slicing.random_tree(rooms, rng, weights)
+    road = envelope.road_edges[0] if envelope.road_edges else None
+    wants_road_first = road is not None and any(
+        room.kind is SpaceKind.CAR_PARKING for room in rooms
+    )
+    road_first_indices: set[int] = set()
+    total = candidates + (ROAD_FIRST_CANDIDATES if wants_road_first else 0)
+
+    for index in range(total):
+        # The random pool is generated first and from the same stream as before, so
+        # adding road-first trees after it cannot change a single random candidate.
+        if index < candidates:
+            tree = slicing.random_tree(rooms, rng, weights)
+        else:
+            tree = slicing.road_first_tree(rooms, rng, weights, road)
+            road_first_indices.add(index)
         placed = slicing.place(tree, *bounds)
         try:
             layout = Layout(
@@ -215,10 +238,15 @@ def shortlist_for(
     # before tuning, for the usual reason that what Stage B fixes is exactly what they
     # look bad on, so ranking alone never showed them to CP-SAT and every plan on a
     # tight plot came back with a bedroom serving as a corridor.
-    reachable = [row for row in scored if not unreachable(row)]
-    walkable = [row for row in scored if not unwalkable(row)]
+    random_pool = [row for row in scored if row[1] not in road_first_indices]
+    road_first = [row for row in scored if row[1] in road_first_indices]
+    reachable = [row for row in random_pool if not unreachable(row)]
+    walkable = [row for row in random_pool if not unwalkable(row)]
     shortlist = _interleave(
-        scored[:TUNE_SHORTLIST], reachable[:TUNE_SHORTLIST], walkable[:TUNE_SHORTLIST]
+        random_pool[:TUNE_SHORTLIST],
+        reachable[:TUNE_SHORTLIST],
+        walkable[:TUNE_SHORTLIST],
+        road_first[:TUNE_SHORTLIST],
     )
     return shortlist
 
@@ -426,8 +454,21 @@ def plan(
     *,
     candidates: int = DEFAULT_CANDIDATES,
     seed: int = 0,
+    judge=None,
 ):
     """Solve every floor and bundle the result for a viewer.
+
+    **`judge` decides which finished candidate is shown, when one is given.** Stage ⑤
+    ranks by its own penalty, and that penalty does not measure what stage ⑦ reports:
+    routes through a bedroom or the kitchen, a bedroom floor with no bathroom, a car bay
+    no driveway reaches. So the lowest penalty was routinely a plan ⑦ refused, while a
+    candidate ⑦ passed sat one place behind it. Measured over the reference plots, taking
+    the top JUDGED_KEEP per floor and letting ⑦ choose turned a refused 30x30 clean and
+    cut the stilt plan from four warnings to one, with no plot getting worse.
+
+    A callable rather than an import: ⑥ and ⑦ depend on ⑤'s output, and ⑤ importing them
+    to rank its own candidates would invert the pipeline. The caller builds it —
+    `validator.judge` — and ⑤ only ever sees a sort key.
 
     One `solve` per floor because each storey is its own rectangle — stacking is
     stage ③'s decision. Floors that produced nothing are dropped rather than
@@ -453,13 +494,17 @@ def plan(
     layouts = []
     fixed: dict = {}
     for floor in floors:
-        best = solve(
+        pool = solve(
             program, envelope, floor=floor, candidates=candidates, seed=seed,
+            keep=JUDGED_KEEP if judge is not None else 1,
             shafts=fixed, shaft_zone=zone,
         )
-        if not best:
+        if not pool:
             continue
-        layouts.append(best[0])
+        # `min` keeps the first of equal keys, and `pool` is already best-penalty first.
+        chosen = min(pool, key=judge) if judge is not None else pool[0]
+        best = [chosen]
+        layouts.append(chosen)
         # Carry the shaft upward. Whatever this storey decided about the staircase is
         # no longer negotiable — the floor above is scored against it.
         kinds = _kinds(program)

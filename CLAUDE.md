@@ -100,7 +100,7 @@ uv venv --python 3.12 && source .venv/bin/activate
 uv pip install -e ".[dev]"
 cp .env.example .env          # set one key, or NAKSHA_INTENT_PROVIDER=claude_code
 
-pytest                        # 649 tests, no network, no key, and independent
+pytest                        # 667 tests, no network, no key, and independent
                               # of whatever is in your .env — see conftest
 pytest -m live                # real model; needs credentials
 
@@ -298,6 +298,17 @@ CP-SAT fail decision 2's twenty-second test.
   surplus. Both a relative *and* an absolute test must fire, or a 5 m² pooja room
   against a 2.5 m² target gets flagged alongside it. See `DECISIONS.md` question 7.
 
+- **Touching the road is a tree shape, so generate the shape.** Whether a room meets the
+  plot edge is fixed by the slicing tree, not by CP-SAT's dimensions, and hardly any
+  random tree puts the car bay on the road and still sizes legally.
+  `slicing.road_first_tree` builds bay and foyer as a strip along the road with the house
+  behind. **Add generator groups beside the random pool, never in place of it** — biasing
+  generation has failed twice here, raising the average and lowering the best.
+- **⑦ picks the plan, not the penalty.** `plan(judge=…)` keeps the 12 best finished
+  candidates per floor and takes the minimum of `validator.judge`. The solver imports
+  neither ⑥ nor ⑦; the judge is passed in. The lowest penalty had picked a 30x50 with no
+  front door.
+
 `max_aspect` is per-kind data, not a constant. A corridor is *supposed* to be
 elongated; flagging one as "a corridor, not a corridor" was the rule mistaking the
 shape for the defect.
@@ -358,6 +369,12 @@ that happens to fail — that test goes vacuous the day the pipeline improves.
 - **Walk every route, not the shortest.** One honest way into a room is enough.
 - **A car bay off the road is an error**, not a warning: it does not satisfy the parking
   requirement that put it in the programme.
+
+- **The judge turns every check into an objective, and an optimiser finds its holes.**
+  The walk once fell back to the staircase on a *ground* floor with no front door, called
+  the house clean, and the judge preferred it to every house you could enter. The
+  staircase start is for upper storeys only. `judge` ranks unreachable rooms worst among
+  refusals.
 
 ### `llm/`
 

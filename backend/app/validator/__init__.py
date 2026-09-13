@@ -65,7 +65,7 @@ def _circulation(layout: Layout, program: Program, floor: RefinedFloor) -> list[
     )
     if entrance is not None and entrance.connects:
         start = entrance.connects[0]
-    else:
+    elif layout.floor > 1:
         start = next(
             (
                 placed.room_id
@@ -74,6 +74,13 @@ def _circulation(layout: Layout, program: Program, floor: RefinedFloor) -> list[
             ),
             None,
         )
+    else:
+        # **Never the stair on the ground floor.** The fallback to the stair was written
+        # for upper storeys and fired on floor 1 too whenever a stair existed — so a
+        # ground floor with no front door was walked from its staircase instead, found
+        # every room reachable, and could come back clean. The judge trusts this verdict,
+        # which made it a way for a house nobody can enter to win.
+        start = None
     if start is None:
         message = (
             "the plan has no front door, so no room is reachable at all"
@@ -195,6 +202,43 @@ def _legality(program: Program, floor: RefinedFloor) -> list[Finding]:
         )
         for message in breaches(floor, program)
     ]
+
+
+def judge(program: Program, envelope=None):
+    """A sort key that ranks finished candidates by what this stage would say of them.
+
+    Errors first, then whether the house can be entered and walked, then rooms below a
+    minimum, then warnings, then stage ⑤'s own penalty as the tiebreak — so a plan ⑦
+    refuses never beats one it passes, however much better its penalty.
+
+    **Refusals are not all equal, and counting them as if they were picked the worst.**
+    A 30x50 had two candidates, each with one error: one whose car bay did not touch the
+    road, and one whose foyer had no street wall at all, so no front door could be drawn.
+    Tied on errors and warnings, the lower penalty won — a house nobody can walk into,
+    chosen over one whose car has to park on the street. A circulation error means the
+    plan does not function as a house; every other error is about part of it. So it
+    ranks worst among refusals.
+
+    Handed to `solver.plan`, which takes a callable precisely so ⑤ does not have to
+    import the stages downstream of it.
+    """
+    from app.refine import refine
+
+    def key(layout: Layout) -> tuple:
+        report = validate(layout, program, refine(layout, program, envelope))
+        unusable = sum(
+            1 for finding in report.by_check("circulation")
+            if finding.severity is Severity.ERROR
+        )
+        return (
+            report.errors,
+            unusable,
+            layout.unbuildable,
+            len(report.findings) - report.errors,
+            layout.score,
+        )
+
+    return key
 
 
 def check(bundle):

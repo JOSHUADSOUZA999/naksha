@@ -400,9 +400,17 @@ def _write_layout(result: IntentResult, args: argparse.Namespace, settings) -> N
     # ⑤ then ⑥ then ⑦, on one bundle. Doing it here rather than per-artefact is what
     # keeps the JSON and the drawing from disagreeing: both now read the same floors.
     from app.refine import draw
-    from app.validator import check
+    from app.validator import check, judge
 
-    bundle = check(draw(plan(result.brief, envelope, program, seed=args.seed), envelope))
+    bundle = check(
+        draw(
+            plan(
+                result.brief, envelope, program, seed=args.seed,
+                judge=judge(program, envelope),
+            ),
+            envelope,
+        )
+    )
 
     # Stage ④ only where stage ⑤ could not produce a legal plan. Assessing costs 60
     # solves a floor, which is not worth paying on the common path where it worked.

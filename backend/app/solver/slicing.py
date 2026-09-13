@@ -18,7 +18,7 @@ import random
 from dataclasses import dataclass
 
 from app.ir.layout import PlacedRoom
-from app.ir.enums import Relation
+from app.ir.enums import Facing, Relation, SpaceKind
 from app.ir.plan import AdjacencySpec, RoomSpec
 
 
@@ -139,6 +139,56 @@ def random_tree(
         left=random_tree(ordered[:split], rng, weights),
         right=random_tree(ordered[split:], rng, weights),
     )
+
+
+def road_first_tree(
+    rooms: list[RoomSpec], rng: random.Random, weights: dict[str, float], road: Facing
+) -> Node:
+    """A tree whose first cut peels off a street-side strip holding the car and the door.
+
+    **Whether a room touches the boundary is decided by the shape of the tree, not by
+    its dimensions** — so no weight in `score` and no tuning in Stage B can move a car
+    bay onto the road if the topology put it in the middle. Measured on a 30x30, a 30x40
+    2BHK and a 30x50: of 50–66 shortlisted random trees only one or two could be
+    dimensioned at all, and none of those had the bay on the road. All three plots were
+    refused for it.
+
+    This is how an Indian house is laid out anyway: parking and the entrance at the
+    front, the house behind. The strip is cut *along* the road, so every room in it keeps
+    the street edge; the body behind it is an ordinary random tree.
+
+    **An addition to the random pool, never a replacement.** A sector-aware shuffle and
+    `graph_tree` both failed the same way — biasing generation raises the mean candidate
+    and lowers the best, and `solve` only keeps the best. Road-first trees compete as
+    their own group, so the random pool's ceiling is untouched.
+    """
+    front = [room for room in rooms if room.kind in (SpaceKind.CAR_PARKING, SpaceKind.FOYER)]
+    body = [room for room in rooms if room not in front]
+    if not front or not body:
+        return random_tree(rooms, rng, weights)
+
+    front = front[:]
+    rng.shuffle(front)
+    # A band across a north or south road is divided by vertical cuts, and a band
+    # along an east or west road by horizontal ones — so no room in it loses the street.
+    strip: Node = Leaf(front[0], weights[front[0].id])
+    for room in front[1:]:
+        strip = Cut(
+            vertical=road in (Facing.NORTH, Facing.SOUTH),
+            left=strip,
+            right=Leaf(room, weights[room.id]),
+        )
+    house = random_tree(body, rng, weights)
+
+    # `place` gives a horizontal cut's right child the north half and a vertical cut's
+    # right child the east half.
+    if road is Facing.NORTH:
+        return Cut(vertical=False, left=house, right=strip)
+    if road is Facing.SOUTH:
+        return Cut(vertical=False, left=strip, right=house)
+    if road is Facing.EAST:
+        return Cut(vertical=True, left=house, right=strip)
+    return Cut(vertical=True, left=strip, right=house)
 
 
 def place(node: Node, x_min: float, y_min: float, x_max: float, y_max: float) -> list[PlacedRoom]:

@@ -53,10 +53,15 @@ class TestYouCanWalkThroughTheHouse:
         through a bedroom — which ⑥ accepts as a last resort when the alternative is a
         room with no way in, and which stage ⑤ separately scores on the tiling.
         """
-        layout, _, _, report = plans[name]
+        layout, program, floor, report = plans[name]
         errors = [
             f for f in report.by_check("circulation") if f.severity is Severity.ERROR
         ]
+        if not any(o.kind is OpeningKind.ENTRANCE for o in floor.openings):
+            # Stage ⑤ put the foyer off the street, so there is no front door to walk
+            # from. That is a defect ⑦ must report — and only that one.
+            assert errors and all("no front door" in f.message for f in errors)
+            return
         assert errors == [], errors[0].message if errors else ""
 
     def test_a_finding_names_the_rooms_it_is_about(self, plans, name):
@@ -480,6 +485,41 @@ class TestEveryDefectTheDrawingsShowed:
         flagged = {r for f in findings for r in f.rooms}
         assert {"hall", "kitchen"} <= flagged
 
+    def test_a_ground_floor_with_no_front_door_is_refused_even_with_a_stair(self):
+        """The 25x40 once listed as the one clean plot had no entrance. The walk fell back
+        to the staircase — a rule written for upper storeys — found every room, and
+        reported nothing; the judge then preferred that house to every one you could
+        walk into."""
+        from types import SimpleNamespace
+
+        from app.ir.plan import Program
+        from app.validator import _circulation
+
+        layout, specs = self._row(
+            ("stair", SpaceKind.STAIRCASE), ("hall", SpaceKind.HALL), through={"hall"},
+        )
+        sealed = SimpleNamespace(openings=[])
+        ground = layout.model_copy(update={"floor": 1})
+        findings = _circulation(ground, Program(rooms=specs), sealed)
+        assert [f.severity for f in findings] == [Severity.ERROR]
+        assert "no front door" in findings[0].message
+
+    def test_an_upper_floor_is_still_entered_from_its_stair(self):
+        """The other half: upstairs there is no front door to demand."""
+        from types import SimpleNamespace
+
+        from app.ir.enums import OpeningKind
+        from app.ir.plan import Program
+        from app.validator import _circulation
+
+        layout, specs = self._row(
+            ("stair", SpaceKind.STAIRCASE), ("hall", SpaceKind.HALL), through={"hall"},
+        )
+        door = SimpleNamespace(kind=OpeningKind.DOOR, connects=("stair", "hall"))
+        upper = layout.model_copy(update={"floor": 2})
+        findings = _circulation(upper, Program(rooms=specs), SimpleNamespace(openings=[door]))
+        assert not any(f.severity is Severity.ERROR for f in findings)
+
     def test_a_bedroom_behind_the_kitchen_is_reported(self):
         """The 40x60: every bedroom lay beyond the kitchen. A kitchen is somewhere you
         walk through to a utility, not the way to the bedrooms."""
@@ -572,3 +612,56 @@ class TestEveryDefectTheDrawingsShowed:
         )
         findings = validate(layout, shrunk, floor).by_check("size")
         assert any(biggest.room_id in f.rooms for f in findings)
+
+
+class TestTheJudgeRanksRefusalsBySeverity:
+    """A 30x50 had two refused candidates, one error each: a car bay off the road, and a
+    foyer with no street wall, so no front door. Tied on errors, the lower penalty won —
+    a house nobody could walk into. Tested by feeding the judge two reports directly, so
+    it does not depend on any brief producing that tie."""
+
+    def test_a_house_you_can_enter_beats_one_you_cannot(self, plans, monkeypatch):
+        import app.validator as validator_module
+        from app.ir.validation import Finding, Report
+
+        layout, program, _, _ = plans["40x60"]
+        cannot_enter = layout.model_copy(update={"score": 10.0})
+        car_on_street = layout.model_copy(update={"score": 500.0})
+
+        def fake_validate(candidate, _program, _floor):
+            if candidate.score == cannot_enter.score:
+                finding = Finding(
+                    check="circulation", severity=Severity.ERROR,
+                    message="the plan has no front door, so no room is reachable at all",
+                )
+            else:
+                finding = Finding(
+                    check="access", severity=Severity.ERROR,
+                    message="car_parking does not touch the north road",
+                )
+            return Report(findings=[finding], checks_run=list(CHECKS))
+
+        monkeypatch.setattr(validator_module, "validate", fake_validate)
+        key = validator_module.judge(program)
+        assert key(car_on_street) < key(cannot_enter), (
+            "a far better penalty must not buy a house with no way in"
+        )
+
+    def test_a_passing_plan_still_beats_any_refused_one(self, plans, monkeypatch):
+        import app.validator as validator_module
+        from app.ir.validation import Finding, Report
+
+        layout, program, _, _ = plans["40x60"]
+        refused = layout.model_copy(update={"score": 1.0})
+        passing = layout.model_copy(update={"score": 999.0})
+
+        def fake_validate(candidate, _program, _floor):
+            findings = (
+                [Finding(check="access", severity=Severity.ERROR, message="x")]
+                if candidate.score == refused.score else []
+            )
+            return Report(findings=findings, checks_run=list(CHECKS))
+
+        monkeypatch.setattr(validator_module, "validate", fake_validate)
+        key = validator_module.judge(program)
+        assert key(passing) < key(refused)

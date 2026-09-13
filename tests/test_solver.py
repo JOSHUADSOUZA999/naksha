@@ -813,3 +813,107 @@ class TestOneShaftThroughTheBuilding:
         envelope = build_envelope(brief, allow_unverified=True)
         program = expand(brief, envelope)
         assert _shaft_zone(program, envelope, [1]) is None
+
+
+class TestRoadFirstTreesKeepTheCarOnTheStreet:
+    """Whether a room touches the boundary is decided by the shape of the tree, not by
+    its dimensions. Three plots were refused because no random tree that could be
+    dimensioned put the car bay on the road; these trees are built so it always is."""
+
+    @pytest.mark.parametrize("road", ["north", "south", "east", "west"])
+    def test_the_car_bay_and_the_entrance_touch_the_road(self, road):
+        from app.ir.enums import Facing, SpaceKind
+
+        brief = fallback.parse("30x40 2bhk in Bengaluru")
+        envelope = build_envelope(brief, allow_unverified=True)
+        rooms = expand(brief, envelope).on_floor(1)
+        weights = slicing.effective_areas(rooms, 75.0)
+        facing = Facing(road)
+        rng = random.Random(3)
+
+        for _ in range(20):
+            tree = slicing.road_first_tree(rooms, rng, weights, facing)
+            placed = {p.room_id: p for p in slicing.place(tree, 0.0, 0.0, 8.0, 10.0)}
+            edge = {
+                Facing.NORTH: lambda r: abs(r.y_max_m - 10.0) <= TOLERANCE_M,
+                Facing.SOUTH: lambda r: abs(r.y_min_m - 0.0) <= TOLERANCE_M,
+                Facing.EAST: lambda r: abs(r.x_max_m - 8.0) <= TOLERANCE_M,
+                Facing.WEST: lambda r: abs(r.x_min_m - 0.0) <= TOLERANCE_M,
+            }[facing]
+            for room in rooms:
+                if room.kind in (SpaceKind.CAR_PARKING, SpaceKind.FOYER):
+                    assert edge(placed[room.id]), f"{room.id} left the {road} road"
+
+    def test_they_join_the_random_pool_instead_of_replacing_it(self):
+        """Biasing generation has failed twice in this file — it raises the average
+        candidate and lowers the best. The random stream must be untouched."""
+        from app.solver import footprint, shortlist_for
+        import app.solver as solver_module
+
+        brief = fallback.parse("30x40 2bhk in Bengaluru")
+        envelope = build_envelope(brief, allow_unverified=True)
+        program = expand(brief, envelope)
+        rooms = program.on_floor(1)
+        bounds = footprint(envelope, rooms)
+        weights = slicing.effective_areas(
+            rooms, (bounds[2] - bounds[0]) * (bounds[3] - bounds[1])
+        )
+
+        with_group = shortlist_for(program, rooms, bounds, weights, envelope, seed=7)
+        saved = solver_module.ROAD_FIRST_CANDIDATES
+        solver_module.ROAD_FIRST_CANDIDATES = 0
+        try:
+            without = shortlist_for(program, rooms, bounds, weights, envelope, seed=7)
+        finally:
+            solver_module.ROAD_FIRST_CANDIDATES = saved
+
+        random_only = [row[1] for row in without]
+        kept = [row[1] for row in with_group if row[1] < solver_module.DEFAULT_CANDIDATES]
+        assert set(random_only) <= set(kept)
+
+
+class TestAJudgeChoosesTheFinishedPlan:
+    """Stage ⑤'s penalty does not measure what ⑦ reports, so the lowest penalty was
+    routinely a plan ⑦ refused. Tested by handing `plan` two candidates directly, so it
+    does not depend on any brief happening to produce that situation."""
+
+    @staticmethod
+    def _two_candidates(monkeypatch):
+        import app.solver as solver_module
+
+        brief = fallback.parse("40x60 3bhk in Bengaluru with pooja room")
+        envelope = build_envelope(brief, allow_unverified=True)
+        program = expand(brief, envelope)
+        real = solver_module.solve(program, envelope, seed=7, keep=2)
+        assert len(real) == 2, "fixture needs two candidates"
+        cheap = real[0].model_copy(update={"score": 10.0})
+        dear = real[1].model_copy(update={"score": 50.0})
+        monkeypatch.setattr(solver_module, "solve", lambda *a, **k: [cheap, dear])
+        return solver_module, brief, envelope, program, cheap, dear
+
+    def test_without_a_judge_the_lowest_penalty_wins(self, monkeypatch):
+        solver_module, brief, envelope, program, cheap, _ = self._two_candidates(monkeypatch)
+        bundle = solver_module.plan(brief, envelope, program, seed=7)
+        assert bundle.layouts[0].score == cheap.score
+
+    def test_a_judge_can_prefer_a_worse_penalty(self, monkeypatch):
+        solver_module, brief, envelope, program, _, dear = self._two_candidates(monkeypatch)
+        bundle = solver_module.plan(
+            brief, envelope, program, seed=7,
+            judge=lambda layout: 0 if layout.score == dear.score else 1,
+        )
+        assert bundle.layouts[0].score == dear.score
+
+    def test_the_real_judge_never_prefers_a_refused_plan(self):
+        """Errors outrank everything below them in the key."""
+        from app.validator import judge
+
+        brief = fallback.parse("40x60 3bhk in Bengaluru with pooja room")
+        envelope = build_envelope(brief, allow_unverified=True)
+        program = expand(brief, envelope)
+        key = judge(program, envelope)
+        for layout in solve(program, envelope, seed=7, keep=4):
+            errors, unusable, unbuildable, warnings, penalty = key(layout)
+            # Refusals lead, and a plan nobody can enter leads the refusals.
+            assert errors >= unusable >= 0
+            assert warnings >= 0 and penalty == layout.score

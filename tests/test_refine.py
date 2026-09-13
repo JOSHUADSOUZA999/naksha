@@ -26,6 +26,23 @@ BRIEFS = {
 }
 
 
+def _foyer_meets_the_road(layout, program, floor) -> bool:
+    """Does any foyer have an exterior wall facing a road?
+
+    If not, stage ⑥ has nowhere to put a front door — the defect is stage ⑤'s placement,
+    and stage ⑦ reports it as an error. The exemption used to be "the plan has rooms
+    below their minimum", which was a stand-in for this and stopped being one the day a
+    30x50 came out with every room legal and its foyer in the middle of the house.
+    """
+    from app.refine import _faces_a_road
+
+    foyers = {r.id for r in program.rooms if r.kind is SpaceKind.FOYER}
+    return any(
+        w.kind is WallKind.EXTERIOR and set(w.rooms) <= foyers and _faces_a_road(w, layout)
+        for w in floor.walls
+    )
+
+
 @pytest.fixture(scope="module")
 def floors():
     """One refined storey per reference brief, solved once and shared."""
@@ -80,9 +97,9 @@ class TestEveryBriefProducesADrawableFloor:
         the 1.30 m a 1.0 m entrance and its clearances need, so the house came out
         sealed. Openings now narrow before they give up.
         """
-        layout, _, floor = floors[name]
+        layout, program, floor = floors[name]
         entrances = [o for o in floor.openings if o.kind is OpeningKind.ENTRANCE]
-        if layout.unbuildable:
+        if layout.unbuildable or not _foyer_meets_the_road(layout, program, floor):
             # A floor stage ⑤ could not lay out legally is exempt. On the 30x40 the
             # foyer ends up with no exterior wall at all — the road-access penalty is
             # outvoted by eight rooms below their minimums — so the missing entrance
@@ -96,12 +113,14 @@ class TestEveryBriefProducesADrawableFloor:
         the wall facing the neighbour would quietly undo it."""
         from app.ir.enums import Facing
 
-        layout, _, floor = floors[name]
+        layout, program, floor = floors[name]
         entrance = next(
             (o for o in floor.openings if o.kind is OpeningKind.ENTRANCE), None
         )
         if entrance is None:
-            assert layout.unbuildable, "only an illegal plan may lack a front door"
+            assert layout.unbuildable or not _foyer_meets_the_road(layout, program, floor), (
+                "a foyer on the road with no front door is stage ⑥'s defect"
+            )
             return
         wall = floor.by_id(entrance.wall_id)
 

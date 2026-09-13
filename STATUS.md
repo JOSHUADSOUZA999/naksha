@@ -12,7 +12,7 @@ Read in this order, then run the commands below:
 
 ```bash
 cd naksha
-.venv/bin/pytest -q                                  # 649 tests, no network, no key
+.venv/bin/pytest -q                                  # 667 tests, no network, no key
 
 # The whole pipeline, to a drawing on disk: ①②③④⑤⑥⑦
 .venv/bin/python -m app.cli -s -e -P --allow-unverified --fallback-only \
@@ -50,35 +50,45 @@ strict vastu` · `20x30 2bhk in Bengaluru` (tight) · `30x40 north facing corner
 
 Where the build actually is.
 
-**Last updated:** 2026-09-13 · 649 tests passing, offline, no key
+**Last updated:** 2026-09-13 · 667 tests passing, offline, no key
 
 > **naksha draws floor plans.** Text in, a dimensioned drawing out: walls with
 > thickness, doors with swings, windows sized to the bye-laws, sanitaryware and beds,
 > and a list of what is wrong with the result. Seven of eight stages are built. **Of the
-> reference plots, one is clean, three are legal with named defects, and five are
-> refused** — and that is the honest count only since 2026-09-13, when looking at the
-> drawings showed stage ⑦ had been calling bad plans clean.
+> nine reference plots, one is clean, four are legal with named defects, and four are
+> refused.** Earlier the same day it was one, three and five — and the one "clean" plan
+> then had no front door.
 
 ## What it produces, per plot
 
-Measured 2026-09-13, seed 7, `--fallback-only`, with ⑦'s six checks.
+Measured 2026-09-13, seed 7, `--fallback-only`, with ⑦'s six checks choosing among ⑤'s
+12 best finished candidates per floor.
 
 | plot | storeys | result |
 |---|---|---|
 | 20x30 2BHK | G+2 | **refused** — 29.3 m² buildable, and the car bay alone is 18 |
-| 25x40 2BHK | G+1 | **clean** |
-| 30x30 2BHK | G+1 | **refused** — car bay off the road · stairs only through the kitchen · upstairs corridor only through a bedroom |
-| 30x40 2BHK | G | **refused** — car bay off the road · second bedroom only through the master |
-| 30x40 3BHK | G+1 | **refused** — the car bay, squeezed to 2.2 m² |
-| 30x40 3BHK `--stilt` | stilt+2 | legal · 4 warnings — living room only through the master bedroom · no bathroom on the top floor · 40 m² staircase |
-| 30x50 3BHK | G | **refused** — car bay off the road · the house is entered through a bedroom |
+| 25x40 2BHK | G+1 | legal · 1 warning — a bathroom and the corridor only through the kitchen |
+| 30x30 2BHK | G+1 | **clean** |
+| 30x40 2BHK | G | **refused** — car bay off the road · second bedroom and its bathroom only through the master |
+| 30x40 3BHK | G+1 | **refused** — car bay squeezed to 1.3 m² · a 0.88 m bathroom · a 0.93 m corridor |
+| 30x40 3BHK `--stilt` | stilt+2 | legal · 1 warning — no bathroom on the top floor |
+| 30x50 3BHK | G | **refused** — car bay off the road · most of the house only through two bedrooms |
 | 40x60 3BHK | G | legal · 1 warning — every bedroom only through the kitchen |
-| 50x80 4BHK | G | legal · 3 warnings — a 27.7 m² bathroom and an 11.2 m² one · study only through a bedroom |
+| 50x80 4BHK | G | legal · 2 warnings — an 18.5 m² foyer, 2.6× its ceiling · hall glazed to 9% |
 
 An **error** is a plan naksha refuses: a room below its statutory minimum measured inside
 its walls, a room with no route to it, or a car bay no driveway reaches. A **warning** is
 legal and wrong: a route through a bedroom or the kitchen, a bedroom floor with no
 bathroom, a room more than twice the size it should ever be, a room short of daylight.
+
+**Two changes moved this table.** ⑤ now also grows *road-first* slicing trees — car bay
+and foyer as a strip along the road, the house behind — as an extra group beside the
+random pool, not instead of it. And ⑤ no longer ships its lowest penalty: it keeps the 12
+best finished candidates per floor and ⑦ picks, refusals first (a house nobody can
+enter worst of all), then unbuildable rooms, warnings, penalty. The penalty alone had
+chosen a 30x50 with no front door. **Judging exposed a hole in ⑦**: a ground floor with
+no entrance was walked from its staircase and could come back clean, and the judge
+preferred it. That 25x40 is the one this table used to call clean.
 
 ## Pipeline
 
@@ -90,7 +100,7 @@ bathroom, a room more than twice the size it should ever be, a room short of day
 | ④ FEASIBILITY | **built** | Explains, and measures each option by running the solver |
 | ⑤ LAYOUT | **built** | Slicing tree (A) + CP-SAT (B). ~1 s a floor |
 | ⑥ REFINE | **built** | Walls, doors, windows, fixtures, porch in the setback |
-| ⑦ VALIDATE | **built** | Circulation · light · legality. Three checks, reported per storey |
+| ⑦ VALIDATE | **built** | Circulation · access · sanitation · size · light · legality, per storey. Also picks ⑤'s plan |
 | ⑧ CRITIC | not started | rerank + rationale, behind a flag — optional by design |
 
 Also built since the last update: `--svg` export, the Konva viewer (runs, Node 20 via
@@ -218,11 +228,12 @@ of it; `--stilt` improves it from 8 errors to 6 and does not make it legal.
 
 ## Next
 
-**1. Fix what ⑦ now reports, in the generators.** Stage ⑦ is honest as of 2026-09-13;
-stages ⑤ and ⑥ are not yet good enough to satisfy it. In order of what it costs a user:
-the car bay off the road (three plots refused) — ⑤ scores it and the penalty loses;
-entering the house through a bedroom; living rooms reached through the master bedroom
-on the stilt plan; bedrooms reached through the kitchen; oversized bathrooms.
+**1. Fix what ⑦ still reports, in the generators.** Road-first trees and ⑦ picking the
+plan cleared the 30x30 and the stilt plan's living-room route. Still open, in order of
+what it costs a user: the car bay off the road on the 30x40 2BHK and the 30x50 — only 2–3
+candidates with the bay on the road dimension legally there, so this is search depth, not
+weighting; routes through the kitchen (25x40, 40x60); no bathroom on the stilt plan's top
+floor; the 50x80's oversized foyer and under-glazed hall.
 
 **2. An editor.** The Konva viewer draws and selects; it does not edit. Decision 3 says
 an edit becomes a *constraint* and the plan is re-solved — never a stored coordinate —
@@ -236,7 +247,7 @@ DXF wants. Open choice: add `ezdxf`, or write ASCII DXF R12 with no new dependen
 
 ## Known imperfections, in priority order
 
-- **Five of nine reference plans are refused and three more carry warnings.** Every
+- **Four of nine reference plans are refused and four more carry warnings.** Every
   defect in the table above is real and was confirmed in the plan data, not only by eye.
 - **The stilt level mislabels its largest room** — a 40 m² staircase beside 5 m² of open
   ground. Question 9.

@@ -449,6 +449,41 @@ the Karnataka version. Cl. 1(3) further splits it: FAR, setback, coverage, heigh
 parking come from the **Master Plan / Zonal Regulations**, not the bye-laws — which is
 why `setbacks_v1.json` remains entirely unverified and is a separate question.
 
+### The car bay off the road was a search problem, not a weight
+
+Three plots were refused because the car bay touched no road. ⑤ already penalised that,
+and the penalty lost, because there was almost nothing better to pick: whether a room
+touches the plot edge is decided by the slicing tree's *shape*, CP-SAT only sizes it,
+and hardly any random tree put the bay on the road and still dimensioned legally.
+`slicing.road_first_tree` builds that shape on purpose — bay and foyer as a strip along
+the road, a random tree for the house behind — and 300 of them are **added** to the
+random pool, whose indices are untouched. Biasing the random pool has failed twice here:
+it raised the average and lowered the best.
+
+Road-first alone made the 25x40 worse by ⑦'s count, because the lowest penalty was no
+longer the plan ⑦ liked. So ⑦ now chooses: `plan(judge=…)` keeps the 12 best finished
+candidates per floor and takes the minimum of `validator.judge` — errors, then errors
+that leave rooms unreachable, then unbuildable rooms, warnings, penalty. The solver
+still imports neither ⑥ nor ⑦; the judge is a function passed in. Unreachable rooms rank
+above other errors because on the 30x50 the tie between two refused plans went to the
+lower penalty, and that was the one with no front door.
+
+### A house with no front door came back clean
+
+⑦'s walk starts where you arrive: the front door on the ground floor, the staircase
+upstairs. The staircase fallback fired on *any* storey with no entrance, so a ground
+floor where ⑥ found no road-facing wall for a door was walked from its stair, reached
+every room, and reported nothing. That did no harm while ⑦ only reported. It did harm as
+soon as ⑦ started picking plans: the judge prefers fewer findings, so a sealed house beat
+one you could enter. **The 25x40 in STATUS as the one clean plot had no entrance** —
+replayed under the old rule it has 0 entrance openings; with the fix the judge picks one
+that has a front door and one warning.
+
+*Lesson: a check people only read can be wrong without anyone acting on it. Once a check
+ranks candidates it is an objective, and the optimiser finds its holes. ⑤'s penalty
+failed the same way. Every signal the judge reads needs a test that breaks a plan on
+purpose, including plans it would call clean.*
+
 ---
 
 ## Corrections to things I got wrong
