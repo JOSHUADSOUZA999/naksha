@@ -577,7 +577,9 @@ once for `-P` and again for `-L`: a 30x50 was printed with `mbed` and a WC and d
 The model's answers are recorded in `tests/golden/program_drafts.json` and replayed
 through a scripted provider — how the fix was measured without spending the subscription.
 All four plans (the 30x40 as G+1 and on a stilt, the 30x50, the joint-family 40x60) come
-out with no errors and no warnings on any floor.
+out with no errors and no warnings on any floor. Then live again, once: the 30x40 3BHK with
+`--stilt` took 86 s end to end against 153 s, drew all three storeys, printed the
+programme it drew, and came out with no findings on any floor.
 
 *Lesson: a second front end to a stage needs the same construction function, not a copy
 of some of its arguments. And a path that only runs with credentials needs a recorded

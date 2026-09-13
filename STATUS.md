@@ -128,8 +128,12 @@ seed 7 is a small sample, and the drawings show things ⑦ does not check: a 16.
 staircase on the joint family's first floor, a 30x40 entered through the stair hall, and
 a bathroom and a pooja room opening off a staircase.
 
-Each live brief took 150–200 s end to end, most of it two ③ calls. One of those calls is
-now gone; the saving has not been re-measured live.
+Each live brief took 150–200 s end to end, most of it two ③ calls. **Re-run live after
+the fixes**, the 30x40 3BHK with `--stilt` took 86 s against 153 s, drew three storeys —
+car bay, foyer, stair and open ground; the living floor; the bedroom floor — printed the
+programme it drew, and ⑦ found nothing on any floor. The drawings still show what ⑦ does
+not judge: a corridor on the living floor that leads nowhere, two bedrooms opening off the
+stair landing, and a master bedroom smaller than one of the other bedrooms.
 
 ## Pipeline
 
@@ -278,11 +282,10 @@ bathroom on the stilt plan's top floor; a bathroom reached through the study (50
 The judge counts findings rather than weighing them, so one warning naming six rooms ties
 with one naming one.
 
-**2. Run the model path live again.** Its fixes were measured by replaying recorded
-answers, not by a new live run, and only three briefs have ever been through the model.
-The model's plans beat the offline expansion on all four replays; if that holds over more
-briefs, the offline expansion is the fallback it was meant to be, and the reference
-table above should be measured on the model path.
+**2. Measure the model path over more briefs.** Three briefs have been through the model
+live, the 30x40 twice. Its plans beat the offline expansion on every replay and on the
+live re-run; if that holds over more briefs, the offline expansion is the fallback it was
+meant to be, and the reference table above should be measured on the model path.
 
 **3. An editor.** The Konva viewer draws and selects; it does not edit. Decision 3 says
 an edit becomes a *constraint* and the plan is re-solved — never a stored coordinate —
@@ -301,6 +304,11 @@ DXF wants. Open choice: add `ezdxf`, or write ASCII DXF R12 with no new dependen
 - **Upper-floor staircases absorb surplus area** — 16.7 m² on the joint-family plan's
   first floor. ⑦ says nothing below twice a room's growth ceiling, and a staircase's is
   9.5 m², so the 19 m² line was not crossed.
+- **`fits` says yes when the grown programme is over FAR.** It checks legal minimums
+  against each floor and against FAR, then prints the grown target total beside the FAR
+  budget without comparing the two — on a stilt, "yes — 224.8 m² of 195.1 m² allowed".
+  Three full storeys are over the cap unless stilt parking is exempt from FAR, which is
+  VERIFY.md Q1, so what that line should say waits on the answer.
 - **Results depend on machine load.** Stage B stops each CP-SAT solve at 0.15 s, so a
   busy machine can return a different plan for the same seed: the 40x60 changed when
   nine plots ran at once. Unloaded, three runs gave identical layouts. Measure one plot
