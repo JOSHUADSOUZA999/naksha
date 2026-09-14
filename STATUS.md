@@ -12,7 +12,7 @@ Read in this order, then run the commands below:
 
 ```bash
 cd naksha
-.venv/bin/pytest -q                                  # 688 tests, no network, no key
+.venv/bin/pytest -q                                  # 691 tests, no network, no key
 
 # The whole pipeline, to a drawing on disk: ①②③④⑤⑥⑦
 .venv/bin/python -m app.cli -s -e -P --allow-unverified --fallback-only \
@@ -50,7 +50,7 @@ strict vastu` · `20x30 2bhk in Bengaluru` (tight) · `30x40 north facing corner
 
 Where the build actually is.
 
-**Last updated:** 2026-09-13 · 688 tests passing, offline, no key
+**Last updated:** 2026-09-14 · 691 tests passing, offline, no key
 
 > **naksha draws floor plans.** Text in, a dimensioned drawing out: walls with
 > thickness, doors with swings, windows sized to the bye-laws, sanitaryware and beds,
@@ -62,21 +62,22 @@ Where the build actually is.
 
 ## What it produces, per plot
 
-Measured 2026-09-13, seed 7, `--fallback-only`, with ⑦'s six checks choosing among ⑤'s
-12 best finished candidates per floor — one plot at a time on an idle machine, which
-matters (see Known imperfections). Time is end to end, Python start-up included.
+Measured 2026-09-14, seed 7, `--fallback-only`, with ⑦'s six checks — stairs connecting
+between storeys included — choosing among ⑤'s 12 best finished candidates per floor. A
+seed now replays the same plan on any machine. Time is end to end, Python start-up
+included.
 
 | plot | storeys | result | time |
 |---|---|---|---|
-| 20x30 2BHK | G+2 | **refused** — 29.3 m² buildable and the car bay alone is 18; minimums are 166% of the footprint | 1.7 s |
-| 25x40 2BHK | G+1 | legal · 1 warning — a bathroom, the corridor and the hall only through the kitchen | 2.4 s |
+| 20x30 2BHK | G+2 | **refused** — 29.3 m² buildable and the car bay alone is 18; minimums are 166% of the footprint | 1.2 s |
+| 25x40 2BHK | G+1 | legal · 1 warning — a bathroom, the corridor and the hall only through the kitchen | 2.3 s |
 | 30x30 2BHK | G+1 | **clean** | 2.0 s |
-| 30x40 2BHK | G | legal · 1 warning — both bedrooms, both bathrooms, the corridor and the hall only through the kitchen | 2.4 s |
-| 30x40 3BHK | G+1 | **refused** — minimums are 101% of the footprint; `--stilt` is the answer | 4.8 s |
-| 30x40 3BHK `--stilt` | stilt+2 | legal · 1 warning — no bathroom on the top floor | 3.3 s |
-| 30x50 3BHK | G | legal · 3 warnings — the hall, two bedrooms and a bathroom only through the kitchen · a bathroom only through a bedroom · a bedroom with no window | 3.0 s |
-| 40x60 3BHK | G | legal · 1 warning — two bedrooms, both bathrooms and the corridor only through the kitchen | 2.7 s |
-| 50x80 4BHK | G | legal · 2 warnings — a bathroom only through the study · hall glazed to 8% | 2.9 s |
+| 30x40 2BHK | G | legal · 1 warning — both bedrooms, both bathrooms, the corridor and the hall only through the kitchen | 2.2 s |
+| 30x40 3BHK | G+1 | **refused** — minimums are 101% of the footprint; `--stilt` is the answer | 3.0 s |
+| 30x40 3BHK `--stilt` | stilt+2 | legal · 1 warning — no bathroom on the top floor. Its stairs connect only since 2026-09-14 | 1.3 s |
+| 30x50 3BHK | G | legal · 3 warnings — the hall, two bedrooms and a bathroom only through the kitchen · a bathroom only through a bedroom · a bedroom with no window | 2.8 s |
+| 40x60 3BHK | G | legal · 1 warning — two bedrooms, both bathrooms and the corridor only through the kitchen | 2.6 s |
+| 50x80 4BHK | G | legal · 2 warnings — a bathroom only through the study · hall glazed to 8% | 2.8 s |
 
 An **error** is a plan naksha refuses: a room below its statutory minimum measured inside
 its walls, a room with no route to it, a hall, kitchen or dining room reachable only
@@ -102,6 +103,10 @@ plots still refused for their car bay:
    Past it, road-first trees dimensioned 1 in 100 on the 30x40 2BHK and 1 in 270 on the
    30x50. A floor whose minimums exceed its footprint skips the search, and roomy plots
    never reach it.
+4. **⑦ checks that the stairs connect, and Stage B pulls each upstairs stair over the
+   one below.** The stilt plan here had a first-floor stair metres from the ground-floor
+   one; nothing checked, and it was reported legal. Plans also replay exactly now, since
+   Stage B stops on work rather than on the clock.
 
 ## The model path — first end-to-end runs, 2026-09-13
 
@@ -126,12 +131,16 @@ the 30x40 3BHK as G+1 and on a stilt, the 30x50, and the joint-family 40x60. The
 expansion has warnings on every one of those plots. One recorded answer per brief at
 seed 7 is a small sample, and the drawings show things ⑦ does not check: a 16.7 m²
 staircase on the joint family's first floor, a 30x40 entered through the stair hall, and
-a bathroom and a pooja room opening off a staircase.
+a bathroom and a pooja room opening off a staircase. **Correction, 2026-09-14:** the
+30x50 among them, and the live re-run below, had a stair that missed the stair beneath,
+which ⑦ could not yet see. With the stair check and Stage B's shaft pull, all four
+replays again have no errors and no warnings — now with stairs that connect.
 
 Each live brief took 150–200 s end to end, most of it two ③ calls. **Re-run live after
 the fixes**, the 30x40 3BHK with `--stilt` took 86 s against 153 s, drew three storeys —
 car bay, foyer, stair and open ground; the living floor; the bedroom floor — printed the
-programme it drew, and ⑦ found nothing on any floor. The drawings still show what ⑦ does
+programme it drew, and ⑦ found nothing on any floor — though its top-floor stair missed
+the one below, which ⑦ could not yet see. The drawings still show what ⑦ does
 not judge: a corridor on the living floor that leads nowhere, two bedrooms opening off the
 stair landing, and a master bedroom smaller than one of the other bedrooms.
 
@@ -143,7 +152,7 @@ stair landing, and a master bedroom smaller than one of the other bedrooms.
 | ② ENVELOPE | **built, gated** | Arithmetic done. Refuses without `--allow-unverified` |
 | ③ PROGRAM | **built ×2** | Deterministic expansion *and* an LLM version in `llm/program.py`, first run end to end 2026-09-13 |
 | ④ FEASIBILITY | **built** | Explains, and measures each option by running the solver |
-| ⑤ LAYOUT | **built** | Slicing tree (A) + CP-SAT (B), deeper on thin floors. 1.7–4.8 s a plot end to end |
+| ⑤ LAYOUT | **built** | Slicing tree (A) + CP-SAT (B), deeper on thin floors; a seed replays exactly. 1.2–3.0 s a plot end to end |
 | ⑥ REFINE | **built** | Walls, doors, windows, fixtures, porch in the setback |
 | ⑦ VALIDATE | **built** | Circulation · access · sanitation · size · light · legality, per storey. Also picks ⑤'s plan |
 | ⑧ CRITIC | not started | rerank + rationale, behind a flag — optional by design |
@@ -301,18 +310,15 @@ DXF wants. Open choice: add `ezdxf`, or write ASCII DXF R12 with no new dependen
 
 - **Two of nine reference plans are refused and six more carry warnings.** Every
   defect in the table above is real and was confirmed in the plan data, not only by eye.
-- **Upper-floor staircases absorb surplus area** — 16.7 m² on the joint-family plan's
-  first floor. ⑦ says nothing below twice a room's growth ceiling, and a staircase's is
-  9.5 m², so the 19 m² line was not crossed.
+- **Upper-floor staircases absorb surplus area**, and the shaft pull makes it worse
+  where the tree leaves the stair against a wall the shaft is not on — 17.7 m² on the
+  25x40's first floor. ⑦ says nothing below twice a room's growth ceiling, and a
+  staircase's is 9.5 m², so the 19 m² line is not crossed.
 - **`fits` says yes when the grown programme is over FAR.** It checks legal minimums
   against each floor and against FAR, then prints the grown target total beside the FAR
   budget without comparing the two — on a stilt, "yes — 224.8 m² of 195.1 m² allowed".
   Three full storeys are over the cap unless stilt parking is exempt from FAR, which is
   VERIFY.md Q1, so what that line should say waits on the answer.
-- **Results depend on machine load.** Stage B stops each CP-SAT solve at 0.15 s, so a
-  busy machine can return a different plan for the same seed: the 40x60 changed when
-  nine plots ran at once. Unloaded, three runs gave identical layouts. Measure one plot
-  at a time; see DECISIONS.
 - **The stilt level mislabels its largest room** — a 40 m² staircase beside 5 m² of open
   ground. Question 9.
 - **Every car bay is drawn with a window** where a vehicle opening belongs. Stage ⑥ has

@@ -100,7 +100,7 @@ uv venv --python 3.12 && source .venv/bin/activate
 uv pip install -e ".[dev]"
 cp .env.example .env          # set one key, or NAKSHA_INTENT_PROVIDER=claude_code
 
-pytest                        # 688 tests, no network, no key, and independent
+pytest                        # 691 tests, no network, no key, and independent
                               # of whatever is in your .env — see conftest
 pytest -m live                # real model; needs credentials
 
@@ -319,6 +319,13 @@ CP-SAT fail decision 2's twenty-second test.
   never pays. **`tuning.cannot_fit` skips floors whose minimums exceed the footprint**
   (166% and 101% on the two hopeless plots; the thin ones that solve sit at 89–91%), and
   it shares `gross_minimum_cm2` with the model so the bound cannot drift from it.
+- **Stage B's budget is work, not seconds.** `tune` stops on CP-SAT deterministic time
+  (`TUNE_WORK`). A wall-clock limit stopped most solves wherever the machine had got to,
+  and the same seed gave different plans run to run. Never add a wall-clock cap beside it.
+- **The stair below is a pull in Stage B, not a pin.** `tune(anchors=…)` prices shaft
+  misalignment at `SHAFT_PULL` cm² per cm against target areas; minimums stay
+  constraints. A pin broke other plans twice, and ranking stair misses alone changed
+  nothing, because no candidate had a rectangle over the shaft.
 
 `max_aspect` is per-kind data, not a constant. A corridor is *supposed* to be
 elongated; flagging one as "a corridor, not a corridor" was the rule mistaking the
@@ -398,6 +405,10 @@ that happens to fail — that test goes vacuous the day the pipeline improves.
 - **The hall behind the kitchen is reported.** Both plots the deeper search made legal
   were entered foyer → kitchen → hall and ⑦ said nothing. A dining room behind the
   kitchen is an ordinary arrangement and stays unreported.
+- **Compare a storey with the one below.** Upstairs the walk starts at the stair, and a
+  stair that does not sit over the stair below is no way up — ⑦ refuses it, reading
+  `layout.shafts`. Nothing checked this, and three plans called clean could not be
+  climbed.
 
 ### `llm/`
 

@@ -23,8 +23,8 @@ from app.ir.enums import SpaceKind
 from app.ir.plan import AdjacencySpec, Program, RoomSpec
 from app.ir.layout import Layout
 from app.solver import (
-    ROAD_FIRST_DEPTH, TUNE_SHORTLIST, deeper, footprint, improve, shortlist_for,
-    slicing, tuning,
+    ROAD_FIRST_DEPTH, TUNE_SHORTLIST, TUNE_WORK, deeper, footprint, improve,
+    shortlist_for, slicing, tuning,
 )
 from app.solver.score import score
 
@@ -216,7 +216,7 @@ def _probe(
     )
 
     def legal_plan(tree) -> bool:
-        dimensioned = tuning.tune(tree, bounds, weights, time_limit_s=0.15)
+        dimensioned = tuning.tune(tree, bounds, weights, work_limit=TUNE_WORK)
         if dimensioned is None:
             return False
         try:

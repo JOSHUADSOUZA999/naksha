@@ -94,6 +94,34 @@ def _circulation(layout: Layout, program: Program, floor: RefinedFloor) -> list[
             Finding(check="circulation", severity=Severity.ERROR, message=message)
         ]
 
+    # **A stair that does not sit over the stair below is not a way up.** Upstairs the
+    # walk starts at the staircase, and nothing asked whether that staircase met the one
+    # on the storey beneath. A 30x40 3BHK from the model put the ground-floor stair in
+    # the north-east and the first-floor stair in the north-west, zero overlap, and both
+    # floors came back clean — as did a 30x50, the stilt plans and a 20x30. The judge
+    # trusted that verdict, so a house nobody could climb was free to win. `layout.shafts`
+    # carries the stair the storey below settled on; empty means solved alone, and then
+    # there is nothing to compare with.
+    below = layout.shafts.get(SpaceKind.STAIRCASE)
+    if layout.floor > 1 and below is not None:
+        stairs = [
+            placed for placed in layout.rooms
+            if program_kind(program, placed.room_id) is SpaceKind.STAIRCASE
+        ]
+        if not any(_stacked_share(stair, below) >= _STAIR_LANDING for stair in stairs):
+            ids = sorted(stair.room_id for stair in stairs)
+            return [
+                Finding(
+                    check="circulation",
+                    severity=Severity.ERROR,
+                    message=(
+                        f"{', '.join(ids)} does not sit over the staircase below, "
+                        "so there is no way up to this storey"
+                    ),
+                    rooms=ids,
+                )
+            ]
+
     graph: dict[str, set[str]] = defaultdict(set)
     for opening in floor.openings:
         if opening.kind is not OpeningKind.DOOR or len(opening.connects) != 2:
@@ -382,6 +410,27 @@ def _through_private_rooms(layout, program, floor, graph, start) -> list[Finding
             )
         )
     return findings
+
+
+# How much of the smaller of two stacked stairs they must share to be one flight. A
+# flight arrives where the one below leaves; the storeys tile independently, so the
+# rectangles are never identical to the centimetre, but at half a flight lands a metre
+# off its landing. Measured here, not borrowed from `score` — a guard that shares its
+# implementation with what it guards catches nothing.
+_STAIR_LANDING = 0.75
+
+
+def _stacked_share(upper, lower) -> float:
+    """The fraction of the smaller rectangle that two stacked rooms have in common."""
+    wide = min(upper.x_max_m, lower.x_max_m) - max(upper.x_min_m, lower.x_min_m)
+    tall = min(upper.y_max_m, lower.y_max_m) - max(upper.y_min_m, lower.y_min_m)
+    if wide <= 0 or tall <= 0:
+        return 0.0
+    smaller = min(
+        (upper.x_max_m - upper.x_min_m) * (upper.y_max_m - upper.y_min_m),
+        (lower.x_max_m - lower.x_min_m) * (lower.y_max_m - lower.y_min_m),
+    )
+    return wide * tall / smaller
 
 
 def _ancestors(room: str, parents: dict[str, str], start: str) -> list[str]:

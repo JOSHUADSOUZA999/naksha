@@ -529,6 +529,43 @@ class TestEveryDefectTheDrawingsShowed:
         findings = _circulation(upper, Program(rooms=specs), SimpleNamespace(openings=[door]))
         assert not any(f.severity is Severity.ERROR for f in findings)
 
+    def test_an_upper_floor_whose_stair_misses_the_one_below_has_no_way_up(self):
+        """The model's 30x40 3BHK: the ground-floor stair in the north-east, the
+        first-floor stair in the north-west, zero overlap — and both floors came back
+        clean, because nothing here compared a storey with the one below it."""
+        from types import SimpleNamespace
+
+        from app.ir.enums import OpeningKind
+        from app.ir.layout import PlacedRoom
+        from app.ir.plan import Program
+        from app.validator import _circulation
+
+        layout, specs = self._row(
+            ("stair", SpaceKind.STAIRCASE), ("hall", SpaceKind.HALL), through={"hall"},
+        )
+        floor = SimpleNamespace(
+            openings=[SimpleNamespace(kind=OpeningKind.DOOR, connects=("stair", "hall"))]
+        )
+
+        def stair_below_at(x_min):
+            return {
+                SpaceKind.STAIRCASE: PlacedRoom(
+                    room_id="stair1", x_min_m=x_min, y_min_m=0, x_max_m=x_min + 2.0, y_max_m=3
+                )
+            }
+
+        missed = layout.model_copy(update={"floor": 2, "shafts": stair_below_at(2.0)})
+        findings = _circulation(missed, Program(rooms=specs), floor)
+        assert [f.severity for f in findings] == [Severity.ERROR]
+        assert "no way up" in findings[0].message
+
+        # The same storey with its stair over the one below is an ordinary first floor.
+        landed = layout.model_copy(update={"floor": 2, "shafts": stair_below_at(0.0)})
+        assert not any(
+            f.severity is Severity.ERROR
+            for f in _circulation(landed, Program(rooms=specs), floor)
+        )
+
     def test_a_bedroom_behind_the_kitchen_is_reported(self):
         """The 40x60: every bedroom lay beyond the kitchen. A kitchen is somewhere you
         walk through to a utility, not the way to the bedrooms."""

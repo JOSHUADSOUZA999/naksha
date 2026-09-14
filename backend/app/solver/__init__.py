@@ -62,7 +62,11 @@ ROAD_FIRST_CANDIDATES = 300
 # shortlist dimensioned fewer layouts than `solve` wants. A count rather than a clock,
 # so a seed still replays. About 1.7 s at the full budget; a roomy plot never spends it.
 ROAD_FIRST_DEPTH = 2000
-TUNE_SECONDS = 0.15
+
+# Stage B's budget per topology, in CP-SAT deterministic seconds — work rather than wall
+# time, so a seed replays at any load. 0.1 is what the old 0.15 s wall-clock limit bought
+# on this machine (0.09–0.12 measured at the cut-off), so a plan costs about what it did.
+TUNE_WORK = 0.1
 
 # Tuned candidates to collect before choosing. Was 3, and 3 is too few now that the
 # shortlist interleaves two groups: the first three successes came from whichever
@@ -336,6 +340,16 @@ def _interleave(*groups: list) -> list:
     return merged
 
 
+def _refused(layout: Layout, program: Program) -> int:
+    """What stage ⑦ refuses outright that the choice of candidate can change.
+
+    A car bay or front door off the street, a stair that misses the stair below. Ranked
+    after `unbuildable` and before the penalty — never ahead of a room below its legal
+    minimum, never behind any quantity of preferences.
+    """
+    return _score.off_the_road(layout, program) + _score.off_the_shaft(layout, program)
+
+
 def improve(layout: Layout, program: Program, rounds: int = 4) -> Layout:
     """Hill-climb by swapping which room occupies which rectangle.
 
@@ -364,7 +378,7 @@ def improve(layout: Layout, program: Program, rounds: int = 4) -> Layout:
     """
     best = layout
     best_hard, best_soft, best_reasons = _score.score(best, program)
-    best_off = _score.off_the_road(best, program)
+    best_off = _refused(best, program)
 
     for _ in range(rounds):
         moved = False
@@ -372,10 +386,11 @@ def improve(layout: Layout, program: Program, rounds: int = 4) -> Layout:
             for j in range(i + 1, len(best.rooms)):
                 swapped = _swap(best, i, j)
                 hard, soft, reasons = _score.score(swapped, program)
-                off = _score.off_the_road(swapped, program)
+                off = _refused(swapped, program)
                 # Lexicographic: never accept a swap that makes a room unbuildable,
                 # however many preferences it satisfies in exchange — and after that,
-                # never one that takes the car bay or the front door off the street.
+                # never one that takes the car bay or the front door off the street, or
+                # the stair off the shaft it has to land on.
                 if (hard, off, soft) < (best_hard, best_off, best_soft - 1e-9):
                     best, best_hard, best_soft, best_reasons = swapped, hard, soft, reasons
                     best_off = off
@@ -408,7 +423,7 @@ def solve(
     candidates: int = DEFAULT_CANDIDATES,
     seed: int = 0,
     keep: int = 1,
-    tune_seconds: float = TUNE_SECONDS,
+    tune_work: float = TUNE_WORK,
 ) -> list[Layout]:
     """The best `keep` layouts out of `candidates` random topologies.
 
@@ -441,13 +456,22 @@ def solve(
     # wide*, which is the one thing a slicing tree structurally cannot: across 200
     # generated topologies on a tight ground floor, 0% broke a minimum area and 100%
     # broke a minimum width.
-    tuned: list[tuple[tuple[int, float], int, Layout]] = []
+    # The storey below's shafts, keyed by the room on this floor that has to land on each.
+    # Stage B pulls those rooms towards them; empty on the ground floor.
+    anchors = {
+        room.id: (placed.x_min_m, placed.y_min_m, placed.x_max_m, placed.y_max_m)
+        for room in rooms
+        for kind, placed in (shafts or {}).items()
+        if room.kind is kind
+    }
+
+    tuned: list[tuple[tuple[int, int, float], int, Layout]] = []
     enough = max(keep, TUNE_KEEP)
 
     def dimension(tree) -> Layout | None:
         dimensioned = tuning.tune(
             tree, (x_min_m, y_min_m, x_max_m, y_max_m), weights,
-            time_limit_s=tune_seconds,
+            work_limit=tune_work, anchors=anchors or None,
         )
         if dimensioned is None:
             return None  # this topology cannot be dimensioned legally; try the next
@@ -481,7 +505,7 @@ def solve(
         layout = dimension(tree)
         if layout is None:
             continue
-        tuned.append(((layout.unbuildable, layout.score), index, layout))
+        tuned.append(((layout.unbuildable, _refused(layout, program), layout.score), index, layout))
         # Enough to choose between. Every further attempt costs a full solve, and the
         # marginal candidate rarely wins.
         if len(tuned) >= enough:
@@ -503,7 +527,9 @@ def solve(
             layout = dimension(tree)
             if layout is None:
                 continue
-            tuned.append(((layout.unbuildable, layout.score), past + offset, layout))
+            tuned.append(
+                ((layout.unbuildable, _refused(layout, program), layout.score), past + offset, layout)
+            )
             if len(tuned) >= enough:
                 break
 
@@ -519,7 +545,9 @@ def solve(
         (improve(layout, program), index)
         for _, index, layout, _ in shortlist[: max(keep, IMPROVE_SHORTLIST)]
     ]
-    polished.sort(key=lambda row: (row[0].unbuildable, row[0].score, row[1]))
+    polished.sort(
+        key=lambda row: (row[0].unbuildable, _refused(row[0], program), row[0].score, row[1])
+    )
     return [layout for layout, _ in polished[:keep]]
 
 

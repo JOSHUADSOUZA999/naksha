@@ -402,6 +402,25 @@ def off_the_road(layout: Layout, program: Program) -> int:
     )
 
 
+def off_the_shaft(layout: Layout, program: Program) -> int:
+    """How many shafts on this storey miss the one below.
+
+    A count for the same reason `off_the_road` is one. Stage ⑦ refuses a storey whose
+    stair does not sit over the stair below — there is no way up to it — and as a
+    weighted term it lost: the 30x40 stilt plan and a 30x50 from the model both shipped
+    a first floor whose stair missed the one beneath by metres.
+    """
+    if not layout.shafts:
+        return 0
+    kinds = {room.id: room.kind for room in program.rooms}
+    missed = 0
+    for kind, below in layout.shafts.items():
+        here = [placed for placed in layout.rooms if kinds.get(placed.room_id) is kind]
+        if here and not any(_overlap(placed, below) >= ALIGNMENT for placed in here):
+            missed += 1
+    return missed
+
+
 def _on_a_road_edge(placed, layout: Layout) -> bool:
     """Does the room touch one of the boundaries that fronts a road?
 

@@ -549,9 +549,9 @@ layout".
 Stage B stops each CP-SAT solve at 0.15 s. On an idle machine the result replays — three
 sequential runs of the 40x60 produced identical layouts — but with nine plots measured at
 once the 40x60 came back as a different plan, because a solve cut short by load keeps a
-different incumbent. **Not fixed.** CP-SAT's deterministic time limit
-(`max_deterministic_time`) is the likely answer and is untested. Until then, measure one
-plot at a time.
+different incumbent. **Fixed on 2026-09-14** by exactly that: Stage B now stops on
+CP-SAT's deterministic time — see "Stage B's wall-clock limit gave the same seed different
+plans" below.
 
 ### The model path had never run end to end, and every plan it drew had no front door
 
@@ -585,9 +585,68 @@ programme it drew, and came out with no findings on any floor.
 of some of its arguments. And a path that only runs with credentials needs a recorded
 replay, or nothing offline ever exercises it.*
 
+### Nothing checked that the stairs connect
+
+A 30x40 3BHK from the model came back with the ground-floor stair in the north-east and
+the first-floor stair in the north-west, zero overlap, and ⑦ called both floors clean.
+Upstairs ⑦ walked the storey from its staircase and never compared that staircase with the
+one beneath. `score` knew — `does not land on the staircase on the floor below` — but as
+a penalty, and a penalty loses. Checked afterwards, the same hole had passed the 30x40
+stilt plan in the reference table, the 30x50 replay and the live stilt run.
+
+⑦ now compares each upper storey's stair with `layout.shafts`, the stair the storey below
+settled on, and refuses one sharing less than three-quarters of the smaller footprint:
+"no way up to this storey". It counts with the unreachable-room errors in the judge. The
+overlap is computed in ⑦ itself rather than borrowed from `score`.
+
+### Stage B's wall-clock limit gave the same seed different plans
+
+A test failed on a plan that had passed minutes earlier. The same brief, seed and process,
+three runs: the same plan twice and a different one the third time, with the stair
+connecting on one and not the others. One worker and a fixed seed were not enough — 22 of
+25 CP-SAT solves on the 30x50 stopped at the 0.15 s wall-clock limit rather than at
+optimality, so where each one stopped depended on how fast the machine was at that moment
+(one took 42 s of wall time). Stage B now stops on deterministic time, a budget of work:
+0.1, which is what 0.15 s bought on this machine (0.09–0.12 measured at the cut-off).
+Repeated runs are identical and a plan costs about what it did. This fixes the entry above
+about the same seed giving a different plan on a busy machine.
+
+### The shaft as a preference in Stage B, measured
+
+Ranking stair misses like road misses — in the climb and the final sort — changed nothing
+on any of ten plans. No candidate upstairs had a rectangle over the shaft to swap the stair
+into, because Stage B could not see the shaft. Question 9 had already recorded that
+pinning it as a constraint breaks other plans, and recommended a preference Stage B can
+trade. `tune` now takes `anchors` — for an upstairs staircase, the stair below — and prices
+each cm of edge misalignment at `SHAFT_PULL` cm² of target-area deviation. Legal minimums
+are constraints and cannot be traded.
+
+Over ten plans, five offline and five from recorded model answers:
+
+| pull | plans whose stair misses the one below | note |
+|---|---|---|
+| 0 | 2 — the 30x40 stilt, the model's 30x50 | |
+| 200 | 1 — the 30x40 stilt | |
+| 1000 | 1 — the 30x40 stilt | |
+| 2000 | 0 | |
+| 3000 | 0 | the 30x50 gains a warning |
+| 5000 | 0 | |
+
+2000 is the smallest that connects every solvable plan, and it adds no errors or warnings
+anywhere. The cost is a larger upper staircase where the tree leaves the stair against a
+wall the shaft is not on — 8.6 to 17.7 m² on the 25x40 — while the model's 30x40 stair
+shrank from 20.1 to 8.8 m² and the joint-family 40x60's from 16.9 to 10.8.
+
 ---
 
 ## Corrections to things I got wrong
+
+**Three plans I called clean could not be climbed.** On 2026-09-13 I reported the 30x40
+stilt plan as legal with one warning, every replayed model plan as free of errors and
+warnings, and the live stilt re-run as clean. ⑦ could not see whether stairs connect, and
+three of those — the reference stilt plan, the 30x50 replay and the live stilt run — had a
+stair that missed the one below. The findings were accurate to ⑦ and the claims were not
+accurate to the houses. Fixed by the stair check; the counts are re-measured.
 
 **The `claude_code` adapter is not misclassifying.** I reported twice that it treats
 schema failures as transport failures and skips both retries, and that stage ③ would

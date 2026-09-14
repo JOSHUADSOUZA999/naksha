@@ -398,7 +398,7 @@ class TestStageBActuallyReachesTheEnvelope:
 
         out = []
         for _, _, tree in ranked[:60]:
-            dimensioned = tuning.tune(tree, bounds, weights, time_limit_s=2.0)
+            dimensioned = tuning.tune(tree, bounds, weights, work_limit=2.0)
             if dimensioned is not None:
                 out.append(dimensioned)
             if len(out) >= limit:
@@ -992,7 +992,7 @@ class TestTheSearchGoesDeeperWhenTheShortlistRunsShort:
         rng = random.Random(0)
         for _ in range(40):
             tree = slicing.random_tree(rooms, rng, weights)
-            assert tuning.tune(tree, bounds, weights, time_limit_s=0.15) is None
+            assert tuning.tune(tree, bounds, weights, work_limit=0.1) is None
 
     def test_the_deeper_search_replays_from_its_seed(self, monkeypatch):
         """Its own generator, seeded from `seed`: a plan found past the shortlist has to
@@ -1004,6 +1004,59 @@ class TestTheSearchGoesDeeperWhenTheShortlistRunsShort:
         a = solve(program, envelope, seed=7)[0]
         b = solve(program, envelope, seed=7)[0]
         assert a.model_dump() == b.model_dump()
+
+
+class TestTheShaftIsAPreferenceStageBTrades:
+    """Stage B could not see the stair below, so no candidate upstairs even had a
+    rectangle over it: ⑦ refused the 30x40 stilt plan and a 30x50 from the model for a
+    first floor with no way up. Pinning the shaft as a constraint broke other plans twice
+    (DECISIONS question 9). A pull in the objective moves the stair without either
+    failure — and legal minimums, being constraints, still hold against it."""
+
+    @staticmethod
+    def _strip():
+        """A stair and a hall side by side in 10 x 3 m, with targets that put the cut
+        at x = 3 m when nothing else pulls."""
+        from app.ir.enums import SpaceKind
+        from app.ir.plan import RoomSpec
+        from app.solver.slicing import Cut, Leaf
+
+        def spec(room_id, kind, target):
+            return RoomSpec(
+                id=room_id, kind=kind, min_area_sq_m=4.0, target_area_sq_m=target,
+                min_width_m=1.0, max_aspect=10.0,
+            )
+
+        stair = spec("stair", SpaceKind.STAIRCASE, 9.0)
+        hall = spec("hall", SpaceKind.HALL, 21.0)
+        tree = Cut(vertical=True, left=Leaf(stair, 9.0), right=Leaf(hall, 21.0))
+        return tree, {"stair": 9.0, "hall": 21.0}, (0.0, 0.0, 10.0, 3.0)
+
+    @staticmethod
+    def _stair(rooms):
+        return next(room for room in rooms if room.room_id == "stair")
+
+    def test_the_stair_moves_to_the_shaft_below(self):
+        from app.solver import tuning
+
+        tree, targets, bounds = self._strip()
+        free = tuning.tune(tree, bounds, targets, work_limit=2.0)
+        pulled = tuning.tune(
+            tree, bounds, targets, work_limit=2.0, anchors={"stair": (0.0, 0.0, 5.0, 3.0)}
+        )
+        assert abs(self._stair(free).x_max_m - 3.0) < 0.05  # the target decides alone
+        assert abs(self._stair(pulled).x_max_m - 5.0) < 0.05  # the shaft decides with it
+
+    def test_a_pull_never_makes_the_stair_illegal(self):
+        """Asked to land on a shaft half a metre wide, the stair keeps its legal width."""
+        from app.solver import tuning
+
+        tree, targets, bounds = self._strip()
+        pulled = tuning.tune(
+            tree, bounds, targets, work_limit=2.0, anchors={"stair": (0.0, 0.0, 0.5, 3.0)}
+        )
+        stair = self._stair(pulled)
+        assert stair.x_max_m - stair.x_min_m >= 1.0 + 2 * tuning._exterior_half() - 0.01
 
 
 class TestAJudgeChoosesTheFinishedPlan:

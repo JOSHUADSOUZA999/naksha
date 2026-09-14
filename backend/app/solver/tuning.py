@@ -34,6 +34,14 @@ from .slicing import Cut, Leaf, Node
 # precision nobody can build to, and metres cannot be integers.
 _PER_M = 100
 
+# cm² of target-area deviation one cm of shaft misalignment is worth — in effect "land on
+# the shaft, then size the rooms", with legal minimums still constraints. Measured over
+# ten plans at 0, 200, 1000, 2000, 3000 and 5000: 2000 is the smallest that puts every
+# solvable plan's stair over the stair below (the 30x40 stilt still missed at 1000), with
+# no new errors or warnings. The cost is a larger upper stair where the tree leaves the
+# stair against a wall the shaft is not on: 8.6 to 17.7 m² on the 25x40.
+SHAFT_PULL = 2000
+
 
 @functools.lru_cache(maxsize=1)
 def _exterior_half() -> float:
@@ -78,12 +86,22 @@ def tune(
     bounds: tuple[float, float, float, float],
     targets: dict[str, float],
     *,
-    time_limit_s: float = 2.0,
+    work_limit: float = 2.0,
+    anchors: dict[str, tuple[float, float, float, float]] | None = None,
 ) -> list[PlacedRoom] | None:
     """Choose cut positions so every room is legal. None if this topology cannot be.
 
     `targets` is what each room should get if the geometry allows — the objective
     pulls towards it, the constraints refuse to break the law for it.
+
+    `work_limit` is CP-SAT *deterministic* time, not seconds: it counts work, so the
+    same tree gives the same rectangles on any machine at any load.
+
+    `anchors` pulls a room's rectangle towards a fixed one — for a staircase upstairs, the
+    stair the storey below settled on. A preference traded against target areas, never a
+    constraint: pinning shafts as constraints was tried twice and broke other plans
+    (DECISIONS question 9), while leaving Stage B blind to the shaft meant no candidate
+    upstairs even had a rectangle over it.
     """
     model = cp_model.CpModel()
     # Inwards, not nearest. The grid must sit *inside* the bounds so that snapping a
@@ -121,12 +139,38 @@ def tune(
         deviation = model.NewIntVar(0, (x1 - x0) * (y1 - y0), f"dev_{spec.id}")
         model.AddAbsEquality(deviation, area - want)
         deviations.append(deviation)
-    model.Minimize(sum(deviations))
+    # **The shaft, as a preference.** Each anchored edge's distance from where it should
+    # land, in cm, priced at SHAFT_PULL cm² of target-area deviation. Legal minimums are
+    # untouched — they are constraints — so a pull can reshape a floor but never make a
+    # room illegal.
+    pulls = []
+    for spec, left, bottom, _, width, depth in leaves:
+        anchor = (anchors or {}).get(spec.id)
+        if anchor is None:
+            continue
+        ax0, ay0, ax1, ay1 = (round(v * _PER_M) for v in anchor)
+        for n, (edge, aim) in enumerate(
+            ((left, ax0), (left + width, ax1), (bottom, ay0), (bottom + depth, ay1))
+        ):
+            if isinstance(edge, int):
+                continue  # an outer bound: nothing the solver can move
+            gap = model.NewIntVar(0, 100_000, f"pull_{spec.id}_{n}")
+            model.AddAbsEquality(gap, edge - aim)
+            pulls.append(gap)
+    model.Minimize(sum(deviations) + SHAFT_PULL * sum(pulls))
 
     solver = cp_model.CpSolver()
-    solver.parameters.max_time_in_seconds = time_limit_s
     # Determinism matters more here than the last few percent of quality: a plan you
     # cannot reproduce is one two people cannot discuss.
+    #
+    # **A budget of work, not of seconds.** One worker and a fixed seed were not enough.
+    # Most solves on a busy floor stop at their limit, not at optimality — 22 of 25 on a
+    # 30x50 — and a wall-clock limit stops them wherever the machine happened to have got
+    # to. The same brief, seed and process gave a plan whose stairs met on one run and
+    # missed on the next, and a test flipped with it. Deterministic time counts work, so
+    # the solver stops at the same point every time. There is no wall-clock cap beside
+    # it: one that ever bound would bring the variance straight back.
+    solver.parameters.max_deterministic_time = work_limit
     solver.parameters.num_workers = 1
     solver.parameters.random_seed = 0
 
