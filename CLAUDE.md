@@ -87,6 +87,7 @@ naksha/
                  test_clarify · test_envelope · test_schema_enforcement
                  test_program · test_feasibility · test_solver
                  test_refine · test_validator · test_llm_program · golden/
+                 benchmark/  the 14-plan regression set: cases, runner, baseline
 ```
 
 Not yet built, at their eventual paths: `store/` · `api/`.
@@ -105,6 +106,8 @@ cp .env.example .env          # set one key, or NAKSHA_INTENT_PROVIDER=claude_co
 pytest                        # 733 tests, no network, no key, and independent
                               # of whatever is in your .env — see conftest
 pytest -m live                # real model; needs credentials
+pytest -m benchmark           # the 14-plan regression set, ~40 s — run after any
+                              # solver, search or circulation change; see tests/benchmark
 
 naksha-intent "30x40 east facing site in Whitefield, 3BHK with pooja room"
 naksha-intent -i              # interactive

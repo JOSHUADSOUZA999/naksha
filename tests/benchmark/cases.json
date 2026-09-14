@@ -1,0 +1,20 @@
+{
+  "_note": "The 14 plans every solver, search or circulation change is measured on. `source` says where the room programme comes from: `offline` expands the brief with program.expand; `recorded` replays a model answer from tests/golden/program_drafts.json; `live` replays a programme from tests/golden/live_programs.json. Briefs are parsed offline, and every case is solved with the production judge at `seed`.",
+  "seed": 7,
+  "cases": [
+    {"id": "20x30-2bhk", "source": "offline", "brief": "20x30 2bhk in Bengaluru"},
+    {"id": "25x40-2bhk", "source": "offline", "brief": "25x40 2bhk in Bengaluru"},
+    {"id": "30x30-2bhk", "source": "offline", "brief": "30x30 2bhk in Bengaluru"},
+    {"id": "30x40-2bhk", "source": "offline", "brief": "30x40 2bhk in Bengaluru"},
+    {"id": "30x40-3bhk", "source": "offline", "brief": "30x40 east facing site in Whitefield, Bengaluru, 3BHK with pooja room"},
+    {"id": "30x40-3bhk-stilt", "source": "offline", "brief": "30x40 east facing site in Whitefield, Bengaluru, 3BHK with pooja room", "stilt": true},
+    {"id": "30x50-3bhk", "source": "offline", "brief": "30x50 3bhk in Bengaluru"},
+    {"id": "40x60-3bhk", "source": "offline", "brief": "40x60 3bhk in Bengaluru with pooja room"},
+    {"id": "50x80-4bhk", "source": "offline", "brief": "50x80 4bhk in Bengaluru with study"},
+    {"id": "model-30x40-3bhk", "source": "recorded", "brief": "30x40 east facing site in Whitefield, Bengaluru, 3BHK with pooja room"},
+    {"id": "model-30x50-3bhk", "source": "recorded", "brief": "30x50 3bhk in Bengaluru"},
+    {"id": "model-40x60-joint-family", "source": "recorded", "brief": "40x60 for a joint family in Bengaluru"},
+    {"id": "live-whitefield-30x40-3bhk", "source": "live"},
+    {"id": "live-jpnagar-40x60-4bhk", "source": "live"}
+  ]
+}

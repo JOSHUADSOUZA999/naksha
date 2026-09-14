@@ -1,0 +1,259 @@
+{
+  "_note": "Accepted results of tests/benchmark/cases.json. Rewrite only deliberately, after reading what changed: `.venv/bin/python tests/benchmark/benchmark_plans.py --write`. `seconds` is recorded for information and never compared.",
+  "rulesets": {
+    "spaces_v1": "spaces_v1@a67e18",
+    "refine_v1": "refine_v1@665846",
+    "setbacks_v1": "setbacks_v1@90b243"
+  },
+  "cases": [
+    {
+      "id": "20x30-2bhk",
+      "floors": 3,
+      "errors": 11,
+      "warnings": 2,
+      "by_check": {
+        "access": 1,
+        "circulation": 3,
+        "legality": 8,
+        "light": 1
+      },
+      "zones_met": 3,
+      "zones_wanted": 9,
+      "two_sided_air": 1,
+      "air_rooms": 4,
+      "no_air": 1,
+      "baths_vented": 2,
+      "baths": 2,
+      "geometry": "46df80da5bd720b17f3078571c6bb662ff9a03acb78ddbbc2ec2389c632ffd37",
+      "seconds": 0.62
+    },
+    {
+      "id": "25x40-2bhk",
+      "floors": 2,
+      "errors": 0,
+      "warnings": 2,
+      "by_check": {
+        "circulation": 2
+      },
+      "zones_met": 3,
+      "zones_wanted": 8,
+      "two_sided_air": 3,
+      "air_rooms": 4,
+      "no_air": 0,
+      "baths_vented": 2,
+      "baths": 2,
+      "geometry": "a94adc79fd158326b09a7f0ef5dcb40eb26f2a496305974cbf001a71aed2bbc8",
+      "seconds": 3.46
+    },
+    {
+      "id": "30x30-2bhk",
+      "floors": 2,
+      "errors": 0,
+      "warnings": 1,
+      "by_check": {
+        "sanitation": 1
+      },
+      "zones_met": 3,
+      "zones_wanted": 8,
+      "two_sided_air": 3,
+      "air_rooms": 4,
+      "no_air": 0,
+      "baths_vented": 2,
+      "baths": 2,
+      "geometry": "4f6c7d9f593997c9c54319a2e959c7d3ad15ef10f04d7a59b87e599f4ff55a4e",
+      "seconds": 1.68
+    },
+    {
+      "id": "30x40-2bhk",
+      "floors": 1,
+      "errors": 0,
+      "warnings": 2,
+      "by_check": {
+        "circulation": 2
+      },
+      "zones_met": 1,
+      "zones_wanted": 6,
+      "two_sided_air": 1,
+      "air_rooms": 4,
+      "no_air": 0,
+      "baths_vented": 2,
+      "baths": 2,
+      "geometry": "4b517e52427c6fb69ba6e9b74888bdb8de3b70b8226ce4446376753dc9a94d20",
+      "seconds": 3.42
+    },
+    {
+      "id": "30x40-3bhk",
+      "floors": 2,
+      "errors": 5,
+      "warnings": 1,
+      "by_check": {
+        "access": 1,
+        "circulation": 1,
+        "legality": 3,
+        "sanitation": 1
+      },
+      "zones_met": 1,
+      "zones_wanted": 11,
+      "two_sided_air": 2,
+      "air_rooms": 6,
+      "no_air": 0,
+      "baths_vented": 2,
+      "baths": 2,
+      "geometry": "2ae07762bec888015a3b3b35264964909b891957b83b3d43838e62ffb530d5f3",
+      "seconds": 0.98
+    },
+    {
+      "id": "30x40-3bhk-stilt",
+      "floors": 3,
+      "errors": 0,
+      "warnings": 1,
+      "by_check": {
+        "sanitation": 1
+      },
+      "zones_met": 3,
+      "zones_wanted": 12,
+      "two_sided_air": 4,
+      "air_rooms": 6,
+      "no_air": 0,
+      "baths_vented": 2,
+      "baths": 2,
+      "geometry": "e197c9285537838a92459d102b1080331a0a2fa919e3b76dae6ee1e46ce19eb5",
+      "seconds": 0.71
+    },
+    {
+      "id": "30x50-3bhk",
+      "floors": 1,
+      "errors": 0,
+      "warnings": 4,
+      "by_check": {
+        "circulation": 3,
+        "light": 1
+      },
+      "zones_met": 2,
+      "zones_wanted": 8,
+      "two_sided_air": 1,
+      "air_rooms": 6,
+      "no_air": 1,
+      "baths_vented": 2,
+      "baths": 2,
+      "geometry": "ce04b05e9429b9cd8c16beb2376b88089a5dd38ebca1c064d4a3116a26db5fc5",
+      "seconds": 4.12
+    },
+    {
+      "id": "40x60-3bhk",
+      "floors": 1,
+      "errors": 0,
+      "warnings": 0,
+      "by_check": {},
+      "zones_met": 0,
+      "zones_wanted": 9,
+      "two_sided_air": 1,
+      "air_rooms": 6,
+      "no_air": 0,
+      "baths_vented": 2,
+      "baths": 2,
+      "geometry": "814c1029ff5e1dfb2a42c34d88ed9d6e8300b90098f870ed026e867eca526fed",
+      "seconds": 2.08
+    },
+    {
+      "id": "50x80-4bhk",
+      "floors": 1,
+      "errors": 0,
+      "warnings": 1,
+      "by_check": {
+        "size": 1
+      },
+      "zones_met": 3,
+      "zones_wanted": 11,
+      "two_sided_air": 2,
+      "air_rooms": 8,
+      "no_air": 0,
+      "baths_vented": 3,
+      "baths": 3,
+      "geometry": "10b64e59c5da99c081f36e611b9c80c1add8ef51d27e12c13b2dfea6d01f9c20",
+      "seconds": 2.31
+    },
+    {
+      "id": "model-30x40-3bhk",
+      "floors": 2,
+      "errors": 0,
+      "warnings": 0,
+      "by_check": {},
+      "zones_met": 3,
+      "zones_wanted": 12,
+      "two_sided_air": 4,
+      "air_rooms": 5,
+      "no_air": 0,
+      "baths_vented": 2,
+      "baths": 2,
+      "geometry": "eed88b1e48d997b987754c3ec627709dcd56716181dd4aacd37f813779367968",
+      "seconds": 2.55
+    },
+    {
+      "id": "model-30x50-3bhk",
+      "floors": 2,
+      "errors": 0,
+      "warnings": 0,
+      "by_check": {},
+      "zones_met": 3,
+      "zones_wanted": 11,
+      "two_sided_air": 3,
+      "air_rooms": 6,
+      "no_air": 0,
+      "baths_vented": 2,
+      "baths": 2,
+      "geometry": "f91eee20fedc34eda07459d58314fb8bde7d6e4ae6c05cf91f98e3ee9a4d61f5",
+      "seconds": 2.97
+    },
+    {
+      "id": "model-40x60-joint-family",
+      "floors": 2,
+      "errors": 0,
+      "warnings": 0,
+      "by_check": {},
+      "zones_met": 4,
+      "zones_wanted": 13,
+      "two_sided_air": 1,
+      "air_rooms": 7,
+      "no_air": 0,
+      "baths_vented": 3,
+      "baths": 3,
+      "geometry": "8523e99faa52ab63fa10d47cc3d4d9617043725de977b083dbb1ed15499f7d7a",
+      "seconds": 3.72
+    },
+    {
+      "id": "live-whitefield-30x40-3bhk",
+      "floors": 2,
+      "errors": 0,
+      "warnings": 0,
+      "by_check": {},
+      "zones_met": 3,
+      "zones_wanted": 12,
+      "two_sided_air": 2,
+      "air_rooms": 5,
+      "no_air": 0,
+      "baths_vented": 2,
+      "baths": 2,
+      "geometry": "6bf25c480a77bc3b3d529463707d208fbe048db07129a18faa73d55cbf4c8533",
+      "seconds": 2.51
+    },
+    {
+      "id": "live-jpnagar-40x60-4bhk",
+      "floors": 2,
+      "errors": 0,
+      "warnings": 1,
+      "by_check": {
+        "circulation": 1
+      },
+      "zones_met": 6,
+      "zones_wanted": 14,
+      "two_sided_air": 3,
+      "air_rooms": 7,
+      "no_air": 1,
+      "baths_vented": 3,
+      "baths": 3,
+      "geometry": "c0b2e4bd4025e2848f66c7d1f2069d6fb5d2db750f68644eca3f0522a0d5655f",
+      "seconds": 3.82
+    }
+  ]
+}

@@ -1,0 +1,871 @@
+{
+  "_note": "Stage 3 programmes the real model wrote on live runs through the Claude subscription (claude_code provider), kept so the benchmark can replay them offline. Rooms are rebuilt from the current rules with program.spec_for, keeping only what the model decided: id, kind, floor, sector and target sizes, plus its relationships. The envelope is the one the live run used.",
+  "programmes": {
+    "live-whitefield-30x40-3bhk": {
+      "brief_text": "30*40 3bhk  east facing side in white field with pooja room",
+      "envelope": {
+        "x_min_m": 0.97536,
+        "y_min_m": 0.7315200000000001,
+        "x_max_m": 10.72896,
+        "y_max_m": 8.41248,
+        "setbacks": {
+          "north": 0.7315200000000001,
+          "east": 1.4630400000000001,
+          "south": 0.7315200000000001,
+          "west": 0.97536
+        },
+        "plot_area_sq_m": 111.483648,
+        "max_coverage": 0.75,
+        "max_far": 1.75,
+        "max_floors": 4,
+        "road_width_m": 9.0,
+        "road_edges": [
+          "east"
+        ],
+        "ruleset": "setbacks_v1@90b243",
+        "authority": "BBMP",
+        "east_west_m": 9.7536,
+        "north_south_m": 7.680960000000001,
+        "area_sq_m": 74.91701145600001,
+        "max_footprint_sq_m": 74.91701145600001,
+        "max_built_area_sq_m": 195.096384
+      },
+      "program": {
+        "rooms": [
+          {
+            "id": "foyer",
+            "kind": "foyer",
+            "min_area_sq_m": 2.0,
+            "target_area_sq_m": 4.03033885257143,
+            "max_target_sq_m": 7.0,
+            "min_width_m": 1.2,
+            "max_aspect": 3.0,
+            "sector": "east",
+            "sector_is_hard": false,
+            "needs_exterior_wall": false,
+            "is_through_route": true,
+            "outside_envelope": false,
+            "needs_door": true,
+            "needs_road_access": true,
+            "floor": 1
+          },
+          {
+            "id": "hall",
+            "kind": "hall",
+            "min_area_sq_m": 9.5,
+            "target_area_sq_m": 21.606185984000003,
+            "max_target_sq_m": 32.0,
+            "min_width_m": 2.4,
+            "max_aspect": 2.5,
+            "sector": "north",
+            "sector_is_hard": false,
+            "needs_exterior_wall": true,
+            "is_through_route": true,
+            "outside_envelope": false,
+            "needs_door": true,
+            "needs_road_access": false,
+            "floor": 1
+          },
+          {
+            "id": "kitchen",
+            "kind": "kitchen",
+            "min_area_sq_m": 5.0,
+            "target_area_sq_m": 10.287923565714287,
+            "max_target_sq_m": 14.0,
+            "min_width_m": 1.8,
+            "max_aspect": 2.5,
+            "sector": "south_east",
+            "sector_is_hard": false,
+            "needs_exterior_wall": true,
+            "is_through_route": true,
+            "outside_envelope": false,
+            "needs_door": true,
+            "needs_road_access": false,
+            "floor": 1
+          },
+          {
+            "id": "pooja",
+            "kind": "pooja",
+            "min_area_sq_m": 1.5,
+            "target_area_sq_m": 2.8863770697142863,
+            "max_target_sq_m": 4.0,
+            "min_width_m": 1.0,
+            "max_aspect": 2.5,
+            "sector": "north_east",
+            "sector_is_hard": false,
+            "needs_exterior_wall": false,
+            "is_through_route": false,
+            "outside_envelope": false,
+            "needs_door": true,
+            "needs_road_access": false,
+            "floor": 1
+          },
+          {
+            "id": "corr_g",
+            "kind": "corridor",
+            "min_area_sq_m": 2.0,
+            "target_area_sq_m": 6.575847131428574,
+            "max_target_sq_m": 14.0,
+            "min_width_m": 1.0,
+            "max_aspect": 6.0,
+            "sector": null,
+            "sector_is_hard": false,
+            "needs_exterior_wall": false,
+            "is_through_route": true,
+            "outside_envelope": false,
+            "needs_door": true,
+            "needs_road_access": false,
+            "floor": 1
+          },
+          {
+            "id": "stair_g",
+            "kind": "staircase",
+            "min_area_sq_m": 5.0,
+            "target_area_sq_m": 7.643961782857144,
+            "max_target_sq_m": 9.5,
+            "min_width_m": 1.0,
+            "max_aspect": 3.5,
+            "sector": "south",
+            "sector_is_hard": false,
+            "needs_exterior_wall": false,
+            "is_through_route": true,
+            "outside_envelope": false,
+            "needs_door": true,
+            "needs_road_access": false,
+            "floor": 1
+          },
+          {
+            "id": "bath1",
+            "kind": "bathroom",
+            "min_area_sq_m": 1.8,
+            "target_area_sq_m": 3.8863770697142863,
+            "max_target_sq_m": 5.0,
+            "min_width_m": 1.2,
+            "max_aspect": 2.2,
+            "sector": "north_west",
+            "sector_is_hard": false,
+            "needs_exterior_wall": false,
+            "is_through_route": false,
+            "outside_envelope": false,
+            "needs_door": true,
+            "needs_road_access": false,
+            "floor": 1
+          },
+          {
+            "id": "park1",
+            "kind": "car_parking",
+            "min_area_sq_m": 18.0,
+            "target_area_sq_m": 18.0,
+            "max_target_sq_m": null,
+            "min_width_m": 3.0,
+            "max_aspect": 2.2,
+            "sector": "east",
+            "sector_is_hard": false,
+            "needs_exterior_wall": true,
+            "is_through_route": false,
+            "outside_envelope": false,
+            "needs_door": false,
+            "needs_road_access": true,
+            "floor": 1
+          },
+          {
+            "id": "corr_1",
+            "kind": "corridor",
+            "min_area_sq_m": 2.0,
+            "target_area_sq_m": 11.630316080000004,
+            "max_target_sq_m": 14.0,
+            "min_width_m": 1.0,
+            "max_aspect": 6.0,
+            "sector": null,
+            "sector_is_hard": false,
+            "needs_exterior_wall": false,
+            "is_through_route": true,
+            "outside_envelope": false,
+            "needs_door": true,
+            "needs_road_access": false,
+            "floor": 2
+          },
+          {
+            "id": "stair_1",
+            "kind": "staircase",
+            "min_area_sq_m": 5.0,
+            "target_area_sq_m": 8.90757902,
+            "max_target_sq_m": 9.5,
+            "min_width_m": 1.0,
+            "max_aspect": 3.5,
+            "sector": "south",
+            "sector_is_hard": false,
+            "needs_exterior_wall": false,
+            "is_through_route": true,
+            "outside_envelope": false,
+            "needs_door": true,
+            "needs_road_access": false,
+            "floor": 2
+          },
+          {
+            "id": "master",
+            "kind": "master_bedroom",
+            "min_area_sq_m": 9.5,
+            "target_area_sq_m": 20.104252864000003,
+            "max_target_sq_m": 22.0,
+            "min_width_m": 2.4,
+            "max_aspect": 2.5,
+            "sector": "south_west",
+            "sector_is_hard": false,
+            "needs_exterior_wall": true,
+            "is_through_route": false,
+            "outside_envelope": false,
+            "needs_door": true,
+            "needs_road_access": false,
+            "floor": 2
+          },
+          {
+            "id": "bed2",
+            "kind": "bedroom",
+            "min_area_sq_m": 7.5,
+            "target_area_sq_m": 14.815158040000002,
+            "max_target_sq_m": 16.0,
+            "min_width_m": 2.1,
+            "max_aspect": 2.5,
+            "sector": "west",
+            "sector_is_hard": false,
+            "needs_exterior_wall": true,
+            "is_through_route": false,
+            "outside_envelope": false,
+            "needs_door": true,
+            "needs_road_access": false,
+            "floor": 2
+          },
+          {
+            "id": "bed3",
+            "kind": "bedroom",
+            "min_area_sq_m": 7.5,
+            "target_area_sq_m": 14.815158040000002,
+            "max_target_sq_m": 16.0,
+            "min_width_m": 2.1,
+            "max_aspect": 2.5,
+            "sector": "north",
+            "sector_is_hard": false,
+            "needs_exterior_wall": true,
+            "is_through_route": false,
+            "outside_envelope": false,
+            "needs_door": true,
+            "needs_road_access": false,
+            "floor": 2
+          },
+          {
+            "id": "bath2",
+            "kind": "bathroom",
+            "min_area_sq_m": 1.8,
+            "target_area_sq_m": 4.6445474120000005,
+            "max_target_sq_m": 5.0,
+            "min_width_m": 1.2,
+            "max_aspect": 2.2,
+            "sector": "north_west",
+            "sector_is_hard": false,
+            "needs_exterior_wall": false,
+            "is_through_route": false,
+            "outside_envelope": false,
+            "needs_door": true,
+            "needs_road_access": false,
+            "floor": 2
+          }
+        ],
+        "adjacencies": [
+          {
+            "a": "foyer",
+            "b": "hall",
+            "relation": "connected",
+            "hard": true
+          },
+          {
+            "a": "foyer",
+            "b": "park1",
+            "relation": "adjacent",
+            "hard": false
+          },
+          {
+            "a": "hall",
+            "b": "kitchen",
+            "relation": "connected",
+            "hard": true
+          },
+          {
+            "a": "hall",
+            "b": "corr_g",
+            "relation": "connected",
+            "hard": true
+          },
+          {
+            "a": "hall",
+            "b": "pooja",
+            "relation": "connected",
+            "hard": false
+          },
+          {
+            "a": "corr_g",
+            "b": "stair_g",
+            "relation": "connected",
+            "hard": true
+          },
+          {
+            "a": "corr_g",
+            "b": "bath1",
+            "relation": "connected",
+            "hard": true
+          },
+          {
+            "a": "kitchen",
+            "b": "bath1",
+            "relation": "separated",
+            "hard": true
+          },
+          {
+            "a": "kitchen",
+            "b": "bath2",
+            "relation": "separated",
+            "hard": true
+          },
+          {
+            "a": "pooja",
+            "b": "bath1",
+            "relation": "separated",
+            "hard": false
+          },
+          {
+            "a": "corr_1",
+            "b": "stair_1",
+            "relation": "connected",
+            "hard": true
+          },
+          {
+            "a": "corr_1",
+            "b": "master",
+            "relation": "connected",
+            "hard": true
+          },
+          {
+            "a": "corr_1",
+            "b": "bed2",
+            "relation": "connected",
+            "hard": true
+          },
+          {
+            "a": "corr_1",
+            "b": "bed3",
+            "relation": "connected",
+            "hard": true
+          },
+          {
+            "a": "corr_1",
+            "b": "bath2",
+            "relation": "connected",
+            "hard": true
+          }
+        ],
+        "min_area_sq_m": 78.1,
+        "target_area_sq_m": 149.83402291200002
+      }
+    },
+    "live-jpnagar-40x60-4bhk": {
+      "brief_text": "40x60 north facing site in JP Nagar, Bengaluru, 4BHK G+1 with pooja room and parking for 2 cars",
+      "envelope": {
+        "x_min_m": 0.97536,
+        "y_min_m": 1.4630400000000001,
+        "x_max_m": 11.21664,
+        "y_max_m": 16.09344,
+        "setbacks": {
+          "north": 2.19456,
+          "east": 0.97536,
+          "south": 1.4630400000000001,
+          "west": 0.97536
+        },
+        "plot_area_sq_m": 222.967296,
+        "max_coverage": 0.75,
+        "max_far": 1.75,
+        "max_floors": 4,
+        "road_width_m": 9.0,
+        "road_edges": [
+          "north"
+        ],
+        "ruleset": "setbacks_v1@90b243",
+        "authority": "BBMP",
+        "east_west_m": 10.24128,
+        "north_south_m": 14.630400000000002,
+        "area_sq_m": 149.83402291200002,
+        "max_footprint_sq_m": 149.83402291200002,
+        "max_built_area_sq_m": 390.192768
+      },
+      "program": {
+        "rooms": [
+          {
+            "id": "foyer",
+            "kind": "foyer",
+            "min_area_sq_m": 2.0,
+            "target_area_sq_m": 7.0,
+            "max_target_sq_m": 7.0,
+            "min_width_m": 1.2,
+            "min_length_m": null,
+            "max_aspect": 3.0,
+            "sector": "north",
+            "sector_is_hard": false,
+            "needs_exterior_wall": false,
+            "is_through_route": true,
+            "outside_envelope": false,
+            "needs_door": true,
+            "needs_road_access": true,
+            "floor": 1
+          },
+          {
+            "id": "hall",
+            "kind": "hall",
+            "min_area_sq_m": 9.5,
+            "target_area_sq_m": 32.0,
+            "max_target_sq_m": 32.0,
+            "min_width_m": 2.4,
+            "min_length_m": null,
+            "max_aspect": 2.5,
+            "sector": "east",
+            "sector_is_hard": false,
+            "needs_exterior_wall": true,
+            "is_through_route": true,
+            "outside_envelope": false,
+            "needs_door": true,
+            "needs_road_access": false,
+            "floor": 1
+          },
+          {
+            "id": "dining",
+            "kind": "dining",
+            "min_area_sq_m": 7.5,
+            "target_area_sq_m": 18.0,
+            "max_target_sq_m": 18.0,
+            "min_width_m": 2.1,
+            "min_length_m": null,
+            "max_aspect": 2.5,
+            "sector": null,
+            "sector_is_hard": false,
+            "needs_exterior_wall": false,
+            "is_through_route": true,
+            "outside_envelope": false,
+            "needs_door": true,
+            "needs_road_access": false,
+            "floor": 1
+          },
+          {
+            "id": "kitchen",
+            "kind": "kitchen",
+            "min_area_sq_m": 5.0,
+            "target_area_sq_m": 14.0,
+            "max_target_sq_m": 14.0,
+            "min_width_m": 1.8,
+            "min_length_m": null,
+            "max_aspect": 2.5,
+            "sector": "south_east",
+            "sector_is_hard": false,
+            "needs_exterior_wall": true,
+            "is_through_route": true,
+            "outside_envelope": false,
+            "needs_door": true,
+            "needs_road_access": false,
+            "floor": 1
+          },
+          {
+            "id": "pooja",
+            "kind": "pooja",
+            "min_area_sq_m": 1.5,
+            "target_area_sq_m": 4.0,
+            "max_target_sq_m": 4.0,
+            "min_width_m": 1.0,
+            "min_length_m": null,
+            "max_aspect": 2.5,
+            "sector": "north_east",
+            "sector_is_hard": false,
+            "needs_exterior_wall": false,
+            "is_through_route": false,
+            "outside_envelope": false,
+            "needs_door": true,
+            "needs_road_access": false,
+            "floor": 1
+          },
+          {
+            "id": "bath1",
+            "kind": "bathroom",
+            "min_area_sq_m": 1.8,
+            "target_area_sq_m": 5.0,
+            "max_target_sq_m": 5.0,
+            "min_width_m": 1.2,
+            "min_length_m": null,
+            "max_aspect": 2.2,
+            "sector": "west",
+            "sector_is_hard": false,
+            "needs_exterior_wall": false,
+            "is_through_route": false,
+            "outside_envelope": false,
+            "needs_door": true,
+            "needs_road_access": false,
+            "floor": 1
+          },
+          {
+            "id": "corridor1",
+            "kind": "corridor",
+            "min_area_sq_m": 2.0,
+            "target_area_sq_m": 14.0,
+            "max_target_sq_m": 14.0,
+            "min_width_m": 1.0,
+            "min_length_m": null,
+            "max_aspect": 6.0,
+            "sector": null,
+            "sector_is_hard": false,
+            "needs_exterior_wall": false,
+            "is_through_route": true,
+            "outside_envelope": false,
+            "needs_door": true,
+            "needs_road_access": false,
+            "floor": 1
+          },
+          {
+            "id": "stair1",
+            "kind": "staircase",
+            "min_area_sq_m": 5.0,
+            "target_area_sq_m": 9.5,
+            "max_target_sq_m": 9.5,
+            "min_width_m": 1.0,
+            "min_length_m": null,
+            "max_aspect": 3.5,
+            "sector": "south",
+            "sector_is_hard": false,
+            "needs_exterior_wall": false,
+            "is_through_route": true,
+            "outside_envelope": false,
+            "needs_door": true,
+            "needs_road_access": false,
+            "floor": 1
+          },
+          {
+            "id": "car1",
+            "kind": "car_parking",
+            "min_area_sq_m": 18.0,
+            "target_area_sq_m": 18.0,
+            "max_target_sq_m": null,
+            "min_width_m": 3.0,
+            "min_length_m": 6.0,
+            "max_aspect": 2.2,
+            "sector": "north_west",
+            "sector_is_hard": false,
+            "needs_exterior_wall": true,
+            "is_through_route": false,
+            "outside_envelope": false,
+            "needs_door": false,
+            "needs_road_access": true,
+            "floor": 1
+          },
+          {
+            "id": "car2",
+            "kind": "car_parking",
+            "min_area_sq_m": 18.0,
+            "target_area_sq_m": 18.0,
+            "max_target_sq_m": null,
+            "min_width_m": 3.0,
+            "min_length_m": 6.0,
+            "max_aspect": 2.2,
+            "sector": "north",
+            "sector_is_hard": false,
+            "needs_exterior_wall": true,
+            "is_through_route": false,
+            "outside_envelope": false,
+            "needs_door": false,
+            "needs_road_access": true,
+            "floor": 1
+          },
+          {
+            "id": "master",
+            "kind": "master_bedroom",
+            "min_area_sq_m": 9.5,
+            "target_area_sq_m": 22.0,
+            "max_target_sq_m": 22.0,
+            "min_width_m": 2.4,
+            "min_length_m": null,
+            "max_aspect": 2.5,
+            "sector": "south_west",
+            "sector_is_hard": false,
+            "needs_exterior_wall": true,
+            "is_through_route": false,
+            "outside_envelope": false,
+            "needs_door": true,
+            "needs_road_access": false,
+            "floor": 2
+          },
+          {
+            "id": "bed2",
+            "kind": "bedroom",
+            "min_area_sq_m": 7.5,
+            "target_area_sq_m": 16.0,
+            "max_target_sq_m": 16.0,
+            "min_width_m": 2.1,
+            "min_length_m": null,
+            "max_aspect": 2.5,
+            "sector": "west",
+            "sector_is_hard": false,
+            "needs_exterior_wall": true,
+            "is_through_route": false,
+            "outside_envelope": false,
+            "needs_door": true,
+            "needs_road_access": false,
+            "floor": 2
+          },
+          {
+            "id": "bed3",
+            "kind": "bedroom",
+            "min_area_sq_m": 7.5,
+            "target_area_sq_m": 16.0,
+            "max_target_sq_m": 16.0,
+            "min_width_m": 2.1,
+            "min_length_m": null,
+            "max_aspect": 2.5,
+            "sector": "north",
+            "sector_is_hard": false,
+            "needs_exterior_wall": true,
+            "is_through_route": false,
+            "outside_envelope": false,
+            "needs_door": true,
+            "needs_road_access": false,
+            "floor": 2
+          },
+          {
+            "id": "bed4",
+            "kind": "bedroom",
+            "min_area_sq_m": 7.5,
+            "target_area_sq_m": 16.0,
+            "max_target_sq_m": 16.0,
+            "min_width_m": 2.1,
+            "min_length_m": null,
+            "max_aspect": 2.5,
+            "sector": "east",
+            "sector_is_hard": false,
+            "needs_exterior_wall": true,
+            "is_through_route": false,
+            "outside_envelope": false,
+            "needs_door": true,
+            "needs_road_access": false,
+            "floor": 2
+          },
+          {
+            "id": "bath2",
+            "kind": "bathroom",
+            "min_area_sq_m": 1.8,
+            "target_area_sq_m": 5.0,
+            "max_target_sq_m": 5.0,
+            "min_width_m": 1.2,
+            "min_length_m": null,
+            "max_aspect": 2.2,
+            "sector": null,
+            "sector_is_hard": false,
+            "needs_exterior_wall": false,
+            "is_through_route": false,
+            "outside_envelope": false,
+            "needs_door": true,
+            "needs_road_access": false,
+            "floor": 2
+          },
+          {
+            "id": "bath3",
+            "kind": "bathroom",
+            "min_area_sq_m": 1.8,
+            "target_area_sq_m": 5.0,
+            "max_target_sq_m": 5.0,
+            "min_width_m": 1.2,
+            "min_length_m": null,
+            "max_aspect": 2.2,
+            "sector": "north_west",
+            "sector_is_hard": false,
+            "needs_exterior_wall": false,
+            "is_through_route": false,
+            "outside_envelope": false,
+            "needs_door": true,
+            "needs_road_access": false,
+            "floor": 2
+          },
+          {
+            "id": "corridor2",
+            "kind": "corridor",
+            "min_area_sq_m": 2.0,
+            "target_area_sq_m": 14.0,
+            "max_target_sq_m": 14.0,
+            "min_width_m": 1.0,
+            "min_length_m": null,
+            "max_aspect": 6.0,
+            "sector": null,
+            "sector_is_hard": false,
+            "needs_exterior_wall": false,
+            "is_through_route": true,
+            "outside_envelope": false,
+            "needs_door": true,
+            "needs_road_access": false,
+            "floor": 2
+          },
+          {
+            "id": "stair2",
+            "kind": "staircase",
+            "min_area_sq_m": 5.0,
+            "target_area_sq_m": 9.5,
+            "max_target_sq_m": 9.5,
+            "min_width_m": 1.0,
+            "min_length_m": null,
+            "max_aspect": 3.5,
+            "sector": "south",
+            "sector_is_hard": false,
+            "needs_exterior_wall": false,
+            "is_through_route": true,
+            "outside_envelope": false,
+            "needs_door": true,
+            "needs_road_access": false,
+            "floor": 2
+          }
+        ],
+        "adjacencies": [
+          {
+            "a": "foyer",
+            "b": "hall",
+            "relation": "connected",
+            "hard": true
+          },
+          {
+            "a": "hall",
+            "b": "dining",
+            "relation": "connected",
+            "hard": true
+          },
+          {
+            "a": "hall",
+            "b": "kitchen",
+            "relation": "connected",
+            "hard": true
+          },
+          {
+            "a": "dining",
+            "b": "kitchen",
+            "relation": "connected",
+            "hard": false
+          },
+          {
+            "a": "hall",
+            "b": "corridor1",
+            "relation": "connected",
+            "hard": true
+          },
+          {
+            "a": "corridor1",
+            "b": "stair1",
+            "relation": "connected",
+            "hard": true
+          },
+          {
+            "a": "corridor1",
+            "b": "bath1",
+            "relation": "connected",
+            "hard": true
+          },
+          {
+            "a": "hall",
+            "b": "pooja",
+            "relation": "connected",
+            "hard": false
+          },
+          {
+            "a": "foyer",
+            "b": "car1",
+            "relation": "connected",
+            "hard": false
+          },
+          {
+            "a": "car1",
+            "b": "car2",
+            "relation": "adjacent",
+            "hard": true
+          },
+          {
+            "a": "kitchen",
+            "b": "bath1",
+            "relation": "separated",
+            "hard": true
+          },
+          {
+            "a": "kitchen",
+            "b": "bath2",
+            "relation": "separated",
+            "hard": true
+          },
+          {
+            "a": "kitchen",
+            "b": "bath3",
+            "relation": "separated",
+            "hard": true
+          },
+          {
+            "a": "pooja",
+            "b": "bath1",
+            "relation": "separated",
+            "hard": true
+          },
+          {
+            "a": "pooja",
+            "b": "bath2",
+            "relation": "separated",
+            "hard": true
+          },
+          {
+            "a": "pooja",
+            "b": "bath3",
+            "relation": "separated",
+            "hard": true
+          },
+          {
+            "a": "corridor2",
+            "b": "stair2",
+            "relation": "connected",
+            "hard": true
+          },
+          {
+            "a": "master",
+            "b": "corridor2",
+            "relation": "connected",
+            "hard": true
+          },
+          {
+            "a": "bed2",
+            "b": "corridor2",
+            "relation": "connected",
+            "hard": true
+          },
+          {
+            "a": "bed3",
+            "b": "corridor2",
+            "relation": "connected",
+            "hard": true
+          },
+          {
+            "a": "bed4",
+            "b": "corridor2",
+            "relation": "connected",
+            "hard": true
+          },
+          {
+            "a": "master",
+            "b": "bath2",
+            "relation": "connected",
+            "hard": true
+          },
+          {
+            "a": "bath3",
+            "b": "corridor2",
+            "relation": "connected",
+            "hard": true
+          }
+        ],
+        "min_area_sq_m": 112.9,
+        "target_area_sq_m": 243.0
+      }
+    }
+  }
+}

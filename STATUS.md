@@ -13,6 +13,7 @@ Read in this order, then run the commands below:
 ```bash
 cd naksha
 .venv/bin/pytest -q                                  # 733 tests, no network, no key
+.venv/bin/pytest -m benchmark                        # the 14-plan regression set, ~40 s
 
 # The whole pipeline, to a drawing on disk: ①②③④⑤⑥⑦
 .venv/bin/python -m app.cli -s -e -P --allow-unverified --fallback-only \

@@ -45,5 +45,6 @@ testpaths = ["tests"]
 pythonpath = ["backend"]
 markers = [
     "live: hits the real Anthropic API; requires credentials. Deselected by default.",
+    "benchmark: re-runs the 14-plan regression set, about 40 s. Deselected by default; run with -m benchmark.",
 ]
-addopts = "-m 'not live'"
+addopts = "-m 'not live and not benchmark'"
