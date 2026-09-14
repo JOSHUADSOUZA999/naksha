@@ -229,3 +229,105 @@ class Severity(StrEnum):
 
     ERROR = "error"
     WARNING = "warning"
+
+
+class Grade(StrEnum):
+    """How much an architectural finding matters — the finer scale beside `Severity`.
+
+    `Severity` stays the gate every check reports through: an error refuses the plan, a
+    warning is worth a look. A grade says what kind of problem it is, and maps onto it:
+    a critical finding is an error, a major or minor one a warning. Critical is a house
+    that cannot be used the way it must be — a bedroom that is the way into another —
+    major a significant inefficiency or zoning problem, minor an optimisation.
+    """
+
+    CRITICAL = "critical"
+    MAJOR = "major"
+    MINOR = "minor"
+
+    @property
+    def severity(self) -> Severity:
+        return Severity.ERROR if self is Grade.CRITICAL else Severity.WARNING
+
+
+class Zone(StrEnum):
+    """A space's place on the privacy gradient, from the street inwards.
+
+    `SERVICE` runs beside the gradient rather than on it: a kitchen is not more private
+    than a dining room, it is a different kind of room. `EXTERNAL` is the street side
+    of the front door, and a car bay.
+    """
+
+    PUBLIC = "public"
+    SEMI_PUBLIC = "semi_public"
+    SEMI_PRIVATE = "semi_private"
+    PRIVATE = "private"
+    SERVICE = "service"
+    EXTERNAL = "external"
+
+
+class CirculationRole(StrEnum):
+    """What a space is for when someone walks through the house.
+
+    The role decides what passing *through* a room costs — nothing for a corridor, a
+    failure for a bedroom — and the mapping from room kind to role is data, in
+    `circulation_v1`, not a set of kinds written out in code.
+    """
+
+    ARRIVAL = "arrival"
+    CIRCULATION = "circulation"
+    SOCIAL = "social"
+    SERVICE = "service"
+    SACRED = "sacred"
+    WORK = "work"
+    PRIVATE = "private"
+    SANITARY = "sanitary"
+    VEHICLE = "vehicle"
+    OPEN = "open"
+    OUTSIDE = "outside"
+
+
+class EdgeKind(StrEnum):
+    """How two nodes of a circulation graph are joined.
+
+    `FORCED_PASS_THROUGH` is a door that exists and must never be read as good
+    circulation: the only way to a room runs through a room nobody should walk through.
+    It stays drawn so the plan shows what was generated.
+    """
+
+    DIRECT_DOOR = "direct_door"
+    OPEN_CONNECTION = "open_connection"
+    FORCED_PASS_THROUGH = "forced_pass_through"
+    STAIR_CONNECTION = "stair_connection"
+    SERVICE_CONNECTION = "service_connection"
+    EXTERNAL_CONNECTION = "external_connection"
+
+
+class JourneyClass(StrEnum):
+    """Who is walking, which decides the zones the walk should not have to cross."""
+
+    VISITOR = "visitor"
+    RESIDENT = "resident"
+    PRIVATE = "private"
+    SERVICE = "service"
+
+
+class CorridorVerdict(StrEnum):
+    """Whether a corridor earns its area.
+
+    Deliberately not "does removing it strand rooms": a landing serving four bedrooms is
+    supposed to, and is `ESSENTIAL`. The question is whether the circulation does
+    necessary work in a reasonable amount of floor.
+    """
+
+    ESSENTIAL = "essential"
+    EFFICIENT = "efficient"
+    INEFFICIENT = "inefficient"
+    REDUNDANT = "redundant"
+
+
+class Health(StrEnum):
+    GOOD = "good"
+    FAIR = "fair"
+    POOR = "poor"
+    FAIL = "fail"

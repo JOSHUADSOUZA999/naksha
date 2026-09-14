@@ -17,7 +17,8 @@ from typing import Self
 from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
 
 from app.ir.base import DerivedFieldsAreOutputOnly
-from app.ir.enums import Severity
+from app.ir.circulation import CirculationSummary
+from app.ir.enums import Grade, Severity
 
 
 class Finding(BaseModel):
@@ -37,6 +38,33 @@ class Finding(BaseModel):
     severity: Severity
     message: str = Field(min_length=1)
     rooms: list[str] = Field(default_factory=list)
+    grade: Grade | None = Field(
+        default=None,
+        description="Critical, major or minor. Beside `severity`, not instead of it: a "
+        "critical finding is an error, a major or minor one a warning. Inferred from "
+        "the severity when a check does not grade — an error is critical, a warning "
+        "major — so every report written before grades existed still reads.",
+    )
+    rule: str | None = Field(
+        default=None,
+        description="The stable rule that produced it, e.g. `circulation.access`.",
+    )
+    why: str | None = Field(default=None, description="Why it matters, in plain words.")
+    fix: str | None = Field(default=None, description="An architectural correction.")
+    path: list[str] = Field(
+        default_factory=list, description="The route involved, room by room."
+    )
+
+    @model_validator(mode="after")
+    def _grade_agrees_with_severity(self) -> Self:
+        if self.grade is None:
+            self.grade = Grade.CRITICAL if self.severity is Severity.ERROR else Grade.MAJOR
+        elif self.grade.severity is not self.severity:
+            raise ValueError(
+                f"a {self.grade.value} finding is reported as {self.grade.severity.value}, "
+                f"not {self.severity.value}"
+            )
+        return self
 
 
 class Report(DerivedFieldsAreOutputOnly):
@@ -64,6 +92,11 @@ class Report(DerivedFieldsAreOutputOnly):
         default_factory=list,
         description="The same rooms that do not: open to the air on one side, or none.",
     )
+    circulation: CirculationSummary | None = Field(
+        default=None,
+        description="How the storey is walked, and the score no critical failure can "
+        "pass. None in reports written before the circulation engine existed.",
+    )
 
     @model_validator(mode="after")
     def _findings_come_from_checks_that_ran(self) -> Self:
@@ -82,6 +115,21 @@ class Report(DerivedFieldsAreOutputOnly):
     def ok(self) -> bool:
         """No errors. Warnings are things to look at, not things that are wrong."""
         return self.errors == 0
+
+    @computed_field
+    @property
+    def critical(self) -> int:
+        return sum(1 for f in self.findings if f.grade is Grade.CRITICAL)
+
+    @computed_field
+    @property
+    def major(self) -> int:
+        return sum(1 for f in self.findings if f.grade is Grade.MAJOR)
+
+    @computed_field
+    @property
+    def minor(self) -> int:
+        return sum(1 for f in self.findings if f.grade is Grade.MINOR)
 
     def by_check(self, check: str) -> list[Finding]:
         return [f for f in self.findings if f.check == check]

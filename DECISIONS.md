@@ -7,6 +7,15 @@ Append-only. Why the code is shaped the way it is, what broke, and what is still
 
 ## Open questions — these need you, not me
 
+**10. The circulation rules are practice, and need an architect's eye.** Bye-laws say
+nothing about how a house is walked, so every grade and threshold in
+`circulation_v1.json` is residential design practice written down: a corridor wider than
+1.8 m or over 3 m² per door is inefficient, a foyer over 1.3 times 7 m² is oversized,
+corridors and foyers over 22% of a storey are a minor concern and over 28% a major one, a
+walk under 8 m from car porch to front door is minor. They were calibrated against the 14
+generated plans, not against built houses. Which of them would an architect practising in
+Bengaluru move?
+
 **9. A stilt level cannot get both its labels and its staircase right, and the reason
 is structural.**
 
@@ -819,9 +828,55 @@ bye-laws and the architect who stamps the plan will look for that number. `units
 both directions, and the viewer mirrors its two display functions. Nothing stores feet;
 prompts to the model and IR validation errors stay metric.
 
+### Circulation: reachable is not properly reached
+
+⑦ asked one question of a storey, whether every room could be reached, and JP Nagar's
+first floor answered yes while bed2's only door was through bed3 and the master's
+en-suite opened off a second bathroom. It came out as one warning. The circulation engine
+(`backend/app/circulation/`, rules in `circulation_v1.json`) grades access by what the
+best route must cross, so both are critical, and says why in lengths: bed2 shares 0.11 m
+of wall with the corridor, and a door needs 1.05 m.
+
+It was built unwired and run read-only over the benchmark's 26 storeys before anything
+ranks by it. Three calibrations came out of those results:
+
+- **A stair room includes its landing.** The first rule failed three upper floors the
+  benchmark passes, for a shared bathroom opening off the stair beside a proper corridor.
+  Critical now means a stair whose only way on is a bathroom.
+- **A car porch is not a garage.** "The car bay has no door into the house" was major on
+  11 of 14 ground floors. Measured from gate to front door, the walk outside was 2.7–6.7 m
+  along the front in every plan that has a front door, which is how a porch is used. A
+  walk under `outside_walk_m` (8 m) is minor; a longer one, or a way in through rooms, is
+  major.
+- **One defect, one finding.** A house entered through its kitchen came out as an access
+  finding, a reversed arrival and a visitor crossing the service zone, and the walk from
+  front door to kitchen repeated the relationship findings as backtracking. A room whose
+  access is already reported is now left to that finding, and backtracking is reported
+  only when every leg is fine on its own. On the 25x40 that took four majors to one.
+
+Also decided: health is good only with no major finding, because "good" beside a
+significant problem invites the wrong conclusion; and a guest who must use a bedroom's own
+bathroom is seen walking through that bedroom (major), while a shared bathroom behind a
+bedroom fails.
+
+| 26 storeys, read only | good | fair | poor | fail |
+|---|---|---|---|---|
+| circulation engine | 12 | 9 | 0 | 5 |
+
+Three of the five failures are storeys ⑦ already refuses. The two new ones are JP Nagar's
+first floor and the 30x50's ground floor, whose shared bathroom opens only off a bedroom
+though stage ③ connected it to the corridor. What the judge does with that is Step 3,
+measured on the same set.
+
 ---
 
 ## Corrections to things I got wrong
+
+**The JP Nagar car bay was not a major problem.** I listed "the second car bay has no way
+into the house" among the ground floor's major circulation problems, and that list was
+agreed as the regression. Measured, the walk from its gate to the front door is 3.5 m
+along the front: a car porch, like most of the benchmark. It is reported as minor, the
+regression test holds it there, and `parking.outside_walk_m` is where to disagree.
 
 **Three plans I called clean could not be climbed.** On 2026-09-13 I reported the 30x40
 stilt plan as legal with one warning, every replayed model plan as free of errors and

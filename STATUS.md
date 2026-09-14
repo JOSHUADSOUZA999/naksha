@@ -12,7 +12,7 @@ Read in this order, then run the commands below:
 
 ```bash
 cd naksha
-.venv/bin/pytest -q                                  # 733 tests, no network, no key
+.venv/bin/pytest -q                                  # 786 tests, no network, no key
 .venv/bin/pytest -m benchmark                        # the 14-plan regression set, ~40 s
 
 # The whole pipeline, to a drawing on disk: ①②③④⑤⑥⑦
@@ -51,7 +51,7 @@ strict vastu` · `20x30 2bhk in Bengaluru` (tight) · `30x40 north facing corner
 
 Where the build actually is.
 
-**Last updated:** 2026-09-14 · 733 tests passing, offline, no key
+**Last updated:** 2026-09-14 · 786 tests passing, offline, no key
 
 > **naksha draws floor plans.** Text in, a dimensioned drawing out: walls with
 > thickness, doors with swings, windows sized to the bye-laws, a ventilator in every
@@ -304,13 +304,32 @@ of it; `--stilt` improves it from 8 errors to 6 and does not make it legal.
   models and enums *by inspection*, so ③'s `RoomSpec` and `AdjacencySpec` are covered
   the moment they exist.
 
+## Circulation engine — built, tested, not yet wired in
+
+`backend/app/circulation/` asks what ⑦'s reachability walk could not: can a person move
+through the house the way it is meant to be used? For each drawn storey it builds the
+graph of every way through it, grades each room's access by what the best route must
+cross, walks the everyday journeys, judges corridors and foyers by their work, and scores
+seven dimensions that no critical finding can pass. Its rules are
+`rules/circulation_v1.json`, residential practice marked `verified: false`. Nothing calls
+it yet, so the 14-plan benchmark is unchanged.
+
+Read-only over the benchmark's 26 storeys: 12 good, 9 fair, 5 fail. JP Nagar's first floor
+fails on its two real defects (bed2 through bed3, the master's en-suite through a second
+bathroom) and its ground floor passes with five major findings. The 30x50's ground floor
+fails for a shared bathroom that opens only off a bedroom. The other three failures are
+storeys ⑦ already refuses.
+
 ---
 
 ## Next
 
-**Agreed next, in order:** a staircase a person can climb — a minimum size a real stair
-fits in, and the same box on both floors — then the road strip that takes the whole
-frontage. Both are in the imperfections below, found on the JP Nagar 4BHK.
+**Agreed next, in order — the circulation plan.** Step 3: ⑦'s checker and judge read the
+engine, critical circulation ranked first, with the 14-plan table measured before and
+after. Step 4: the viewer's circulation panel. Then door-aware adjacency in ⑤, ranking by
+proper access, the staircase minimum size, a landing-first upper-floor generator, repair
+and fallback, and the docs. The road strip that takes the whole frontage stays in the
+imperfections below.
 
 **1. Make the legal plans good.** Nothing in the reference set is refused any more but
 the two plots whose rooms cannot fit. What ⑦ still reports, by what it costs a user: the

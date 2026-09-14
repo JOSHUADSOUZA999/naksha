@@ -66,12 +66,12 @@ naksha/
     config.py    settings + the .env bridge
     cli.py       naksha-intent entry point
     ir/          models.py · enums.py · units.py · envelope.py · plan.py
-                 layout.py · refined.py · validation.py      ← THE CONTRACT
+                 layout.py · refined.py · validation.py · circulation.py  ← THE CONTRACT
     llm/         intent.py · program.py · fallback.py · client.py · trace.py
                  prompts/    versioned, hashed into provenance
                  providers/  base.py (the seam) · anthropic_api
                              openai_api · claude_code
-    rules/       clarify_v1 · setbacks_v1 · spaces_v1 · refine_v1.json
+    rules/       clarify_v1 · setbacks_v1 · spaces_v1 · refine_v1 · circulation_v1.json
                                                              ← VERSIONED DATA
     envelope/    geometry.py (pure) · __init__.py (lookup + build)
     program/     __init__.py  ③ expansion · stacking · stilt
@@ -80,13 +80,15 @@ naksha/
     refine/      __init__.py  ⑥ walls · doors · windows · fixtures
     validator/   __init__.py  ⑦ circulation · access · sanitation · size · light
                               · ventilation · legality
+    circulation/ graph · topology · journeys · analysis · scoring · diagnose
+                 how a drawn storey is walked; tested, not yet called by ⑦
     export/      svg.py                                   ← DXF/PDF still to come
   frontend/      Vite + React + react-konva viewer        ← NODE 18+ (20 via nvm)
   tests/         test_ir_brief · test_ir_plan · test_units · test_fallback
                  test_intent · test_providers · test_config · test_cli
                  test_clarify · test_envelope · test_schema_enforcement
                  test_program · test_feasibility · test_solver
-                 test_refine · test_validator · test_llm_program · golden/
+                 test_refine · test_validator · test_llm_program · test_circulation · golden/
                  benchmark/  the 14-plan regression set: cases, runner, baseline
 ```
 
@@ -103,7 +105,7 @@ uv venv --python 3.12 && source .venv/bin/activate
 uv pip install -e ".[dev]"
 cp .env.example .env          # set one key, or NAKSHA_INTENT_PROVIDER=claude_code
 
-pytest                        # 733 tests, no network, no key, and independent
+pytest                        # 786 tests, no network, no key, and independent
                               # of whatever is in your .env — see conftest
 pytest -m live                # real model; needs credentials
 pytest -m benchmark           # the 14-plan regression set, ~40 s — run after any
@@ -466,6 +468,40 @@ that happens to fail — that test goes vacuous the day the pipeline improves.
   `Report.cross_ventilated` and `single_sided`, never as a finding: a floor has four
   corners. The judge counts one-sided rooms after missed zones; before them, over
   fourteen plans, it cost five zones and bought a breeze with a windowless bedroom.
+
+### `circulation/` — the engine stage ⑦ will judge circulation with
+
+**Built and tested, not yet wired in.** Nothing in ⑤, ⑥ or ⑦ calls it, so no plan changes
+until the judge reads it, and `pytest -m benchmark` must show the plans unchanged until
+that wiring is measured. `evaluate(layout, program, floor)` returns a
+`CirculationSummary` and graded findings for one drawn storey.
+
+- **Reachable is not properly reached.** A room behind a bedroom is reachable and still a
+  critical failure. Access is graded by the worst room the *best* route must cross, by
+  what that room is for: through a bedroom or bathroom is critical, through the kitchen
+  major.
+- **Everything it believes about a room kind is `circulation_v1.json`**: role, zone, what
+  walking through it costs, the journeys, the relationships, every threshold. No module
+  keeps its own list of private rooms and no rule reads a room's id; a test renames every
+  room in JP Nagar and requires the same verdict.
+- **An en-suite is judged from its own bedroom**, read from stage ③'s `CONNECTED` edge.
+  Opening off the corridor it is a shared bathroom (major); reached through another
+  bathroom it fails.
+- **A corridor is judged by its work.** Removing a landing strands the bedrooms off it,
+  which makes it essential, not wrong. Redundant means no room needs it and no walk uses
+  it; inefficient means area, width or dead end out of proportion to its doors.
+- **The stair room includes its landing.** A shared bathroom opening off it is ordinary;
+  only a stair whose sole way on is a bathroom is critical. The first rule failed three
+  benchmark plans for a common bathroom beside the stair.
+- **One finding per defect.** A room whose access is already reported is left to that
+  finding: a house entered through the kitchen is one access finding, not also a reversed
+  arrival and a visitor crossing the service zone.
+- **A critical finding fails the storey whatever the score**, and multiplies the score by
+  `critical_validity`, while `quality` keeps two failures comparable. Good also needs no
+  major finding.
+- **Test by drawing the defect.** `test_circulation.py` builds each storey by hand with
+  explicit doors, and JP Nagar is pinned as data in `golden/circulation_jpnagar.json`, so
+  no test waits for the solver to draw a bad plan.
 
 ### `llm/`
 
