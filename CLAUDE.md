@@ -100,7 +100,7 @@ uv venv --python 3.12 && source .venv/bin/activate
 uv pip install -e ".[dev]"
 cp .env.example .env          # set one key, or NAKSHA_INTENT_PROVIDER=claude_code
 
-pytest                        # 708 tests, no network, no key, and independent
+pytest                        # 711 tests, no network, no key, and independent
                               # of whatever is in your .env — see conftest
 pytest -m live                # real model; needs credentials
 
@@ -332,6 +332,10 @@ CP-SAT fail decision 2's twenty-second test.
   runs the corridor across the floor with two rows cut across it. Added as a group after
   the random and road-first trees, it cut route warnings from 10 to 7 over thirteen plans
   at no cost in time.
+- **Zone-aware corridor trees are added beside plain ones.** `zone_spine_tree` puts each
+  room on the side of the corridor its Vastu zone wants and orders each row by the
+  compass. Added, it raised zones met from 24 to 28 of 110 at no cost; swapped in for plain
+  corridor-first, it cost three warnings.
 - **A statutory length is a constraint, and narrow plots need columns to carry it.**
   `RoomSpec.min_length_m` — 6.0 m for a car bay — is enforced in Stage B. A road-first
   strip drags the foyer to the bay's depth, so the deeper search tries road-column trees
@@ -426,6 +430,10 @@ that happens to fail — that test goes vacuous the day the pipeline improves.
   stair that does not sit over the stair below is no way up — ⑦ refuses it, reading
   `layout.shafts`. Nothing checked this, and three plans called clean could not be
   climbed.
+- **The judge ranks Vastu after warnings and before the penalty.** Errors, unreachable
+  rooms, rooms below a minimum, warnings, missed zones, penalty. Vastu is advisory, so no
+  zone buys a warning, but inside the penalty it lost to everything: plans met 18 zones in
+  110, and counting them here raised that to 24.
 - **The front door leads into the house.** A ground floor whose entrance room has no
   door to the hall or dining room is reported, even when every room is reachable: a
   model's 3BHK was entered foyer → staircase → corridor → hall and passed everything.

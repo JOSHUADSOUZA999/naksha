@@ -805,6 +805,48 @@ class TestEveryDefectTheDrawingsShowed:
         assert any(biggest.room_id in f.rooms for f in findings)
 
 
+class TestVastuRanksAfterWarningsAndBeforeThePenalty:
+    """Vastu is advisory, so a missed zone must never outrank a warning. But inside the
+    penalty it was one 5-point term among dozens, and plans met 18 zones in 110. Tested
+    with faked reports and zones, so neither depends on a brief producing the tie."""
+
+    @staticmethod
+    def _candidates(plans, monkeypatch, warn_the_zoned_one):
+        import app.validator as validator_module
+        from app.ir.enums import Sector
+        from app.ir.layout import Layout
+        from app.ir.validation import Finding, Report
+
+        layout, program, _, _ = plans["40x60"]
+        specs = {room.id: room for room in program.rooms}
+        assert any(room.sector for room in program.rooms), "the fixture must want some zones"
+        in_zone = layout.model_copy(update={"score": 900.0})
+        out_of_zone = layout.model_copy(update={"score": 1.0})
+
+        def sector_of(self, room):
+            wanted = specs[room.room_id].sector
+            if self.score == in_zone.score or wanted is None:
+                return wanted
+            return Sector.NORTH if wanted is not Sector.NORTH else Sector.SOUTH
+
+        def validate(candidate, _program, _floor):
+            warned = warn_the_zoned_one and candidate.score == in_zone.score
+            findings = [Finding(check="light", severity=Severity.WARNING, message="x")] if warned else []
+            return Report(findings=findings, checks_run=list(CHECKS))
+
+        monkeypatch.setattr(Layout, "sector_of", sector_of)
+        monkeypatch.setattr(validator_module, "validate", validate)
+        return validator_module.judge(program), in_zone, out_of_zone
+
+    def test_one_warning_outweighs_every_zone(self, plans, monkeypatch):
+        key, in_zone, out_of_zone = self._candidates(plans, monkeypatch, warn_the_zoned_one=True)
+        assert key(out_of_zone) < key(in_zone)
+
+    def test_with_warnings_equal_the_zones_decide_before_the_penalty(self, plans, monkeypatch):
+        key, in_zone, out_of_zone = self._candidates(plans, monkeypatch, warn_the_zoned_one=False)
+        assert key(in_zone) < key(out_of_zone), "a far better penalty must not buy every zone"
+
+
 class TestTheJudgeRanksRefusalsBySeverity:
     """A 30x50 had two refused candidates, one error each: a car bay off the road, and a
     foyer with no street wall, so no front door. Tied on errors, the lower penalty won —

@@ -18,7 +18,7 @@ import random
 from dataclasses import dataclass
 
 from app.ir.layout import PlacedRoom
-from app.ir.enums import Facing, Relation, SpaceKind
+from app.ir.enums import Facing, Relation, Sector, SpaceKind
 from app.ir.plan import AdjacencySpec, RoomSpec
 
 
@@ -231,6 +231,69 @@ def spine_first_tree(
         vertical=not east_west,
         left=row(rest[:split]),
         right=Cut(vertical=not east_west, left=row(spine), right=row(rest[split:])),
+    )
+
+
+# A Vastu zone as a cell of the 3x3 grid `Layout.sector_of` reads: (row, column), row 0
+# south and column 0 west.
+_ZONE_CELL = {
+    Sector.SOUTH_WEST: (0, 0), Sector.SOUTH: (0, 1), Sector.SOUTH_EAST: (0, 2),
+    Sector.WEST: (1, 0), Sector.BRAHMASTHAN: (1, 1), Sector.EAST: (1, 2),
+    Sector.NORTH_WEST: (2, 0), Sector.NORTH: (2, 1), Sector.NORTH_EAST: (2, 2),
+}
+
+
+def zone_spine_tree(
+    rooms: list[RoomSpec], rng: random.Random, weights: dict[str, float]
+) -> Node:
+    """A corridor-first tree whose two rows follow the compass.
+
+    Vastu zones were met 18 times in 110 across the reference plans — barely better than
+    chance on a 3x3 grid — because nothing generated a tree with rooms where they asked
+    to be, and a 5-point penalty cannot move a room the tree put elsewhere. Rooms wanting
+    the south of a band that runs east-west go in its south row, and each row runs west
+    to east in the order its rooms want; a band running north-south sorts the other way.
+    Rooms with no zone fill the shorter row.
+
+    **Its own group, beside plain corridor-first, never instead of it.** Swapping plain
+    corridor-first for this measured three more warnings over eleven plans: the zone
+    order cost some rooms the arrangement that kept them off the kitchen route.
+    """
+    spine = [room for room in rooms if room.kind is SpaceKind.CORRIDOR]
+    rest = [room for room in rooms if room.kind is not SpaceKind.CORRIDOR]
+    if not spine or len(rest) < 2:
+        return random_tree(rooms, rng, weights)
+    east_west = rng.random() < 0.5
+    cell = {
+        room.id: _ZONE_CELL[room.sector] if room.sector else (rng.randrange(3), rng.randrange(3))
+        for room in rest
+    }
+    across = 0 if east_west else 1   # which coordinate chooses a room's side of the band
+    along = 1 if east_west else 0    # which coordinate orders a row
+    low = [room for room in rest if cell[room.id][across] == 0]
+    high = [room for room in rest if cell[room.id][across] == 2]
+    middle = [room for room in rest if cell[room.id][across] == 1]
+    rng.shuffle(middle)
+    for room in middle:
+        (low if len(low) <= len(high) else high).append(room)
+    if not low or not high:
+        both = low + high
+        rng.shuffle(both)
+        half = max(1, len(both) // 2)
+        low, high = both[:half], both[half:]
+
+    def row(group: list[RoomSpec], by_zone: bool = True) -> Node:
+        if by_zone:
+            group = sorted(group, key=lambda room: (cell[room.id][along], rng.random()))
+        node: Node = Leaf(group[0], weights[group[0].id])
+        for room in group[1:]:
+            node = Cut(vertical=east_west, left=node, right=Leaf(room, weights[room.id]))
+        return node
+
+    return Cut(
+        vertical=not east_west,
+        left=row(low),
+        right=Cut(vertical=not east_west, left=row(spine, by_zone=False), right=row(high)),
     )
 
 

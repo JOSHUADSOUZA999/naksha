@@ -1193,6 +1193,53 @@ class TestTheCarBayIsLongEnoughForACar:
         assert max(x_max - x_min, y_max - y_min) >= 6.0 - 1e-6
 
 
+class TestZoneAwareCorridorsFollowTheCompass:
+    """Vastu zones were met 18 times in 110 across the reference plans: nothing generated
+    a tree with rooms where they asked to be. A zone-aware corridor tree puts each room on
+    the side of the corridor it wants and orders each row by the same compass."""
+
+    def test_rooms_land_on_the_side_of_the_corridor_they_want(self):
+        from app.ir.enums import Sector, SpaceKind
+        from app.ir.plan import RoomSpec
+        from app.solver.slicing import place, zone_spine_tree
+
+        def spec(room_id, kind, sector):
+            return RoomSpec(
+                id=room_id, kind=kind, min_area_sq_m=4.0, target_area_sq_m=10.0,
+                min_width_m=1.0, max_aspect=10.0, sector=sector,
+            )
+
+        rooms = [
+            spec("corridor", SpaceKind.CORRIDOR, None),
+            spec("master", SpaceKind.MASTER_BEDROOM, Sector.SOUTH_WEST),
+            spec("kitchen", SpaceKind.KITCHEN, Sector.SOUTH_EAST),
+            spec("pooja", SpaceKind.POOJA, Sector.NORTH_EAST),
+            spec("bath", SpaceKind.BATHROOM, Sector.NORTH_WEST),
+        ]
+        weights = {room.id: room.target_area_sq_m for room in rooms}
+        eps = 1e-6
+        for seed in range(20):
+            tree = zone_spine_tree(rooms, random.Random(seed), weights)
+            at = {p.room_id: p for p in place(tree, 0.0, 0.0, 10.0, 10.0)}
+            band = at["corridor"]
+            if band.x_max_m - band.x_min_m > band.y_max_m - band.y_min_m:
+                # The band runs east-west: south row below it, north row above, each west to east.
+                assert at["master"].y_max_m <= band.y_min_m + eps
+                assert at["kitchen"].y_max_m <= band.y_min_m + eps
+                assert at["pooja"].y_min_m >= band.y_max_m - eps
+                assert at["bath"].y_min_m >= band.y_max_m - eps
+                assert at["master"].x_max_m <= at["kitchen"].x_min_m + eps
+                assert at["bath"].x_max_m <= at["pooja"].x_min_m + eps
+            else:
+                # The band runs north-south: west row left of it, east row right, each south to north.
+                assert at["master"].x_max_m <= band.x_min_m + eps
+                assert at["bath"].x_max_m <= band.x_min_m + eps
+                assert at["kitchen"].x_min_m >= band.x_max_m - eps
+                assert at["pooja"].x_min_m >= band.x_max_m - eps
+                assert at["master"].y_max_m <= at["bath"].y_min_m + eps
+                assert at["kitchen"].y_max_m <= at["pooja"].y_min_m + eps
+
+
 class TestAJudgeChoosesTheFinishedPlan:
     """Stage ⑤'s penalty does not measure what ⑦ reports, so the lowest penalty was
     routinely a plan ⑦ refused. Tested by handing `plan` two candidates directly, so it
@@ -1234,7 +1281,7 @@ class TestAJudgeChoosesTheFinishedPlan:
         program = expand(brief, envelope)
         key = judge(program, envelope)
         for layout in solve(program, envelope, seed=7, keep=4):
-            errors, unusable, unbuildable, warnings, penalty = key(layout)
+            errors, unusable, unbuildable, warnings, zones, penalty = key(layout)
             # Refusals lead, and a plan nobody can enter leads the refusals.
             assert errors >= unusable >= 0
-            assert warnings >= 0 and penalty == layout.score
+            assert warnings >= 0 and zones >= 0 and penalty == layout.score

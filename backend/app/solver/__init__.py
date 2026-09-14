@@ -74,6 +74,12 @@ TUNE_WORK = 0.1
 # road-first: whether a room touches the corridor is the tree's shape, not its dimensions.
 SPINE_FIRST_CANDIDATES = 300
 
+# Zone-aware corridor-first topologies per floor that has a corridor and a room with a
+# Vastu zone: the same shape with its rows following the compass. Generated after every
+# other group, so none of them changes. Over eleven plans, with the judge counting zones,
+# it raised zones met from 24 to 28 of 110 at no cost in warnings or time.
+ZONE_SPINE_CANDIDATES = 300
+
 # Tuned candidates to collect before choosing. Was 3, and 3 is too few now that the
 # shortlist interleaves two groups: the first three successes came from whichever
 # group led, so the other never got compared. Six is enough for both to land and still
@@ -188,7 +194,13 @@ def shortlist_for(
         and sum(1 for room in rooms if room.kind is not SpaceKind.CORRIDOR) >= 3
     )
     spine_count = SPINE_FIRST_CANDIDATES if wants_spine_first else 0
-    total = candidates + road_count + spine_count
+    zone_spine_indices: set[int] = set()
+    zone_count = (
+        ZONE_SPINE_CANDIDATES
+        if wants_spine_first and any(room.sector is not None for room in rooms)
+        else 0
+    )
+    total = candidates + road_count + spine_count + zone_count
 
     for index in range(total):
         # The random pool is generated first and from the same stream as before, so
@@ -199,7 +211,7 @@ def shortlist_for(
         elif index < candidates + road_count:
             tree = slicing.road_first_tree(rooms, rng, weights, road)
             road_first_indices.add(index)
-        else:
+        elif index < candidates + road_count + spine_count:
             tree = (
                 slicing.road_first_tree(
                     rooms, rng, weights, road, house_tree=slicing.spine_first_tree
@@ -208,6 +220,15 @@ def shortlist_for(
                 else slicing.spine_first_tree(rooms, rng, weights)
             )
             spine_first_indices.add(index)
+        else:
+            tree = (
+                slicing.road_first_tree(
+                    rooms, rng, weights, road, house_tree=slicing.zone_spine_tree
+                )
+                if wants_road_first
+                else slicing.zone_spine_tree(rooms, rng, weights)
+            )
+            zone_spine_indices.add(index)
         placed = slicing.place(tree, *bounds)
         try:
             layout = Layout(
@@ -269,10 +290,11 @@ def shortlist_for(
     # before tuning, for the usual reason that what Stage B fixes is exactly what they
     # look bad on, so ranking alone never showed them to CP-SAT and every plan on a
     # tight plot came back with a bedroom serving as a corridor.
-    grouped = road_first_indices | spine_first_indices
+    grouped = road_first_indices | spine_first_indices | zone_spine_indices
     random_pool = [row for row in scored if row[1] not in grouped]
     road_first = [row for row in scored if row[1] in road_first_indices]
     spine_first = [row for row in scored if row[1] in spine_first_indices]
+    zone_spine = [row for row in scored if row[1] in zone_spine_indices]
     reachable = [row for row in random_pool if not unreachable(row)]
     walkable = [row for row in random_pool if not unwalkable(row)]
     shortlist = _interleave(
@@ -281,6 +303,7 @@ def shortlist_for(
         walkable[:TUNE_SHORTLIST],
         road_first[:TUNE_SHORTLIST],
         spine_first[:TUNE_SHORTLIST],
+        zone_spine[:TUNE_SHORTLIST],
     )
     return shortlist
 
@@ -552,7 +575,10 @@ def solve(
     # past it dimensioned about 1 in 100 and 1 in 270 — and a third to two thirds of
     # those passed stage ⑦ outright. Only a floor that comes up short pays for this.
     if len(tuned) < enough:
-        past = candidates + ROAD_FIRST_CANDIDATES + SPINE_FIRST_CANDIDATES
+        past = (
+            candidates + ROAD_FIRST_CANDIDATES + SPINE_FIRST_CANDIDATES
+            + ZONE_SPINE_CANDIDATES
+        )
         trees = deeper(
             rooms, weights, envelope,
             bounds=(x_min_m, y_min_m, x_max_m, y_max_m), seed=seed,

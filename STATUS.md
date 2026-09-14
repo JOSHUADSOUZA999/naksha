@@ -12,7 +12,7 @@ Read in this order, then run the commands below:
 
 ```bash
 cd naksha
-.venv/bin/pytest -q                                  # 708 tests, no network, no key
+.venv/bin/pytest -q                                  # 711 tests, no network, no key
 
 # The whole pipeline, to a drawing on disk: ①②③④⑤⑥⑦
 .venv/bin/python -m app.cli -s -e -P --allow-unverified --fallback-only \
@@ -50,7 +50,7 @@ strict vastu` · `20x30 2bhk in Bengaluru` (tight) · `30x40 north facing corner
 
 Where the build actually is.
 
-**Last updated:** 2026-09-14 · 708 tests passing, offline, no key
+**Last updated:** 2026-09-14 · 711 tests passing, offline, no key
 
 > **naksha draws floor plans.** Text in, a dimensioned drawing out: walls with
 > thickness, doors with swings, windows sized to the bye-laws, sanitaryware and beds,
@@ -70,15 +70,15 @@ included.
 
 | plot | storeys | result | time |
 |---|---|---|---|
-| 20x30 2BHK | G+2 | **refused** — 29.3 m² buildable and the car bay alone is 18; minimums are 166% of the footprint | 1.6 s |
-| 25x40 2BHK | G+1 | legal · 2 warnings — the front door opens into the stair room · a bathroom, the corridor and the hall only through the kitchen | 3.6 s |
-| 30x30 2BHK | G+1 | legal · 1 warning — the kitchen shares a wall with a bathroom | 2.0 s |
-| 30x40 2BHK | G | legal · 2 warnings — a bedroom and a bathroom only through the kitchen · a bedroom with no window | 3.7 s |
-| 30x40 3BHK | G+1 | **refused** — minimums are 101% of the footprint; `--stilt` is the answer | 3.5 s |
+| 20x30 2BHK | G+2 | **refused** — 29.3 m² buildable and the car bay alone is 18; minimums are 166% of the footprint | 1.9 s |
+| 25x40 2BHK | G+1 | legal · 2 warnings — the front door opens into the kitchen · a bathroom, the corridor, the stair and the hall only through the kitchen | 4.0 s |
+| 30x30 2BHK | G+1 | legal · 1 warning — the kitchen shares a wall with a bathroom | 2.6 s |
+| 30x40 2BHK | G | legal · 2 warnings — the front door opens into the kitchen · both bedrooms, both bathrooms, the corridor and the hall only through the kitchen | 3.9 s |
+| 30x40 3BHK | G+1 | **refused** — minimums are 101% of the footprint; `--stilt` is the answer | 3.6 s |
 | 30x40 3BHK `--stilt` | stilt+2 | legal · 1 warning — no bathroom on the top floor. Its stairs connect only since 2026-09-14 | 1.1 s |
-| 30x50 3BHK | G | legal · 4 warnings — the front door opens into a corridor · the hall, two bedrooms and a bathroom only through the kitchen · a bathroom only through a bedroom · a bedroom with no window | 4.4 s |
-| 40x60 3BHK | G | **clean** | 2.7 s |
-| 50x80 4BHK | G | legal · 1 warning — hall glazed to 9% | 2.9 s |
+| 30x50 3BHK | G | legal · 4 warnings — the front door opens into a corridor · the hall, two bedrooms and a bathroom only through the kitchen · a bathroom only through a bedroom · a bedroom with no window | 4.5 s |
+| 40x60 3BHK | G | **clean** | 2.5 s |
+| 50x80 4BHK | G | legal · 1 warning — a 19.6 m² foyer, 2.8× its ceiling | 2.7 s |
 
 An **error** is a plan naksha refuses: a room below its statutory minimum measured inside
 its walls, a room with no route to it, a hall, kitchen or dining room reachable only
@@ -120,6 +120,9 @@ plots still refused for their car bay:
    a gate across its long side, like a car porch; and ⑦ refuses a bay a car cannot get
    into. No plan gained a warning. The tight plots that search past the shortlist take
    about 1.5 s longer.
+8. **Vastu zones count for something.** The judge ranks missed zones after warnings and
+   before the penalty, and ⑤ adds corridor trees that follow the compass. Over eleven plans
+   zones met rose from 18 to 28 of 110, with no warning or time added.
 
 ## The model path — first end-to-end runs, 2026-09-13
 
@@ -165,7 +168,7 @@ stair landing, and a master bedroom smaller than one of the other bedrooms.
 | ② ENVELOPE | **built, gated** | Arithmetic done. Refuses without `--allow-unverified` |
 | ③ PROGRAM | **built ×2** | Deterministic expansion *and* an LLM version in `llm/program.py`, first run end to end 2026-09-13 |
 | ④ FEASIBILITY | **built** | Explains, and measures each option by running the solver |
-| ⑤ LAYOUT | **built** | Slicing tree (A) + CP-SAT (B), deeper on thin floors; a seed replays exactly. 1.1–4.4 s a plot end to end |
+| ⑤ LAYOUT | **built** | Slicing tree (A) + CP-SAT (B), deeper on thin floors; a seed replays exactly. 1.1–4.5 s a plot end to end |
 | ⑥ REFINE | **built** | Walls, doors, windows, fixtures, porch in the setback |
 | ⑦ VALIDATE | **built** | Circulation · access · sanitation · size · light · legality, per storey. Also picks ⑤'s plan |
 | ⑧ CRITIC | not started | rerank + rationale, behind a flag — optional by design |
@@ -325,6 +328,14 @@ DXF wants. Open choice: add `ezdxf`, or write ASCII DXF R12 with no new dependen
 
 ## Known imperfections, in priority order
 
+- **The judge counts warnings; it does not weigh them.** With missed zones ranked after
+  the count, a plan can win on Vastu while its warnings cover more. The 30x40 2BHK now
+  enters through its kitchen with six rooms behind it, where it had two rooms behind the
+  kitchen and a bedroom with no window — the same count of two.
+- **Vastu is still mostly missed: 28 of 110 zones.** The live 30x40 3BHK meets 3 of 12,
+  for geometric reasons: its east car bay and foyer take the north-east corner the pooja
+  room wants, and its stair, fixed on the west by the ground floor, blocks the south-west
+  the master bedroom wants upstairs. Choosing floors together is the untried lever.
 - **Two of nine reference plans are refused and six more carry warnings.** Every
   defect in the table above is real and was confirmed in the plan data, not only by eye.
 - **Upper-floor staircases absorb surplus area**, and the shaft pull makes it worse

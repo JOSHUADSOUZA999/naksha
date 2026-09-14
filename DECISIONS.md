@@ -728,6 +728,37 @@ and a bay running back from the road keeps a 2.7 m gate. ⑦ refuses a bay along
 with a narrower gate. With that, every legal reference plan has a usable bay, and the
 warnings are where they were before any of the bay changes.
 
+### Vastu zones: counted by the judge, and a corridor group that follows the compass
+
+Across eleven plans — seven offline, three recorded model answers and the live 30x40
+3BHK — rooms met 18 of the 110 zones their programmes asked for. On a 3x3 grid chance
+alone is about one in nine, so placement was barely better than chance. Two causes: a
+missed zone was one 5-point term inside a penalty with dozens of others, and nothing
+generated a tree with rooms where they asked to be.
+
+Measured, same eleven plans:
+
+| | zones met | errors | warnings | time |
+|---|---|---|---|---|
+| before | 18 / 110 | 0 | 11 | 29 s |
+| judge counts missed zones after warnings | 24 / 110 | 0 | 11 | 31 s |
+| zone-aware corridor trees *instead of* plain corridor-first | 21 / 110 | 0 | 14 | 27 s |
+| judge counts zones + zone-aware corridor trees *added* | 28 / 110 | 0 | 11 | 31 s |
+
+The judge now ranks errors, unreachable rooms, rooms below a minimum, warnings, then
+missed zones, then the penalty: Vastu is advisory, so no zone buys a warning, but it no
+longer loses to aspect ratios. `slicing.zone_spine_tree` puts each room on the side of the
+corridor it wants and orders each row by the compass; replacing plain corridor-first with
+it cost three warnings, added beside it cost nothing — the group lesson a third time.
+
+The live 30x40 3BHK stayed at 3 of 12, for two reasons geometry gives and scoring cannot
+change. On the ground floor the car bay and foyer run along the east road and take the
+whole east third of the plan, so the pooja room cannot reach the north-east cell it asks
+for. On the first floor the stair must sit over the ground-floor stair, which is on the
+west, and that blocks the south-west the master bedroom wants. Choosing the floors
+together, so the ground floor's stair leaves the upper floor its zones, is the next lever
+and has not been tried.
+
 ---
 
 ## Corrections to things I got wrong

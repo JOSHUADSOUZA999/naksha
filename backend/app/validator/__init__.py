@@ -268,8 +268,9 @@ def judge(program: Program, envelope=None):
     """A sort key that ranks finished candidates by what this stage would say of them.
 
     Errors first, then whether the house can be entered and walked, then rooms below a
-    minimum, then warnings, then stage ⑤'s own penalty as the tiebreak — so a plan ⑦
-    refuses never beats one it passes, however much better its penalty.
+    minimum, then warnings, then Vastu zones missed, then stage ⑤'s own penalty as the
+    tiebreak — so a plan ⑦ refuses never beats one it passes, however much better its
+    penalty, and no Vastu gain buys a warning.
 
     **Refusals are not all equal, and counting them as if they were picked the worst.**
     A 30x50 had two candidates, each with one error: one whose car bay did not touch the
@@ -284,17 +285,28 @@ def judge(program: Program, envelope=None):
     """
     from app.refine import refine
 
+    zoned = {room.id: room.sector for room in program.rooms if room.sector is not None}
+
     def key(layout: Layout) -> tuple:
         report = validate(layout, program, refine(layout, program, envelope))
         unusable = sum(
             1 for finding in report.by_check("circulation")
             if finding.severity is Severity.ERROR
         )
+        # **Vastu after warnings, before the penalty.** Advisory, so a missed zone never
+        # outranks a route through a bedroom or a room with no window — but inside the
+        # penalty it was one 5-point term among dozens, and plans met 18 zones in 110.
+        # Counted here, the same candidates met 24.
+        missed_zones = sum(
+            1 for placed in layout.rooms
+            if placed.room_id in zoned and layout.sector_of(placed) is not zoned[placed.room_id]
+        )
         return (
             report.errors,
             unusable,
             layout.unbuildable,
             len(report.findings) - report.errors,
+            missed_zones,
             layout.score,
         )
 
