@@ -659,6 +659,31 @@ the plans better is ⑤'s job.
 
 *Lesson: the 30x30 was clean for exactly as long as nobody looked at its kitchen wall.*
 
+### Corridor-first trees: the corridor touching the rooms it serves
+
+With ⑦ able to see the route defects, the judge still could not avoid them. The model's
+30x40 3BHK came back with its master bedroom, a bathroom and the corridor itself reachable
+only through another bedroom, and none of the twelve candidates the judge chose from was
+free of that — whether a room touches the corridor is decided by the tree's shape, and
+random trees rarely put every private room against it. `slicing.spine_first_tree` builds
+the shape: the corridor as a band across the floor, the other rooms in two rows cut across
+it, so every room keeps a length of wall on the corridor. On a floor with a car bay it is
+the house behind the road-first strip. 300 are added per floor that has a corridor and at
+least three other rooms, generated after the random and road-first groups so neither
+changes.
+
+Over thirteen plans — nine offline, three recorded model answers, and the live 30x40 3BHK:
+
+| | errors | warnings | route warnings | time |
+|---|---|---|---|---|
+| without | 14 | 20 | 10 | 26 s |
+| with | 14 | 16 | 7 | 26 s |
+
+The live 30x40 3BHK went from two warnings to none, the offline 40x60 3BHK became the one
+clean reference plot, the refused 20x30 lost a warning, and nothing got worse anywhere.
+"Route warnings" are the ones about walking through a bedroom, a bathroom or the kitchen,
+and a front door that does not lead into the house.
+
 ---
 
 ## Corrections to things I got wrong

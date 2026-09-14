@@ -142,7 +142,11 @@ def random_tree(
 
 
 def road_first_tree(
-    rooms: list[RoomSpec], rng: random.Random, weights: dict[str, float], road: Facing
+    rooms: list[RoomSpec],
+    rng: random.Random,
+    weights: dict[str, float],
+    road: Facing,
+    house_tree=None,
 ) -> Node:
     """A tree whose first cut peels off a street-side strip holding the car and the door.
 
@@ -178,7 +182,7 @@ def road_first_tree(
             left=strip,
             right=Leaf(room, weights[room.id]),
         )
-    house = random_tree(body, rng, weights)
+    house = (house_tree or random_tree)(body, rng, weights)
 
     # `place` gives a horizontal cut's right child the north half and a vertical cut's
     # right child the east half.
@@ -189,6 +193,45 @@ def road_first_tree(
     if road is Facing.EAST:
         return Cut(vertical=True, left=house, right=strip)
     return Cut(vertical=True, left=strip, right=house)
+
+
+def spine_first_tree(
+    rooms: list[RoomSpec], rng: random.Random, weights: dict[str, float]
+) -> Node:
+    """A corridor across the floor, with every other room keeping a wall on it.
+
+    **Whether a bedroom can have a door to the corridor is decided by the shape of the
+    tree** — the car bay's lesson again. No swap and no tuning can make two rooms touch
+    that the tree put apart, and random trees rarely put every private room against the
+    corridor: the model's 30x40 3BHK came out with its master bedroom, a bathroom and the
+    corridor itself reachable only through another bedroom.
+
+    The corridor is a band across the floor. The other rooms form two rows, one on each
+    side, cut *across* the band, so every leaf spans its row's full depth and keeps a
+    length of wall on the corridor. An addition to the random pool, never a replacement:
+    biasing generation has failed here twice.
+    """
+    spine = [room for room in rooms if room.kind is SpaceKind.CORRIDOR]
+    rest = [room for room in rooms if room.kind is not SpaceKind.CORRIDOR]
+    if not spine or len(rest) < 2:
+        return random_tree(rooms, rng, weights)
+    rest = rest[:]
+    rng.shuffle(rest)
+    split = max(1, min(len(rest) - 1, len(rest) // 2 + rng.randint(-1, 1)))
+    # True: the band runs east-west, so the rows sit north and south of it.
+    east_west = rng.random() < 0.5
+
+    def row(group: list[RoomSpec]) -> Node:
+        node: Node = Leaf(group[0], weights[group[0].id])
+        for room in group[1:]:
+            node = Cut(vertical=east_west, left=node, right=Leaf(room, weights[room.id]))
+        return node
+
+    return Cut(
+        vertical=not east_west,
+        left=row(rest[:split]),
+        right=Cut(vertical=not east_west, left=row(spine), right=row(rest[split:])),
+    )
 
 
 def place(node: Node, x_min: float, y_min: float, x_max: float, y_max: float) -> list[PlacedRoom]:

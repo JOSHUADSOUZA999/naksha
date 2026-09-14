@@ -100,7 +100,7 @@ uv venv --python 3.12 && source .venv/bin/activate
 uv pip install -e ".[dev]"
 cp .env.example .env          # set one key, or NAKSHA_INTENT_PROVIDER=claude_code
 
-pytest                        # 694 tests, no network, no key, and independent
+pytest                        # 696 tests, no network, no key, and independent
                               # of whatever is in your .env — see conftest
 pytest -m live                # real model; needs credentials
 
@@ -327,6 +327,11 @@ CP-SAT fail decision 2's twenty-second test.
   misalignment at `SHAFT_PULL` cm² per cm against target areas; minimums stay
   constraints. A pin broke other plans twice, and ranking stair misses alone changed
   nothing, because no candidate had a rectangle over the shaft.
+- **Corridor-first trees make the corridor reach the rooms.** Whether a bedroom can have
+  a door to the corridor is the tree's shape, like the car bay's road. `spine_first_tree`
+  runs the corridor across the floor with two rows cut across it. Added as a group after
+  the random and road-first trees, it cut route warnings from 10 to 7 over thirteen plans
+  at no cost in time.
 
 `max_aspect` is per-kind data, not a constant. A corridor is *supposed* to be
 elongated; flagging one as "a corridor, not a corridor" was the rule mistaking the

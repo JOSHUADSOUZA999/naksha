@@ -12,7 +12,7 @@ Read in this order, then run the commands below:
 
 ```bash
 cd naksha
-.venv/bin/pytest -q                                  # 694 tests, no network, no key
+.venv/bin/pytest -q                                  # 696 tests, no network, no key
 
 # The whole pipeline, to a drawing on disk: ①②③④⑤⑥⑦
 .venv/bin/python -m app.cli -s -e -P --allow-unverified --fallback-only \
@@ -50,15 +50,16 @@ strict vastu` · `20x30 2bhk in Bengaluru` (tight) · `30x40 north facing corner
 
 Where the build actually is.
 
-**Last updated:** 2026-09-14 · 694 tests passing, offline, no key
+**Last updated:** 2026-09-14 · 696 tests passing, offline, no key
 
 > **naksha draws floor plans.** Text in, a dimensioned drawing out: walls with
 > thickness, doors with swings, windows sized to the bye-laws, sanitaryware and beds,
 > and a list of what is wrong with the result. Seven of eight stages are built. **Of the
-> nine reference plots, none is clean, seven are legal with named defects, and two are
+> nine reference plots, one is clean, six are legal with named defects, and two are
 > refused** — and both refusals are plots whose rooms cannot physically fit: their legal
-> minimums come to 166% and 101% of the footprint. The last clean one, the 30x30, turned
-> out to have its kitchen against a bathroom as soon as ⑦ looked.
+> minimums come to 166% and 101% of the footprint. The 30x30 lost its clean result when ⑦
+> learned to see a kitchen against a bathroom; the 40x60 gained one when corridor-first
+> layouts let every room open off the corridor.
 
 ## What it produces, per plot
 
@@ -69,14 +70,14 @@ included.
 
 | plot | storeys | result | time |
 |---|---|---|---|
-| 20x30 2BHK | G+2 | **refused** — 29.3 m² buildable and the car bay alone is 18; minimums are 166% of the footprint | 1.2 s |
+| 20x30 2BHK | G+2 | **refused** — 29.3 m² buildable and the car bay alone is 18; minimums are 166% of the footprint | 1.4 s |
 | 25x40 2BHK | G+1 | legal · 2 warnings — the front door opens into the stair room · a bathroom, the corridor and the hall only through the kitchen | 2.2 s |
 | 30x30 2BHK | G+1 | legal · 1 warning — the kitchen shares a wall with a bathroom | 1.9 s |
 | 30x40 2BHK | G | legal · 2 warnings — a bedroom and a bathroom only through the kitchen · a bedroom with no window | 2.2 s |
 | 30x40 3BHK | G+1 | **refused** — minimums are 101% of the footprint; `--stilt` is the answer | 3.1 s |
 | 30x40 3BHK `--stilt` | stilt+2 | legal · 1 warning — no bathroom on the top floor. Its stairs connect only since 2026-09-14 | 1.3 s |
 | 30x50 3BHK | G | legal · 4 warnings — the front door opens into a corridor · the hall, two bedrooms and a bathroom only through the kitchen · a bathroom only through a bedroom · a bedroom with no window | 2.8 s |
-| 40x60 3BHK | G | legal · 1 warning — two bedrooms, both bathrooms and the corridor only through the kitchen | 2.8 s |
+| 40x60 3BHK | G | **clean** | 2.9 s |
 | 50x80 4BHK | G | legal · 2 warnings — a bathroom only through the study · hall glazed to 8% | 2.8 s |
 
 An **error** is a plan naksha refuses: a room below its statutory minimum measured inside
@@ -110,6 +111,9 @@ plots still refused for their car bay:
    Stage B stops on work rather than on the clock.
 5. **⑦ reports a front door that does not lead into the house, and rooms kept apart that
    share a wall.** No plan got better for it, and the 30x30 stopped being clean.
+6. **⑤ grows corridor-first layouts** — the corridor across the floor, every other room
+   keeping a wall on it — as a group beside the others. Route warnings fell from 10 to 7
+   over thirteen plans at no cost in time, and the 40x60 came out clean.
 
 ## The model path — first end-to-end runs, 2026-09-13
 
@@ -292,9 +296,11 @@ living room reached through the kitchen (25x40, 30x40 2BHK, 30x50) and bedrooms 
 opened into whichever room the tree put behind it; a bedroom with no window (30x50); no
 bathroom on the stilt plan's top floor; a bathroom reached through the study (50x80).
 The judge counts findings rather than weighing them, so one warning naming six rooms ties
-with one naming one. Most of what remains is circulation, and it is ⑤'s to fix: judging 24
-or 36 candidates instead of 12 barely helps, so ⑤ has to generate candidates whose
-corridor reaches every bedroom and whose foyer meets the hall.
+with one naming one. Corridor-first layouts cleared the worst of the circulation; what
+remains is the route through the kitchen on the 25x40 and the 30x50, a front door into a
+stair room or corridor, the car bay's opening and size, and Vastu placement. Judging 24 or
+36 candidates instead of 12 barely helps — improvements have to come from what ⑤
+generates.
 
 **2. Measure the model path over more briefs.** Three briefs have been through the model
 live, the 30x40 twice. Its plans beat the offline expansion on every replay and on the
@@ -313,7 +319,7 @@ DXF wants. Open choice: add `ezdxf`, or write ASCII DXF R12 with no new dependen
 
 ## Known imperfections, in priority order
 
-- **Two of nine reference plans are refused and the other seven carry warnings.** Every
+- **Two of nine reference plans are refused and six more carry warnings.** Every
   defect in the table above is real and was confirmed in the plan data, not only by eye.
 - **Upper-floor staircases absorb surplus area**, and the shaft pull makes it worse
   where the tree leaves the stair against a wall the shaft is not on — 17.7 m² on the

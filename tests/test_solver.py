@@ -913,7 +913,11 @@ class TestRoadFirstTreesKeepTheCarOnTheStreet:
         finally:
             solver_module.ROAD_FIRST_CANDIDATES = saved
 
-        random_only = [row[1] for row in without]
+        # Only the random stream's candidates: the shortlist has other groups in it now
+        # (corridor-first trees are generated after road-first ones in both runs).
+        random_only = [
+            row[1] for row in without if row[1] < solver_module.DEFAULT_CANDIDATES
+        ]
         kept = [row[1] for row in with_group if row[1] < solver_module.DEFAULT_CANDIDATES]
         assert set(random_only) <= set(kept)
 
@@ -1057,6 +1061,59 @@ class TestTheShaftIsAPreferenceStageBTrades:
         )
         stair = self._stair(pulled)
         assert stair.x_max_m - stair.x_min_m >= 1.0 + 2 * tuning._exterior_half() - 0.01
+
+
+class TestCorridorFirstTreesGiveEveryRoomACorridorWall:
+    """The model's 30x40 3BHK came out with its master bedroom, a bathroom and the corridor
+    reachable only through another bedroom, on every candidate ⑦ chose from. Whether a room
+    touches the corridor is the tree's shape; this group builds that shape on purpose."""
+
+    def test_every_room_keeps_a_wall_on_the_corridor(self):
+        from app.ir.enums import SpaceKind
+        from app.ir.plan import RoomSpec
+        from app.solver.slicing import place, spine_first_tree
+
+        def spec(room_id, kind):
+            return RoomSpec(
+                id=room_id, kind=kind, min_area_sq_m=4.0, target_area_sq_m=10.0,
+                min_width_m=1.0, max_aspect=10.0,
+            )
+
+        rooms = [
+            spec("corridor", SpaceKind.CORRIDOR), spec("bed1", SpaceKind.MASTER_BEDROOM),
+            spec("bed2", SpaceKind.BEDROOM), spec("bed3", SpaceKind.BEDROOM),
+            spec("bath1", SpaceKind.BATHROOM), spec("stair", SpaceKind.STAIRCASE),
+        ]
+        weights = {room.id: room.target_area_sq_m for room in rooms}
+        for seed in range(20):
+            tree = spine_first_tree(rooms, random.Random(seed), weights)
+            placed = {p.room_id: p for p in place(tree, 0.0, 0.0, 10.0, 8.0)}
+            corridor = placed["corridor"]
+            for room_id, rect in placed.items():
+                if room_id != "corridor":
+                    assert rect.touches(corridor), (seed, room_id)
+
+    def test_the_earlier_groups_are_untouched(self, monkeypatch):
+        """Generated after the random and road-first groups, so no candidate either of
+        them ever produced changes — the property that lets a group be added at all."""
+        import app.solver as solver_module
+        from app.solver import footprint, shortlist_for
+
+        brief = fallback.parse("40x60 3bhk in Bengaluru with pooja room")
+        envelope = build_envelope(brief, allow_unverified=True)
+        program = expand(brief, envelope)
+        rooms = program.on_floor(1)
+        bounds = footprint(envelope, rooms)
+        area = (bounds[2] - bounds[0]) * (bounds[3] - bounds[1])
+        weights = slicing.effective_areas(rooms, area)
+        limit = solver_module.DEFAULT_CANDIDATES + solver_module.ROAD_FIRST_CANDIDATES
+
+        def earlier(count):
+            monkeypatch.setattr(solver_module, "SPINE_FIRST_CANDIDATES", count)
+            rows = shortlist_for(program, rooms, bounds, weights, envelope, seed=7)
+            return [row[1] for row in rows if row[1] < limit]
+
+        assert earlier(0) == earlier(300)
 
 
 class TestAJudgeChoosesTheFinishedPlan:

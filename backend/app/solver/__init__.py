@@ -68,6 +68,11 @@ ROAD_FIRST_DEPTH = 2000
 # on this machine (0.09–0.12 measured at the cut-off), so a plan costs about what it did.
 TUNE_WORK = 0.1
 
+# Corridor-first topologies per floor that has a corridor and at least three other rooms,
+# generated after the random and road-first groups so neither changes. Same argument as
+# road-first: whether a room touches the corridor is the tree's shape, not its dimensions.
+SPINE_FIRST_CANDIDATES = 300
+
 # Tuned candidates to collect before choosing. Was 3, and 3 is too few now that the
 # shortlist interleaves two groups: the first three successes came from whichever
 # group led, so the other never got compared. Six is enough for both to land and still
@@ -175,16 +180,33 @@ def shortlist_for(
         room.kind is SpaceKind.CAR_PARKING for room in rooms
     )
     road_first_indices: set[int] = set()
-    total = candidates + (ROAD_FIRST_CANDIDATES if wants_road_first else 0)
+    spine_first_indices: set[int] = set()
+    road_count = ROAD_FIRST_CANDIDATES if wants_road_first else 0
+    wants_spine_first = (
+        any(room.kind is SpaceKind.CORRIDOR for room in rooms)
+        and sum(1 for room in rooms if room.kind is not SpaceKind.CORRIDOR) >= 3
+    )
+    spine_count = SPINE_FIRST_CANDIDATES if wants_spine_first else 0
+    total = candidates + road_count + spine_count
 
     for index in range(total):
         # The random pool is generated first and from the same stream as before, so
-        # adding road-first trees after it cannot change a single random candidate.
+        # adding road-first trees after it cannot change a single random candidate —
+        # and corridor-first trees come after both, so they change neither.
         if index < candidates:
             tree = slicing.random_tree(rooms, rng, weights)
-        else:
+        elif index < candidates + road_count:
             tree = slicing.road_first_tree(rooms, rng, weights, road)
             road_first_indices.add(index)
+        else:
+            tree = (
+                slicing.road_first_tree(
+                    rooms, rng, weights, road, house_tree=slicing.spine_first_tree
+                )
+                if wants_road_first
+                else slicing.spine_first_tree(rooms, rng, weights)
+            )
+            spine_first_indices.add(index)
         placed = slicing.place(tree, *bounds)
         try:
             layout = Layout(
@@ -246,8 +268,12 @@ def shortlist_for(
     # before tuning, for the usual reason that what Stage B fixes is exactly what they
     # look bad on, so ranking alone never showed them to CP-SAT and every plan on a
     # tight plot came back with a bedroom serving as a corridor.
-    random_pool = [row for row in scored if row[1] not in road_first_indices]
+    random_pool = [
+        row for row in scored
+        if row[1] not in road_first_indices and row[1] not in spine_first_indices
+    ]
     road_first = [row for row in scored if row[1] in road_first_indices]
+    spine_first = [row for row in scored if row[1] in spine_first_indices]
     reachable = [row for row in random_pool if not unreachable(row)]
     walkable = [row for row in random_pool if not unwalkable(row)]
     shortlist = _interleave(
@@ -255,6 +281,7 @@ def shortlist_for(
         reachable[:TUNE_SHORTLIST],
         walkable[:TUNE_SHORTLIST],
         road_first[:TUNE_SHORTLIST],
+        spine_first[:TUNE_SHORTLIST],
     )
     return shortlist
 
@@ -518,7 +545,7 @@ def solve(
     # past it dimensioned about 1 in 100 and 1 in 270 — and a third to two thirds of
     # those passed stage ⑦ outright. Only a floor that comes up short pays for this.
     if len(tuned) < enough:
-        past = candidates + ROAD_FIRST_CANDIDATES
+        past = candidates + ROAD_FIRST_CANDIDATES + SPINE_FIRST_CANDIDATES
         trees = deeper(
             rooms, weights, envelope,
             bounds=(x_min_m, y_min_m, x_max_m, y_max_m), seed=seed,
