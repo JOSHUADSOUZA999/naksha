@@ -579,3 +579,24 @@ class TestStiltParking:
         big, big_env = self._case("50x80 4bhk in Bengaluru with study")
         assert stilt_would_help(expand(small, small_env).rooms, small_env)
         assert not stilt_would_help(expand(big, big_env).rooms, big_env)
+
+
+def test_the_pooja_room_is_kept_apart_from_every_bathroom():
+    """A toilet against the pooja room is objected to before almost any other placement.
+    The model's programmes kept them apart and this expansion did not."""
+    from app.envelope import build_envelope
+    from app.ir.enums import Relation, SpaceKind
+    from app.llm import fallback
+
+    brief = fallback.parse("40x60 3bhk in Bengaluru with pooja room")
+    program = expand(brief, build_envelope(brief, allow_unverified=True))
+    kinds = {room.id: room.kind for room in program.rooms}
+    pooja = [rid for rid, kind in kinds.items() if kind is SpaceKind.POOJA]
+    baths = [rid for rid, kind in kinds.items() if kind is SpaceKind.BATHROOM]
+    assert pooja and baths
+    apart = {
+        frozenset({edge.a, edge.b})
+        for edge in program.adjacencies
+        if edge.relation is Relation.SEPARATED and edge.hard
+    }
+    assert all(frozenset({p, b}) in apart for p in pooja for b in baths)

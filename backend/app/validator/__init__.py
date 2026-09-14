@@ -149,6 +149,31 @@ def _circulation(layout: Layout, program: Program, floor: RefinedFloor) -> list[
     # master bedroom's bathroom running hall → dining → bed2 → corridor → bed1 → bath1:
     # every check passed and a bedroom was serving as a corridor.
     findings = _through_private_rooms(layout, program, floor, graph, start)
+
+    # **The front door should lead into the house.** The model's 30x40 3BHK was entered
+    # foyer → staircase → corridor → hall: every room reachable, no private room crossed,
+    # so nothing here objected. The room you step into from the foyer is where the house
+    # is lived in, not the stair hall. Only where this storey has a hall or dining room —
+    # the ground floor of a stilt holds neither, and its entrance leads rightly to the stair.
+    if entrance is not None:
+        living = {
+            placed.room_id for placed in layout.rooms
+            if program_kind(program, placed.room_id) in (SpaceKind.HALL, SpaceKind.DINING)
+        }
+        if living and start not in living and not graph[start] & living:
+            beyond = ", ".join(sorted(graph[start])) or "no other room"
+            findings.append(
+                Finding(
+                    check="circulation",
+                    severity=Severity.WARNING,
+                    message=(
+                        f"the front door does not lead into the house: {start} opens "
+                        f"into {beyond}, not the {' or '.join(sorted(living))}"
+                    ),
+                    rooms=[start],
+                )
+            )
+
     if not stranded:
         return findings
 
@@ -499,20 +524,51 @@ def _sanitation(layout: Layout, program: Program) -> list[Finding]:
     """
     kinds = {r.id: r.kind for r in program.rooms}
     here = {placed.room_id: kinds.get(placed.room_id) for placed in layout.rooms}
+    findings = _kept_apart(layout, program)
     sleeping = sorted(rid for rid, kind in here.items() if kind in _BEDROOMS)
-    if not sleeping or any(kind in _BATHS for kind in here.values()):
-        return []
-    return [
-        Finding(
-            check="sanitation",
-            severity=Severity.WARNING,
-            message=(
-                f"floor {layout.floor} has bedrooms ({', '.join(sleeping)}) and no "
-                f"bathroom"
-            ),
-            rooms=sleeping,
+    if sleeping and not any(kind in _BATHS for kind in here.values()):
+        findings.append(
+            Finding(
+                check="sanitation",
+                severity=Severity.WARNING,
+                message=(
+                    f"floor {layout.floor} has bedrooms ({', '.join(sleeping)}) and no "
+                    f"bathroom"
+                ),
+                rooms=sleeping,
+            )
         )
-    ]
+    return findings
+
+
+def _kept_apart(layout: Layout, program: Program) -> list[Finding]:
+    """Rooms the programme keeps apart that the tiling put wall to wall.
+
+    A toilet against the kitchen or against the pooja room is the placement Indian
+    clients object to first. `score` penalises it and the penalty can lose: the model's
+    30x40 3BHK put its pooja room against a bathroom and ⑦ said nothing. A warning, not
+    an error — the house works — and one finding per pair, naming both rooms. Wall to
+    wall means a shared length of wall; rooms meeting at a corner are not touching.
+    """
+    placed = {room.room_id: room for room in layout.rooms}
+    findings: list[Finding] = []
+    for edge in program.adjacencies:
+        if edge.relation is not Relation.SEPARATED:
+            continue
+        a, b = placed.get(edge.a), placed.get(edge.b)
+        if a is not None and b is not None and a.touches(b):
+            findings.append(
+                Finding(
+                    check="sanitation",
+                    severity=Severity.WARNING,
+                    message=(
+                        f"{edge.a} shares a wall with {edge.b}, which the programme "
+                        f"keeps apart"
+                    ),
+                    rooms=sorted([edge.a, edge.b]),
+                )
+            )
+    return findings
 
 
 def _size(layout: Layout, program: Program, floor: RefinedFloor) -> list[Finding]:

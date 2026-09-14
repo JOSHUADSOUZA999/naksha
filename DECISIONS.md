@@ -637,6 +637,28 @@ anywhere. The cost is a larger upper staircase where the tree leaves the stair a
 wall the shaft is not on — 8.6 to 17.7 m² on the 25x40 — while the model's 30x40 stair
 shrank from 20.1 to 8.8 m² and the joint-family 40x60's from 16.9 to 10.8.
 
+### The front door and rooms kept apart were invisible to ⑦
+
+The model's 30x40 3BHK showed two more things ⑦ never asked about. It was entered foyer →
+staircase → corridor → hall, and every rule passed, because every room was reachable and
+no private room was crossed. And its pooja room shared a wall with a bathroom, which the
+programme's own `SEPARATED` edge forbade — `score` penalised that and the penalty lost.
+⑦ now warns when the front door does not open into the hall or dining room, on storeys
+that have one, and when two rooms the programme keeps apart share a wall. The offline
+expansion now keeps the pooja room apart from every bathroom, as the model's programmes
+already did.
+
+On plans that had passed, it found: the 30x30 — the one clean reference plot — with its
+kitchen against a bathroom; the 25x40 entered through the stair room; the 30x50 entered
+through a corridor; the refused 30x40 3BHK with its pooja room against a bathroom. The
+three replayed model plans stayed clean. No offline plan got better, because none of the
+twelve candidates ⑦ chooses from is free of these defects. Measured just before, judging
+24 candidates a floor instead of 12 removed one warning on one plan of eleven and 36
+removed one on two, for 64% and 108% more time. The checks make the report honest; making
+the plans better is ⑤'s job.
+
+*Lesson: the 30x30 was clean for exactly as long as nobody looked at its kitchen wall.*
+
 ---
 
 ## Corrections to things I got wrong

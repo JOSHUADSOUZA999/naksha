@@ -100,7 +100,7 @@ uv venv --python 3.12 && source .venv/bin/activate
 uv pip install -e ".[dev]"
 cp .env.example .env          # set one key, or NAKSHA_INTENT_PROVIDER=claude_code
 
-pytest                        # 691 tests, no network, no key, and independent
+pytest                        # 694 tests, no network, no key, and independent
                               # of whatever is in your .env — see conftest
 pytest -m live                # real model; needs credentials
 
@@ -245,8 +245,9 @@ house.
   it.
 - **Bedrooms open off the corridor, never the hall.** That is what circulation is for,
   and why privacy survives the tiling.
-- **Kitchen and every bathroom carry a hard `SEPARATED` edge.** A toilet sharing a
-  kitchen wall is the one placement every Indian client objects to, Vastu or not.
+- **Kitchen and every bathroom carry a hard `SEPARATED` edge, and so do the pooja room
+  and every bathroom.** A toilet sharing a kitchen or pooja-room wall is the placement
+  Indian clients object to first, Vastu or not.
 - **`parking_bays` is authoritative, not `extra_rooms`.** The model lists
   `car_parking` in `extra_rooms` on some runs and not others for the same brief;
   building the bay from that choice swung the programme 14% between identical inputs.
@@ -409,6 +410,12 @@ that happens to fail — that test goes vacuous the day the pipeline improves.
   stair that does not sit over the stair below is no way up — ⑦ refuses it, reading
   `layout.shafts`. Nothing checked this, and three plans called clean could not be
   climbed.
+- **The front door leads into the house.** A ground floor whose entrance room has no
+  door to the hall or dining room is reported, even when every room is reachable: a
+  model's 3BHK was entered foyer → staircase → corridor → hall and passed everything.
+- **Rooms the programme keeps apart must not share a wall** — a toilet against the
+  kitchen or the pooja room. Reported from the programme's `SEPARATED` edges, so the rule
+  lives in stage ③, not in a list in ⑦.
 
 ### `llm/`
 

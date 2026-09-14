@@ -343,6 +343,15 @@ def _wire(
         AdjacencySpec(a=kitchen, b=bath, relation=Relation.SEPARATED, hard=True)
         for bath in baths
     ]
+    # And against the pooja room, for the same reason and more so. The model's programmes
+    # kept them apart; this one did not, so a pooja room could land against a toilet with
+    # nothing in the score or in ⑦ objecting.
+    edges += [
+        AdjacencySpec(a=room.id, b=bath, relation=Relation.SEPARATED, hard=True)
+        for room in extras
+        if room.kind is SpaceKind.POOJA
+        for bath in baths
+    ]
 
     # Everything a person walks into needs a door, and until stage ⑦ existed nothing
     # checked. `dining` had no edge of any kind and the rooms a user names — pooja,

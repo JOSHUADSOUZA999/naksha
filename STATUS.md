@@ -12,7 +12,7 @@ Read in this order, then run the commands below:
 
 ```bash
 cd naksha
-.venv/bin/pytest -q                                  # 691 tests, no network, no key
+.venv/bin/pytest -q                                  # 694 tests, no network, no key
 
 # The whole pipeline, to a drawing on disk: ①②③④⑤⑥⑦
 .venv/bin/python -m app.cli -s -e -P --allow-unverified --fallback-only \
@@ -50,40 +50,41 @@ strict vastu` · `20x30 2bhk in Bengaluru` (tight) · `30x40 north facing corner
 
 Where the build actually is.
 
-**Last updated:** 2026-09-14 · 691 tests passing, offline, no key
+**Last updated:** 2026-09-14 · 694 tests passing, offline, no key
 
 > **naksha draws floor plans.** Text in, a dimensioned drawing out: walls with
 > thickness, doors with swings, windows sized to the bye-laws, sanitaryware and beds,
 > and a list of what is wrong with the result. Seven of eight stages are built. **Of the
-> nine reference plots, one is clean, six are legal with named defects, and two are
+> nine reference plots, none is clean, seven are legal with named defects, and two are
 > refused** — and both refusals are plots whose rooms cannot physically fit: their legal
-> minimums come to 166% and 101% of the footprint. Earlier the same day it was one,
-> three and five, and the one "clean" plan had no front door.
+> minimums come to 166% and 101% of the footprint. The last clean one, the 30x30, turned
+> out to have its kitchen against a bathroom as soon as ⑦ looked.
 
 ## What it produces, per plot
 
-Measured 2026-09-14, seed 7, `--fallback-only`, with ⑦'s six checks — stairs connecting
-between storeys included — choosing among ⑤'s 12 best finished candidates per floor. A
+Measured 2026-09-14, seed 7, `--fallback-only`, with ⑦'s six checks — connecting stairs, a front
+door into the house and rooms kept apart included — choosing among ⑤'s 12 best finished candidates per floor. A
 seed now replays the same plan on any machine. Time is end to end, Python start-up
 included.
 
 | plot | storeys | result | time |
 |---|---|---|---|
 | 20x30 2BHK | G+2 | **refused** — 29.3 m² buildable and the car bay alone is 18; minimums are 166% of the footprint | 1.2 s |
-| 25x40 2BHK | G+1 | legal · 1 warning — a bathroom, the corridor and the hall only through the kitchen | 2.3 s |
-| 30x30 2BHK | G+1 | **clean** | 2.0 s |
-| 30x40 2BHK | G | legal · 1 warning — both bedrooms, both bathrooms, the corridor and the hall only through the kitchen | 2.2 s |
-| 30x40 3BHK | G+1 | **refused** — minimums are 101% of the footprint; `--stilt` is the answer | 3.0 s |
+| 25x40 2BHK | G+1 | legal · 2 warnings — the front door opens into the stair room · a bathroom, the corridor and the hall only through the kitchen | 2.2 s |
+| 30x30 2BHK | G+1 | legal · 1 warning — the kitchen shares a wall with a bathroom | 1.9 s |
+| 30x40 2BHK | G | legal · 2 warnings — a bedroom and a bathroom only through the kitchen · a bedroom with no window | 2.2 s |
+| 30x40 3BHK | G+1 | **refused** — minimums are 101% of the footprint; `--stilt` is the answer | 3.1 s |
 | 30x40 3BHK `--stilt` | stilt+2 | legal · 1 warning — no bathroom on the top floor. Its stairs connect only since 2026-09-14 | 1.3 s |
-| 30x50 3BHK | G | legal · 3 warnings — the hall, two bedrooms and a bathroom only through the kitchen · a bathroom only through a bedroom · a bedroom with no window | 2.8 s |
-| 40x60 3BHK | G | legal · 1 warning — two bedrooms, both bathrooms and the corridor only through the kitchen | 2.6 s |
+| 30x50 3BHK | G | legal · 4 warnings — the front door opens into a corridor · the hall, two bedrooms and a bathroom only through the kitchen · a bathroom only through a bedroom · a bedroom with no window | 2.8 s |
+| 40x60 3BHK | G | legal · 1 warning — two bedrooms, both bathrooms and the corridor only through the kitchen | 2.8 s |
 | 50x80 4BHK | G | legal · 2 warnings — a bathroom only through the study · hall glazed to 8% | 2.8 s |
 
 An **error** is a plan naksha refuses: a room below its statutory minimum measured inside
 its walls, a room with no route to it, a hall, kitchen or dining room reachable only
-through a bedroom or bathroom, or a car bay no driveway reaches. A **warning** is
+through a bedroom or bathroom, a stair that misses the stair below, or a car bay no driveway reaches. A **warning** is
 legal and wrong: a route through a bedroom or the kitchen, a bedroom floor with no
-bathroom, a room more than twice the size it should ever be, a room short of daylight.
+bathroom, a room more than twice the size it should ever be, a room short of daylight, a
+front door that does not open into the hall, a toilet against the kitchen or pooja room.
 
 **What moved this table, in order.** ⑤ grows *road-first* slicing trees — car bay and
 foyer as a strip along the road, the house behind — beside the random pool, and ⑦ picks
@@ -107,6 +108,8 @@ plots still refused for their car bay:
    one below.** The stilt plan here had a first-floor stair metres from the ground-floor
    one; nothing checked, and it was reported legal. Plans also replay exactly now, since
    Stage B stops on work rather than on the clock.
+5. **⑦ reports a front door that does not lead into the house, and rooms kept apart that
+   share a wall.** No plan got better for it, and the 30x30 stopped being clean.
 
 ## The model path — first end-to-end runs, 2026-09-13
 
@@ -289,7 +292,9 @@ living room reached through the kitchen (25x40, 30x40 2BHK, 30x50) and bedrooms 
 opened into whichever room the tree put behind it; a bedroom with no window (30x50); no
 bathroom on the stilt plan's top floor; a bathroom reached through the study (50x80).
 The judge counts findings rather than weighing them, so one warning naming six rooms ties
-with one naming one.
+with one naming one. Most of what remains is circulation, and it is ⑤'s to fix: judging 24
+or 36 candidates instead of 12 barely helps, so ⑤ has to generate candidates whose
+corridor reaches every bedroom and whose foyer meets the hall.
 
 **2. Measure the model path over more briefs.** Three briefs have been through the model
 live, the 30x40 twice. Its plans beat the offline expansion on every replay and on the
@@ -308,7 +313,7 @@ DXF wants. Open choice: add `ezdxf`, or write ASCII DXF R12 with no new dependen
 
 ## Known imperfections, in priority order
 
-- **Two of nine reference plans are refused and six more carry warnings.** Every
+- **Two of nine reference plans are refused and the other seven carry warnings.** Every
   defect in the table above is real and was confirmed in the plan data, not only by eye.
 - **Upper-floor staircases absorb surplus area**, and the shaft pull makes it worse
   where the tree leaves the stair against a wall the shaft is not on — 17.7 m² on the

@@ -596,6 +596,59 @@ class TestEveryDefectTheDrawingsShowed:
         # A kitchen is a room people do walk through: reported, not refused.
         assert all(f.severity is Severity.WARNING for f in findings)
 
+    def test_a_front_door_that_does_not_lead_into_the_house_is_reported(self):
+        """The model's 30x40 3BHK was entered foyer → staircase → corridor → hall. Every
+        room was reachable and no private room was crossed, so nothing objected."""
+        from types import SimpleNamespace
+
+        from app.ir.enums import OpeningKind
+        from app.ir.plan import Program
+        from app.validator import _circulation
+
+        layout, specs = self._row(
+            ("foyer", SpaceKind.FOYER), ("stair", SpaceKind.STAIRCASE),
+            ("hall", SpaceKind.HALL), through={"foyer", "stair", "hall"},
+        )
+        entrance = SimpleNamespace(kind=OpeningKind.ENTRANCE, connects=("foyer",))
+
+        def door(a, b):
+            return SimpleNamespace(kind=OpeningKind.DOOR, connects=(a, b))
+
+        via_stair = SimpleNamespace(
+            openings=[entrance, door("foyer", "stair"), door("stair", "hall")]
+        )
+        findings = _circulation(layout, Program(rooms=specs), via_stair)
+        assert any("does not lead into the house" in f.message for f in findings)
+        assert all(f.severity is Severity.WARNING for f in findings)
+
+        direct = SimpleNamespace(
+            openings=[entrance, door("foyer", "hall"), door("stair", "hall")]
+        )
+        assert not any(
+            "does not lead into the house" in f.message
+            for f in _circulation(layout, Program(rooms=specs), direct)
+        )
+
+    def test_rooms_kept_apart_that_share_a_wall_are_reported(self):
+        """The model's 30x40 3BHK put its pooja room against a bathroom. `score` knew and
+        the penalty lost; ⑦ did not look."""
+        from app.ir.enums import Relation
+        from app.ir.plan import AdjacencySpec, Program
+        from app.validator import _kept_apart
+
+        layout, specs = self._row(("pooja", SpaceKind.POOJA), ("bath1", SpaceKind.BATHROOM))
+        apart = Program(
+            rooms=specs,
+            adjacencies=[
+                AdjacencySpec(a="pooja", b="bath1", relation=Relation.SEPARATED, hard=True)
+            ],
+        )
+        findings = _kept_apart(layout, apart)
+        assert [set(f.rooms) for f in findings] == [{"pooja", "bath1"}]
+        assert findings[0].severity is Severity.WARNING
+        # No edge, no complaint: the rule is the programme's, not a list in ⑦.
+        assert _kept_apart(layout, Program(rooms=specs)) == []
+
     def test_a_second_honest_route_clears_the_room(self):
         """Every route, not the shortest. One good way in is enough."""
         from app.ir.plan import Program
