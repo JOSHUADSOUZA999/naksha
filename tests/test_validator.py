@@ -649,6 +649,78 @@ class TestEveryDefectTheDrawingsShowed:
         # No edge, no complaint: the rule is the programme's, not a list in ⑦.
         assert _kept_apart(layout, Program(rooms=specs)) == []
 
+    def test_a_bay_on_the_road_with_no_opening_is_refused(self):
+        """Touching the road is not an opening onto it: every bay was drawn with a window,
+        sealed, and passed."""
+        from types import SimpleNamespace
+
+        from app.ir.enums import Facing, OpeningKind
+        from app.ir.plan import Program
+        from app.validator import _access
+
+        layout, specs = self._row(("bay", SpaceKind.CAR_PARKING), ("hall", SpaceKind.HALL))
+        layout = layout.model_copy(update={"road_edges": [Facing.NORTH]})
+        findings = _access(layout, Program(rooms=specs), SimpleNamespace(openings=[]))
+        assert [f.severity for f in findings] == [Severity.ERROR]
+        assert "no opening a car can drive through" in findings[0].message
+
+        gate = SimpleNamespace(kind=OpeningKind.VEHICLE, connects=["bay"])
+        assert _access(layout, Program(rooms=specs), SimpleNamespace(openings=[gate])) == []
+
+    def test_a_bay_along_the_road_needs_a_gate_across_it(self):
+        """A bay lying along the road is swung into, so an ordinary 2.7 m gate in its long
+        side is not a way in."""
+        from types import SimpleNamespace
+
+        from app.ir.enums import Facing, OpeningKind
+        from app.ir.layout import Layout, PlacedRoom
+        from app.ir.plan import Program
+        from app.program import spec_for
+        from app.validator import _access
+
+        program = Program(
+            rooms=[spec_for(SpaceKind.CAR_PARKING, "bay"), spec_for(SpaceKind.HALL, "hall")]
+        )
+        layout = Layout(
+            rooms=[
+                PlacedRoom(room_id="bay", x_min_m=0.0, y_min_m=0.0, x_max_m=6.5, y_max_m=3.5),
+                PlacedRoom(room_id="hall", x_min_m=6.5, y_min_m=0.0, x_max_m=10.0, y_max_m=3.5),
+            ],
+            x_min_m=0.0, y_min_m=0.0, x_max_m=10.0, y_max_m=3.5, road_edges=[Facing.NORTH],
+        )
+
+        def gate(width):
+            return SimpleNamespace(openings=[
+                SimpleNamespace(kind=OpeningKind.VEHICLE, connects=["bay"], width_m=width)
+            ])
+
+        narrow = _access(layout, program, gate(2.7))
+        assert [f.severity for f in narrow] == [Severity.ERROR]
+        assert "lies along the road" in narrow[0].message
+        assert _access(layout, program, gate(6.2)) == []
+
+    def test_a_car_bay_is_not_reported_for_having_no_window(self):
+        """Its light and air come through its opening. Once ⑥ stopped drawing it a window,
+        every bay in the project was reported as a room with none."""
+        from app.ir.enums import Facing
+        from app.ir.layout import Layout, PlacedRoom
+        from app.ir.plan import Program
+        from app.program import spec_for
+        from app.refine import refine
+        from app.validator import _light
+
+        program = Program(
+            rooms=[spec_for(SpaceKind.CAR_PARKING, "bay"), spec_for(SpaceKind.HALL, "hall")]
+        )
+        layout = Layout(
+            rooms=[
+                PlacedRoom(room_id="bay", x_min_m=0.0, y_min_m=0.0, x_max_m=3.5, y_max_m=8.0),
+                PlacedRoom(room_id="hall", x_min_m=3.5, y_min_m=0.0, x_max_m=9.5, y_max_m=8.0),
+            ],
+            x_min_m=0.0, y_min_m=0.0, x_max_m=9.5, y_max_m=8.0, road_edges=[Facing.NORTH],
+        )
+        assert not any("bay" in f.rooms for f in _light(program, refine(layout, program)))
+
     def test_a_second_honest_route_clears_the_room(self):
         """Every route, not the shortest. One good way in is enough."""
         from app.ir.plan import Program
@@ -707,13 +779,17 @@ class TestEveryDefectTheDrawingsShowed:
         """The 50x80's 27.7 m² bathroom passed because ⑦ only measured rooms that were
         too small. Built by lowering a room's ceiling below the space it was given."""
         layout, program, floor, _ = plans["40x60"]
+        specs = {s.id: s for s in program.rooms}
+        # The biggest room *well above its minimum* — not simply the biggest. A car bay at
+        # its statutory 3 x 6 m is now often the largest room on a floor and sits right at
+        # its minimum, so lowering its ceiling tests nothing.
         biggest = max(
-            (r for r in layout.rooms),
+            (
+                r for r in layout.rooms
+                if (floor.clear_area_sq_m(r.room_id) or 0) > 2 * specs[r.room_id].min_area_sq_m + 3
+            ),
             key=lambda r: floor.clear_area_sq_m(r.room_id) or 0,
         )
-        spec = next(s for s in program.rooms if s.id == biggest.room_id)
-        area = floor.clear_area_sq_m(biggest.room_id)
-        assert area > 2 * spec.min_area_sq_m + 3, "fixture room must be well above its minimum"
 
         shrunk = program.model_copy(
             update={

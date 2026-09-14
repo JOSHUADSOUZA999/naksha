@@ -1116,6 +1116,83 @@ class TestCorridorFirstTreesGiveEveryRoomACorridorWall:
         assert earlier(0) == earlier(300)
 
 
+class TestTheCarBayIsLongEnoughForACar:
+    """A 4.3 x 4.6 m bay passed on area and width. The bye-law bay is 3.0 x 6.0 m, and on
+    a narrow plot the only way to fit one is to run it back from the road."""
+
+    def test_stage_b_holds_the_bay_to_its_length(self):
+        from app.ir.enums import SpaceKind
+        from app.ir.plan import RoomSpec
+        from app.solver import tuning
+        from app.solver.slicing import Cut, Leaf
+
+        def bay(length):
+            return RoomSpec(
+                id="bay", kind=SpaceKind.CAR_PARKING, min_area_sq_m=18.0,
+                target_area_sq_m=18.0, min_width_m=3.0, min_length_m=length, max_aspect=2.2,
+            )
+
+        hall = RoomSpec(
+            id="hall", kind=SpaceKind.HALL, min_area_sq_m=9.5, target_area_sq_m=22.0,
+            min_width_m=2.4, max_aspect=2.5,
+        )
+
+        def longest(spec):
+            tree = Cut(vertical=True, left=Leaf(spec, 18.0), right=Leaf(hall, 22.0))
+            rooms = tuning.tune(
+                tree, (0.0, 0.0, 10.0, 4.0), {"bay": 18.0, "hall": 22.0}, work_limit=2.0
+            )
+            placed = next(room for room in rooms if room.room_id == "bay")
+            return max(placed.x_max_m - placed.x_min_m, placed.y_max_m - placed.y_min_m)
+
+        allow = 2 * tuning._exterior_half()
+        assert longest(bay(None)) < 6.0  # area and width alone leave it short
+        assert longest(bay(6.0)) >= 6.0 + allow - 0.01
+
+    @pytest.mark.parametrize("road", ["north", "east"])
+    def test_road_columns_keep_every_street_room_on_the_street(self, road):
+        from app.ir.enums import Facing, SpaceKind
+        from app.ir.layout import Layout
+        from app.program import spec_for
+        from app.solver.score import _on_a_road_edge
+        from app.solver.slicing import place, road_columns_tree
+
+        facing = Facing(road)
+        rooms = [
+            spec_for(SpaceKind.CAR_PARKING, "bay"), spec_for(SpaceKind.FOYER, "foyer"),
+            spec_for(SpaceKind.HALL, "hall"), spec_for(SpaceKind.KITCHEN, "kitchen"),
+            spec_for(SpaceKind.BATHROOM, "bath1"), spec_for(SpaceKind.STAIRCASE, "stair1"),
+        ]
+        weights = {room.id: room.target_area_sq_m for room in rooms}
+        for seed in range(20):
+            tree = road_columns_tree(rooms, random.Random(seed), weights, facing)
+            layout = Layout(
+                rooms=place(tree, 0.0, 0.0, 6.0, 10.0), x_min_m=0.0, y_min_m=0.0,
+                x_max_m=6.0, y_max_m=10.0, road_edges=[facing],
+            )
+            for placed in layout.rooms:
+                if placed.room_id in ("bay", "foyer"):
+                    assert _on_a_road_edge(placed, layout), (road, seed, placed.room_id)
+
+    def test_a_narrow_plot_runs_its_bay_back_from_the_road(self):
+        """The 25x40: a 5.6 m frontage cannot lay a 6 m bay along the road, and a strip
+        could not run it back without dragging the foyer with it. Refused, until the
+        deeper search tried columns."""
+        from app.refine import refine
+        from app.solver import plan
+        from app.validator import judge, validate
+
+        brief = fallback.parse("25x40 2bhk in Bengaluru")
+        envelope = build_envelope(brief, allow_unverified=True)
+        program = expand(brief, envelope)
+        bundle = plan(brief, envelope, program, seed=7, judge=judge(program, envelope))
+        ground = next(layout for layout in bundle.layouts if layout.floor == 1)
+        floor = refine(ground, program, envelope)
+        assert validate(ground, program, floor).errors == 0
+        x_min, y_min, x_max, y_max = floor.clear["car_parking"]
+        assert max(x_max - x_min, y_max - y_min) >= 6.0 - 1e-6
+
+
 class TestAJudgeChoosesTheFinishedPlan:
     """Stage ⑤'s penalty does not measure what ⑦ reports, so the lowest penalty was
     routinely a plan ⑦ refused. Tested by handing `plan` two candidates directly, so it

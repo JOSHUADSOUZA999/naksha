@@ -100,7 +100,7 @@ uv venv --python 3.12 && source .venv/bin/activate
 uv pip install -e ".[dev]"
 cp .env.example .env          # set one key, or NAKSHA_INTENT_PROVIDER=claude_code
 
-pytest                        # 696 tests, no network, no key, and independent
+pytest                        # 708 tests, no network, no key, and independent
                               # of whatever is in your .env — see conftest
 pytest -m live                # real model; needs credentials
 
@@ -332,6 +332,11 @@ CP-SAT fail decision 2's twenty-second test.
   runs the corridor across the floor with two rows cut across it. Added as a group after
   the random and road-first trees, it cut route warnings from 10 to 7 over thirteen plans
   at no cost in time.
+- **A statutory length is a constraint, and narrow plots need columns to carry it.**
+  `RoomSpec.min_length_m` — 6.0 m for a car bay — is enforced in Stage B. A road-first
+  strip drags the foyer to the bay's depth, so the deeper search tries road-column trees
+  once the strips are spent. Strips first: taking both in turn cost floors the strips
+  had served.
 
 `max_aspect` is per-kind data, not a constant. A corridor is *supposed* to be
 elongated; flagging one as "a corridor, not a corridor" was the rule mistaking the
@@ -376,6 +381,12 @@ makes 11 of 60 layouts legal" is a decision they can take.
   started their walk at the entrance and gave up upstairs.
 - **Openings narrow before they give up.** Missing a doorway by three centimetres is a
   reason to draw a narrower door, not a house with no way in.
+- **A car bay gets a gate, not a window, and the gate depends on which way it lies.**
+  `_vehicle_openings` puts a 2.7 m gate in the short side of a bay running back from the
+  road, and a gate across nearly the whole long side — at least 5.4 m, car-porch style —
+  of one lying along it. ⑦ refuses a bay on the road with no gate, or with a narrow gate
+  along the road, and its daylight rule skips car bays. Requiring every bay to be driven
+  into nose first refused three single-storey plans; the user chose the car porch.
 
 ### `validator/` — stage ⑦
 

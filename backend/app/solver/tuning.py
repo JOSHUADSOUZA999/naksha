@@ -64,7 +64,11 @@ def gross_minimum_cm2(spec) -> int:
     """
     side = math.sqrt(spec.min_area_sq_m)
     allow = 2 * _exterior_half()
-    return round((side + allow) * (side + allow) * _PER_M * _PER_M)
+    gross = (side + allow) * (side + allow)
+    if spec.min_length_m:
+        # A statutory length forces a longer room than the squarest one of that area.
+        gross = max(gross, (spec.min_width_m + allow) * (spec.min_length_m + allow))
+    return round(gross * _PER_M * _PER_M)
 
 
 def cannot_fit(rooms, bounds: tuple[float, float, float, float]) -> bool:
@@ -240,6 +244,13 @@ def _build(model, node: Node, x0, x1, y0, y1, leaves: list) -> None:
         depth = model.NewIntVar(floor_cm, 10_000, f"d_{spec.id}")
         model.Add(width == x1 - x0)
         model.Add(depth == y1 - y0)
+        # A length the law sets as well as a width: a private garage is 3.0 x 6.0 m.
+        # Either side may be the long one — which way the car faces is not the bye-law's
+        # question, and the opening goes on whichever side meets the road.
+        if spec.min_length_m:
+            longer = model.NewIntVar(floor_cm, 10_000, f"l_{spec.id}")
+            model.AddMaxEquality(longer, [width, depth])
+            model.Add(longer >= round((spec.min_length_m + allow) * _PER_M))
 
         area = model.NewIntVar(0, 100_000_000, f"a_{spec.id}")
         model.AddMultiplicationEquality(area, [width, depth])

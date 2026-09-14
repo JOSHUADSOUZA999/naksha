@@ -60,7 +60,8 @@ JUDGED_KEEP = 12
 ROAD_FIRST_CANDIDATES = 300
 # Road-first trees tried one at a time past the shortlist, and only on a floor where the
 # shortlist dimensioned fewer layouts than `solve` wants. A count rather than a clock,
-# so a seed still replays. About 1.7 s at the full budget; a roomy plot never spends it.
+# so a seed still replays. About 1.7 s per phase at the full budget; a roomy plot never
+# spends it.
 ROAD_FIRST_DEPTH = 2000
 
 # Stage B's budget per topology, in CP-SAT deterministic seconds — work rather than wall
@@ -268,10 +269,8 @@ def shortlist_for(
     # before tuning, for the usual reason that what Stage B fixes is exactly what they
     # look bad on, so ranking alone never showed them to CP-SAT and every plan on a
     # tight plot came back with a bedroom serving as a corridor.
-    random_pool = [
-        row for row in scored
-        if row[1] not in road_first_indices and row[1] not in spine_first_indices
-    ]
+    grouped = road_first_indices | spine_first_indices
+    random_pool = [row for row in scored if row[1] not in grouped]
     road_first = [row for row in scored if row[1] in road_first_indices]
     spine_first = [row for row in scored if row[1] in spine_first_indices]
     reachable = [row for row in random_pool if not unreachable(row)]
@@ -316,6 +315,14 @@ def deeper(
     rng = random.Random(f"road-first depth {seed}")
     for _ in range(ROAD_FIRST_DEPTH):
         yield slicing.road_first_tree(rooms, rng, weights, road)
+    # **Then columns, on their own stream, and only once the strips are spent.** With the
+    # car bay at its statutory 6 m, a narrow plot's bay has to run back from the road, and
+    # a strip drags the foyer back with it: the 25x40 dimensioned no strip at all. Taking
+    # strips and columns in turn found it, but cost the 30x40 2BHK two warnings by halving
+    # the strips it saw. Strips first leaves every floor they already served as it was.
+    rng = random.Random(f"road-columns depth {seed}")
+    for _ in range(ROAD_FIRST_DEPTH):
+        yield slicing.road_columns_tree(rooms, rng, weights, road)
 
 
 def _shaft_zone(

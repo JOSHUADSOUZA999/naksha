@@ -214,6 +214,7 @@
       "target_area_sq_m": 18.0,
       "max_target_sq_m": 18.0,
       "min_width_m": 3.0,
+      "min_length_m": 6.0,
       "sector": null,
       "exterior_wall": true,
       "road_access": true,

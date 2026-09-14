@@ -24,6 +24,14 @@
     "source": "Practice. NBC 2016 Part 3 gives 0.75 m as the floor for a bathroom or WC door and 0.9 m for a habitable room; the 1.0 m entrance is convention, not code. Neither figure has been read first-hand — see VERIFY.md.",
     "verified": false
   },
+  "vehicles": {
+    "opening_width_m": 2.7,
+    "min_opening_width_m": 2.4,
+    "side_gate_min_m": 5.4,
+    "clearance_m": 0.15,
+    "source": "Practice, not code. A car is about 1.8 m wide; 2.4 m is the narrowest opening a driver uses without folding mirrors and 2.7 m an ordinary garage opening. A bay lying along the road is entered by swinging in, like a car porch, which wants a gate across its long side — at least 5.4 m, a 4.5 m car and room to turn. Karnataka Municipalities Model Building Bye-Laws 2017 cl. 5.1.8.2 sizes the bay, not its opening.",
+    "verified": false
+  },
   "windows": {
     "area_fraction": 0.1,
     "height_m": 1.2,

@@ -600,3 +600,13 @@ def test_the_pooja_room_is_kept_apart_from_every_bathroom():
         if edge.relation is Relation.SEPARATED and edge.hard
     }
     assert all(frozenset({p, b}) in apart for p in pooja for b in baths)
+
+
+def test_the_car_bay_is_three_by_six_not_just_eighteen_square_metres():
+    """Area and width alone passed a 4.3 x 4.6 m bay no car fits in. The clause the rule
+    already cites — cl. 5.1.8.2(a) — says 3.0 x 6.0 m."""
+    from app.ir.enums import SpaceKind
+    from app.program import spec_for
+
+    bay = spec_for(SpaceKind.CAR_PARKING, "car_parking")
+    assert (bay.min_width_m, bay.min_length_m, bay.min_area_sq_m) == (3.0, 6.0, 18.0)

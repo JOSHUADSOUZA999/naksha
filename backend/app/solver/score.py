@@ -163,6 +163,13 @@ def score(layout: Layout, program: Program) -> tuple[int, float, list[str]]:
                 f"{spec.id} is {clear_side:.2f} m clear across, below the "
                 f"{spec.min_width_m:.2f} m minimum width",
             )
+        clear_length = clear_area / clear_side if clear_side > 0 else 0.0
+        if spec.min_length_m and clear_length < spec.min_length_m - EPSILON:
+            fail(
+                ILLEGAL,
+                f"{spec.id} is {clear_length:.2f} m long inside its walls, below the "
+                f"{spec.min_length_m:.2f} m minimum length",
+            )
         # Grossly oversized is a defect too, and until this existed nothing measured
         # it. Exact tiling fixes the total area, so whatever the programme does not
         # ask for is forced into *some* room — on a 50x80, where 48% of the permitted

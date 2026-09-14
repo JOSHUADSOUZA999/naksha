@@ -181,13 +181,20 @@ def _walls_and_openings(refined: RefinedFloor, layout: Layout, px) -> list[str]:
             f'<line x1="{ax:.1f}" y1="{ay:.1f}" x2="{bx:.1f}" y2="{by:.1f}" '
             f'stroke-width="{wall.thickness_m * _SCALE + 1:.1f}"/>'
         )
-        if opening.kind is not OpeningKind.WINDOW:
-            arcs.append(_swing(ax, ay, bx, by, _inward(wall, opening, layout, px)))
-        else:
+        if opening.kind is OpeningKind.WINDOW:
             arcs.append(
                 f'<line x1="{ax:.1f}" y1="{ay:.1f}" x2="{bx:.1f}" y2="{by:.1f}" '
                 f'stroke="#3f6f8f" stroke-width="1.4"/>'
             )
+        elif opening.kind is OpeningKind.VEHICLE:
+            # The car bay's opening: no leaf and no glass, so a dashed line across the gap
+            # — the convention for an opening with nothing in it.
+            arcs.append(
+                f'<line x1="{ax:.1f}" y1="{ay:.1f}" x2="{bx:.1f}" y2="{by:.1f}" '
+                f'stroke="#8a8a8a" stroke-width="1.4" stroke-dasharray="6 4"/>'
+            )
+        else:
+            arcs.append(_swing(ax, ay, bx, by, _inward(wall, opening, layout, px)))
     out.append('</g>')
     out.extend(arcs)
     return out

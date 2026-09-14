@@ -234,6 +234,59 @@ def spine_first_tree(
     )
 
 
+def road_columns_tree(
+    rooms: list[RoomSpec], rng: random.Random, weights: dict[str, float], road: Facing
+) -> Node:
+    """Every room that needs the street at the road end of its own column.
+
+    `road_first_tree` puts the car bay and the foyer in one strip, so both take the
+    strip's depth. With the bay at its statutory 3.0 x 6.0 m that stopped working on a
+    narrow plot: a 25x40's 5.6 m frontage cannot lay the bay along the road, so the bay
+    runs 6 m back from it — and the foyer beside it had to as well, leaving too little
+    house behind. Not one of 600 strip trees could be dimensioned. In columns the bay can
+    run deep while the foyer stays shallow with the hall behind it.
+
+    Columns stand side by side along the road; each holds one road room at its street
+    end and a random tree of other rooms behind it.
+    """
+    front = [room for room in rooms if room.needs_road_access]
+    rest = [room for room in rooms if not room.needs_road_access]
+    if len(front) < 2 or not rest:
+        return road_first_tree(rooms, rng, weights, road)
+    front = front[:]
+    rest = rest[:]
+    rng.shuffle(front)
+    rng.shuffle(rest)
+    behind: list[list[RoomSpec]] = [[] for _ in front]
+    for room in rest:
+        behind[rng.randrange(len(front))].append(room)
+
+    # Across a north or south road the columns stand side by side east-west, split by
+    # vertical cuts; along an east or west road, north-south. Inside a column the cut
+    # runs parallel to the road, and `place` gives a cut's right child the north or east
+    # half — so the road room is the right child on a north or east road.
+    across = road in (Facing.NORTH, Facing.SOUTH)
+    street_is_right = road in (Facing.NORTH, Facing.EAST)
+    columns: list[Node] = []
+    for room, others in zip(front, behind):
+        leaf: Node = Leaf(room, weights[room.id])
+        if not others:
+            columns.append(leaf)
+            continue
+        body = random_tree(others, rng, weights)
+        columns.append(
+            Cut(
+                vertical=not across,
+                left=body if street_is_right else leaf,
+                right=leaf if street_is_right else body,
+            )
+        )
+    tree = columns[0]
+    for column in columns[1:]:
+        tree = Cut(vertical=across, left=tree, right=column)
+    return tree
+
+
 def place(node: Node, x_min: float, y_min: float, x_max: float, y_max: float) -> list[PlacedRoom]:
     """Divide the rectangle down the tree, proportional to target areas.
 

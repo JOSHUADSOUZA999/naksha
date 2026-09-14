@@ -213,6 +213,7 @@ export function FloorPlan({ layout, refined, specs, width, height, selected, onS
           const a = t(op.offset_m - op.width_m / 2);
           const b = t(op.offset_m + op.width_m / 2);
           const isWindow = op.kind === "window";
+          const isVehicle = op.kind === "vehicle";
           const room = op.connects.length ? layout.rooms.find(
             (r) => r.room_id === op.connects[op.connects.length - 1]) : undefined;
 
@@ -254,6 +255,11 @@ export function FloorPlan({ layout, refined, specs, width, height, selected, onS
                     strokeWidth={wall.thickness_m * scale + 1} />
               {isWindow ? (
                 <Line points={[a.x, a.y, b.x, b.y]} stroke="#3f6f8f" strokeWidth={1.4} />
+              ) : isVehicle ? (
+                // The car bay's opening: no leaf and no glass, just the gap, dashed — the
+                // same convention the SVG renderer uses.
+                <Line points={[a.x, a.y, b.x, b.y]} stroke="#8a8a8a" strokeWidth={1.4}
+                      dash={[6, 4]} />
               ) : (
                 <>
                   <Line points={[a.x, a.y, leaf.x, leaf.y]} stroke="#555" strokeWidth={1.1} />

@@ -684,6 +684,50 @@ clean reference plot, the refused 20x30 lost a warning, and nothing got worse an
 "Route warnings" are the ones about walking through a bedroom, a bathroom or the kitchen,
 and a front door that does not lead into the house.
 
+### The car bay: 6 m long, and an opening a car can drive through
+
+Every car bay in the project had two defects nothing checked. The rule held area (18 m²)
+and width (3.0 m) but not the 6.0 m length its own cited clause sets, so a 4.3 x 4.6 m bay
+passed. And stage ⑥ gave a bay what it gives any room with an exterior wall — a window —
+so every bay was drawn as a sealed room. `RoomSpec.min_length_m` now carries the length,
+6.0 for a car bay from cl. 5.1.8.2(a); Stage B holds a bay's longer side to it, and
+`score`, `refine.breaches` and ⑦ all report a short bay. Stage ⑥ gives a road-facing bay
+a `vehicle` opening — 2.7 m, narrowing to 2.4, practice figures marked unverified — in
+place of a window; the SVG and the viewer draw it as a dashed gap, and ⑦ refuses a bay on
+the road with no opening.
+
+The measurement caught two things. Removing the window made ⑦'s daylight rule report
+every bay as having "no window at all": a bay needs its exterior wall for the opening,
+not for glass, so the daylight rule now skips it. And the 25x40 went from legal to
+refused. Its 5.6 m frontage cannot lay a 6 m bay along the road, so the bay has to run
+back from it, and a road-first strip drags the foyer back too — 0 of 600 strip trees
+could be dimensioned. `slicing.road_columns_tree` puts each street room at the road end
+of its own column, and 4 of 600 dimensioned. As its own shortlist group it bought nothing
+and cost the 50x80 a warning. Alternated with strips in the deeper search it rescued the
+25x40 but cost the 30x40 2BHK two warnings, by halving the strips it saw. Strips first,
+then columns on their own stream, leaves every floor the strips served as it was and
+still reaches the 25x40.
+
+Over thirteen plans: every legal plan has a 3 x 6 m bay with an opening, no plan gained a
+warning and the 50x80 lost one. The three tight plots that search past the shortlist take
+1.4–1.6 s longer, because they now also try columns.
+
+*Lesson: a rule that cites a clause should carry every number in it. The 6.0 m was in the
+`source` text of the rule the whole time.*
+
+**Which way the bay lies was the user's call.** The first drawings showed a legal 3 x 6 m
+bay lying along the road, 3 m deep, with a 2.7 m gate in the middle of its long side — a
+garage no car can turn into. Requiring the car to drive in nose first, with the 6 m
+running back from the road, in Stage B, `score`, the climb and ⑦, refused the
+single-storey 30x30, 30x40 2BHK and 30x50 outright: none of their candidates had room for
+a 6 m-deep bay and the house beside it, and a column generator putting only narrow rooms
+behind the bay changed nothing. The model's G+1 plans kept drive-in bays and stayed clean.
+Given the choice, the user took the car-porch answer: a bay may lie along the road if its
+gate spans nearly the whole long side, at least 5.4 m (a practice figure, unverified),
+and a bay running back from the road keeps a 2.7 m gate. ⑦ refuses a bay along the road
+with a narrower gate. With that, every legal reference plan has a usable bay, and the
+warnings are where they were before any of the bay changes.
+
 ---
 
 ## Corrections to things I got wrong

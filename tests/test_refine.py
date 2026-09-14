@@ -591,6 +591,8 @@ class TestWindowsAreSizedToTheRoomTheyLight:
             for room in program.rooms:
                 if not room.needs_exterior_wall or room.id not in floor.clear:
                     continue
+                if room.kind.value == "car_parking":
+                    continue  # lit and aired by its opening to the road, never glazed
                 area = floor.clear_area_sq_m(room.id)
                 has_wall = any(
                     w.kind is WallKind.EXTERIOR
@@ -696,3 +698,70 @@ class TestTheSpineIsConnectedBeforeAnythingElse:
         assert spine_neighbours & through, (
             "the corridor must open onto circulation, not only onto bedrooms"
         )
+
+
+class TestTheCarBayOpensOntoTheRoad:
+    """Every car bay was drawn with a window, sealed — a room no car could get into."""
+
+    @staticmethod
+    def _plan(bay_rect, road):
+        from app.ir.enums import Facing, SpaceKind
+        from app.ir.layout import Layout, PlacedRoom
+        from app.ir.plan import Program
+        from app.program import spec_for
+
+        x_max, y_max = bay_rect
+        program = Program(
+            rooms=[spec_for(SpaceKind.CAR_PARKING, "bay"), spec_for(SpaceKind.HALL, "hall")]
+        )
+        layout = Layout(
+            rooms=[
+                PlacedRoom(room_id="bay", x_min_m=0.0, y_min_m=0.0, x_max_m=x_max, y_max_m=y_max),
+                PlacedRoom(room_id="hall", x_min_m=x_max, y_min_m=0.0, x_max_m=9.5, y_max_m=y_max),
+            ],
+            x_min_m=0.0, y_min_m=0.0, x_max_m=9.5, y_max_m=y_max, road_edges=[Facing(road)],
+        )
+        return layout, program
+
+    def test_a_bay_on_the_road_gets_an_opening_and_no_window(self):
+        from app.ir.enums import OpeningKind
+        from app.refine import refine
+
+        layout, program = self._plan((3.5, 8.0), "north")
+        floor = refine(layout, program)
+        opening = next(o for o in floor.openings if o.kind is OpeningKind.VEHICLE)
+        wall = floor.by_id(opening.wall_id)
+        assert opening.connects == ["bay"]
+        assert not wall.is_vertical and abs(wall.y1_m - 8.0) < 1e-6  # on the north road
+        assert opening.width_m >= 2.4
+        assert not any(
+            o.kind is OpeningKind.WINDOW and "bay" in o.connects for o in floor.openings
+        )
+
+    def test_a_bay_lying_along_the_road_gets_a_gate_across_its_side(self):
+        """Swung into from the road, like a car porch. A 2.7 m gap in the middle of a 6 m
+        wall, 3 m deep, is a garage no car can turn into."""
+        from app.ir.enums import OpeningKind
+        from app.refine import refine
+
+        layout, program = self._plan((3.5, 8.0), "west")  # the 8 m side is on the road
+        floor = refine(layout, program)
+        gate = next(o for o in floor.openings if o.kind is OpeningKind.VEHICLE)
+        wall = floor.by_id(gate.wall_id)
+        assert wall.is_vertical and abs(wall.x1_m) < 1e-6
+        assert gate.width_m >= 5.4
+
+    def test_a_bay_off_the_road_gets_no_opening(self):
+        from app.ir.enums import OpeningKind
+        from app.refine import refine
+
+        layout, program = self._plan((3.5, 8.0), "east")
+        assert not any(o.kind is OpeningKind.VEHICLE for o in refine(layout, program).openings)
+
+    def test_a_bay_too_short_for_a_car_is_a_breach(self):
+        """4.6 x 4.9 m on centrelines: 18 m² of floor would pass on area; 6 m would not."""
+        from app.refine import breaches, refine
+
+        layout, program = self._plan((4.6, 4.9), "north")
+        found = breaches(refine(layout, program), program)
+        assert any(message.startswith("bay") and "minimum length" in message for message in found)

@@ -54,6 +54,13 @@ class RoomSpec(BaseModel):
         description="Shortest usable dimension. Area alone permits a 1 m x 9 m bedroom.",
         gt=0,
     )
+    min_length_m: float | None = Field(
+        default=None,
+        gt=0,
+        description="Longest side's legal minimum, where the law sets one. A private "
+        "garage is 3.0 x 6.0 m, and area and width alone passed a 4.3 x 4.6 m bay no car "
+        "fits in. Null for every room whose rule is area and width only.",
+    )
     max_aspect: float = Field(
         default=2.5,
         description="Longest side over shortest. The other half of stopping a room "

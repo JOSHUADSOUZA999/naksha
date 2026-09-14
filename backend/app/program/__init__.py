@@ -294,6 +294,7 @@ def _spec(kind: SpaceKind, room_id: str, rules: dict[str, Any], *, floor: int) -
             else None
         ),
         min_width_m=rule["min_width_m"],
+        min_length_m=rule.get("min_length_m"),
         max_aspect=rule["max_aspect"],
         sector=Sector(sector) if sector else None,
         needs_exterior_wall=rule["exterior_wall"],

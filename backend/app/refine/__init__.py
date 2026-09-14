@@ -38,6 +38,7 @@ def refine(layout: Layout, program: Program, envelope=None) -> RefinedFloor:
     walls = _walls(layout, rules["walls"])
     openings = _doors(walls, layout, program, rules["doors"])
     openings += _connect(walls, layout, program, openings, rules["doors"])
+    openings += _vehicle_openings(walls, layout, program, rules["vehicles"], openings)
 
     clear = {
         placed.room_id: _clear_rect(placed, layout, rules["walls"])
@@ -235,6 +236,69 @@ def _entrance(
     )
 
 
+def _vehicle_openings(
+    walls: list[Wall], layout: Layout, program: Program, rules: dict, taken: list[Opening]
+) -> list[Opening]:
+    """The car bay's opening to the road: a gap a car can drive through.
+
+    Stage ⑥ gave a car bay what it gives every room with an exterior wall — a window —
+    so every bay in the project was drawn as a sealed room no car could get into. The
+    opening goes on the bay's road-facing wall, which `score` and ⑦ already require it to
+    have, and narrows to the least a car fits through before it gives up. A bay with no
+    such wall, or too little of one, gets nothing, and ⑦ refuses it. A porch built in the
+    setback is drawn by `_in_the_setback` and is open anyway.
+
+    **Which gate depends on which way the bay lies.** One that runs back from the road is
+    driven into nose first, through an ordinary 2.7 m gate in its short side. One lying
+    along the road — its long side on the street — is swung into, like a car porch, and
+    gets a gate across that whole side: a 2.7 m gap in the middle of a 6 m wall, 3 m
+    deep, is a garage no car can turn into.
+    """
+    bays = [
+        room.id for room in program.rooms
+        if room.kind is SpaceKind.CAR_PARKING and not room.outside_envelope
+    ]
+    if not bays or not layout.road_edges:
+        return []
+    openings: list[Opening] = []
+    for bay in bays:
+        road_walls = sorted(
+            (
+                wall for wall in walls
+                if wall.kind is WallKind.EXTERIOR
+                and wall.rooms == [bay]
+                and _faces_a_road(wall, layout)
+            ),
+            key=lambda w: w.length_m,
+            reverse=True,
+        )
+        room = layout.by_id(bay)
+        for wall in road_walls:
+            along = room is not None and (
+                (room.x_max_m - room.x_min_m) > (room.y_max_m - room.y_min_m)
+                if not wall.is_vertical
+                else (room.y_max_m - room.y_min_m) > (room.x_max_m - room.x_min_m)
+            )
+            placed = _fit(
+                wall,
+                wall.length_m if along else rules["opening_width_m"],
+                rules["clearance_m"],
+                [*taken, *openings],
+                floor_width=rules["side_gate_min_m"] if along else rules["min_opening_width_m"],
+            )
+            if placed is None:
+                continue
+            offset, width = placed
+            openings.append(
+                Opening(
+                    wall_id=wall.id, kind=OpeningKind.VEHICLE, offset_m=offset,
+                    width_m=width, connects=[bay],
+                )
+            )
+            break
+    return openings
+
+
 def _faces_a_road(wall: Wall, layout: Layout) -> bool:
     """Is this exterior wall on one of the boundaries that fronts a road?"""
     from app.ir.enums import Facing
@@ -268,7 +332,12 @@ def _windows(
     under-glazed, and that is a finding for stage ⑦ rather than something to fake here
     by drawing a window wider than its wall.
     """
-    needs = {room.id for room in program.rooms if room.needs_exterior_wall}
+    # Not the car bay: its opening to the road lights and airs it, and a window there was
+    # the only opening it ever had, which is how every bay came out sealed.
+    needs = {
+        room.id for room in program.rooms
+        if room.needs_exterior_wall and room.kind is not SpaceKind.CAR_PARKING
+    }
     height = rules["height_m"]
     fraction = rules["area_fraction"]
     smallest = rules["min_width_m"]
@@ -583,6 +652,12 @@ def breaches(floor: RefinedFloor, program: Program) -> list[str]:
             found.append(
                 f"{room_id} is {width:.2f} m clear across, below the "
                 f"{spec.min_width_m:.2f} m minimum width"
+            )
+        length = max(max(0.0, x_max - x_min), max(0.0, y_max - y_min))
+        if spec.min_length_m and length < spec.min_length_m - TOLERANCE_M:
+            found.append(
+                f"{room_id} is {length:.2f} m long inside its walls, below the "
+                f"{spec.min_length_m:.2f} m minimum length"
             )
     return found
 

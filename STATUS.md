@@ -12,7 +12,7 @@ Read in this order, then run the commands below:
 
 ```bash
 cd naksha
-.venv/bin/pytest -q                                  # 696 tests, no network, no key
+.venv/bin/pytest -q                                  # 708 tests, no network, no key
 
 # The whole pipeline, to a drawing on disk: ①②③④⑤⑥⑦
 .venv/bin/python -m app.cli -s -e -P --allow-unverified --fallback-only \
@@ -50,7 +50,7 @@ strict vastu` · `20x30 2bhk in Bengaluru` (tight) · `30x40 north facing corner
 
 Where the build actually is.
 
-**Last updated:** 2026-09-14 · 696 tests passing, offline, no key
+**Last updated:** 2026-09-14 · 708 tests passing, offline, no key
 
 > **naksha draws floor plans.** Text in, a dimensioned drawing out: walls with
 > thickness, doors with swings, windows sized to the bye-laws, sanitaryware and beds,
@@ -64,21 +64,21 @@ Where the build actually is.
 ## What it produces, per plot
 
 Measured 2026-09-14, seed 7, `--fallback-only`, with ⑦'s six checks — connecting stairs, a front
-door into the house and rooms kept apart included — choosing among ⑤'s 12 best finished candidates per floor. A
+door into the house, rooms kept apart and a car bay a car can use included — choosing among ⑤'s 12 best finished candidates per floor. A
 seed now replays the same plan on any machine. Time is end to end, Python start-up
 included.
 
 | plot | storeys | result | time |
 |---|---|---|---|
-| 20x30 2BHK | G+2 | **refused** — 29.3 m² buildable and the car bay alone is 18; minimums are 166% of the footprint | 1.4 s |
-| 25x40 2BHK | G+1 | legal · 2 warnings — the front door opens into the stair room · a bathroom, the corridor and the hall only through the kitchen | 2.2 s |
-| 30x30 2BHK | G+1 | legal · 1 warning — the kitchen shares a wall with a bathroom | 1.9 s |
-| 30x40 2BHK | G | legal · 2 warnings — a bedroom and a bathroom only through the kitchen · a bedroom with no window | 2.2 s |
-| 30x40 3BHK | G+1 | **refused** — minimums are 101% of the footprint; `--stilt` is the answer | 3.1 s |
-| 30x40 3BHK `--stilt` | stilt+2 | legal · 1 warning — no bathroom on the top floor. Its stairs connect only since 2026-09-14 | 1.3 s |
-| 30x50 3BHK | G | legal · 4 warnings — the front door opens into a corridor · the hall, two bedrooms and a bathroom only through the kitchen · a bathroom only through a bedroom · a bedroom with no window | 2.8 s |
-| 40x60 3BHK | G | **clean** | 2.9 s |
-| 50x80 4BHK | G | legal · 2 warnings — a bathroom only through the study · hall glazed to 8% | 2.8 s |
+| 20x30 2BHK | G+2 | **refused** — 29.3 m² buildable and the car bay alone is 18; minimums are 166% of the footprint | 1.6 s |
+| 25x40 2BHK | G+1 | legal · 2 warnings — the front door opens into the stair room · a bathroom, the corridor and the hall only through the kitchen | 3.6 s |
+| 30x30 2BHK | G+1 | legal · 1 warning — the kitchen shares a wall with a bathroom | 2.0 s |
+| 30x40 2BHK | G | legal · 2 warnings — a bedroom and a bathroom only through the kitchen · a bedroom with no window | 3.7 s |
+| 30x40 3BHK | G+1 | **refused** — minimums are 101% of the footprint; `--stilt` is the answer | 3.5 s |
+| 30x40 3BHK `--stilt` | stilt+2 | legal · 1 warning — no bathroom on the top floor. Its stairs connect only since 2026-09-14 | 1.1 s |
+| 30x50 3BHK | G | legal · 4 warnings — the front door opens into a corridor · the hall, two bedrooms and a bathroom only through the kitchen · a bathroom only through a bedroom · a bedroom with no window | 4.4 s |
+| 40x60 3BHK | G | **clean** | 2.7 s |
+| 50x80 4BHK | G | legal · 1 warning — hall glazed to 9% | 2.9 s |
 
 An **error** is a plan naksha refuses: a room below its statutory minimum measured inside
 its walls, a room with no route to it, a hall, kitchen or dining room reachable only
@@ -114,6 +114,12 @@ plots still refused for their car bay:
 6. **⑤ grows corridor-first layouts** — the corridor across the floor, every other room
    keeping a wall on it — as a group beside the others. Route warnings fell from 10 to 7
    over thirteen plans at no cost in time, and the 40x60 came out clean.
+7. **The car bay is a real 3 x 6 m bay with a gate.** The rule held 18 m² and 3 m of width
+   and passed a 4.3 x 4.6 m bay, and every bay was drawn with a window. The 6 m length is
+   now enforced; a bay running back from the road gets a 2.7 m gate and one lying along it
+   a gate across its long side, like a car porch; and ⑦ refuses a bay a car cannot get
+   into. No plan gained a warning. The tight plots that search past the shortlist take
+   about 1.5 s longer.
 
 ## The model path — first end-to-end runs, 2026-09-13
 
@@ -159,7 +165,7 @@ stair landing, and a master bedroom smaller than one of the other bedrooms.
 | ② ENVELOPE | **built, gated** | Arithmetic done. Refuses without `--allow-unverified` |
 | ③ PROGRAM | **built ×2** | Deterministic expansion *and* an LLM version in `llm/program.py`, first run end to end 2026-09-13 |
 | ④ FEASIBILITY | **built** | Explains, and measures each option by running the solver |
-| ⑤ LAYOUT | **built** | Slicing tree (A) + CP-SAT (B), deeper on thin floors; a seed replays exactly. 1.2–3.0 s a plot end to end |
+| ⑤ LAYOUT | **built** | Slicing tree (A) + CP-SAT (B), deeper on thin floors; a seed replays exactly. 1.1–4.4 s a plot end to end |
 | ⑥ REFINE | **built** | Walls, doors, windows, fixtures, porch in the setback |
 | ⑦ VALIDATE | **built** | Circulation · access · sanitation · size · light · legality, per storey. Also picks ⑤'s plan |
 | ⑧ CRITIC | not started | rerank + rationale, behind a flag — optional by design |
@@ -298,7 +304,7 @@ bathroom on the stilt plan's top floor; a bathroom reached through the study (50
 The judge counts findings rather than weighing them, so one warning naming six rooms ties
 with one naming one. Corridor-first layouts cleared the worst of the circulation; what
 remains is the route through the kitchen on the 25x40 and the 30x50, a front door into a
-stair room or corridor, the car bay's opening and size, and Vastu placement. Judging 24 or
+stair room or corridor, and Vastu placement. Judging 24 or
 36 candidates instead of 12 barely helps — improvements have to come from what ⑤
 generates.
 
@@ -332,8 +338,6 @@ DXF wants. Open choice: add `ezdxf`, or write ASCII DXF R12 with no new dependen
   VERIFY.md Q1, so what that line should say waits on the answer.
 - **The stilt level mislabels its largest room** — a 40 m² staircase beside 5 m² of open
   ground. Question 9.
-- **Every car bay is drawn with a window** where a vehicle opening belongs. Stage ⑥ has
-  no opening type for one yet.
 - **Room names are drawn over bed and WC symbols**, which makes labels hard to read.
 - **Sector (Vastu) satisfaction is the largest remaining penalty term.** Untouched on
   purpose: it is a preference, and every other defect outranked it.

@@ -40,7 +40,7 @@ def validate(layout: Layout, program: Program, floor: RefinedFloor) -> Report:
     """Every check, against the drawn plan."""
     findings: list[Finding] = []
     findings += _circulation(layout, program, floor)
-    findings += _access(layout, program)
+    findings += _access(layout, program, floor)
     findings += _sanitation(layout, program)
     findings += _size(layout, program, floor)
     findings += _light(program, floor)
@@ -215,16 +215,20 @@ def _light(program: Program, floor: RefinedFloor) -> list[Finding]:
     for room in program.rooms:
         if not room.needs_exterior_wall or room.id not in floor.clear:
             continue
+        # A car bay's light and air come through its opening to the road. It needs an
+        # exterior wall for that opening, not for glass, and once ⑥ stopped drawing it a
+        # window every bay in the project was reported as a room with none.
+        if room.kind is SpaceKind.CAR_PARKING:
+            continue
         area = floor.clear_area_sq_m(room.id) or 0.0
         glazed = floor.window_area_sq_m(room.id)
         if area <= 0 or glazed >= area * fraction - 1e-6:
             continue
 
         if glazed <= 0:
-            # Not "habitable room" in the no-window case: `needs_exterior_wall` is
-            # also true of a car porch, which needs to be open and is nobody's idea of
-            # a habitable room. The ratio message keeps the term because that is where
-            # it carries its legal meaning.
+            # Not "habitable room" in the no-window case: `needs_exterior_wall` is also
+            # true of a pooja room or a store, which nobody calls habitable. The ratio
+            # message keeps the term because that is where it carries its legal meaning.
             message = f"{room.id} has no window at all"
         else:
             message = (
@@ -468,7 +472,9 @@ def _ancestors(room: str, parents: dict[str, str], start: str) -> list[str]:
     return out
 
 
-def _access(layout: Layout, program: Program) -> list[Finding]:
+def _access(
+    layout: Layout, program: Program, floor: RefinedFloor | None = None
+) -> list[Finding]:
     """Can a car actually reach the car bay?
 
     An error, not a warning: a bay no driveway reaches does not satisfy the parking
@@ -481,6 +487,7 @@ def _access(layout: Layout, program: Program) -> list[Finding]:
     cannot catch it going wrong.
     """
     kinds = {r.id: r.kind for r in program.rooms}
+    specs = {r.id: r for r in program.rooms}
     outside = {r.id for r in program.rooms if r.outside_envelope}
     findings: list[Finding] = []
     for placed in layout.rooms:
@@ -501,7 +508,64 @@ def _access(layout: Layout, program: Program) -> list[Finding]:
                     rooms=[placed.room_id],
                 )
             )
+        # Touching the road is not an opening onto it. Every bay used to be drawn with a
+        # window, sealed, and passed; the drawing has to show a way in for a car.
+        elif floor is not None:
+            gates = [
+                opening for opening in floor.openings
+                if opening.kind is OpeningKind.VEHICLE and placed.room_id in opening.connects
+            ]
+            if not gates:
+                findings.append(
+                    Finding(
+                        check="access",
+                        severity=Severity.ERROR,
+                        message=f"{placed.room_id} has no opening a car can drive through",
+                        rooms=[placed.room_id],
+                    )
+                )
+            elif _lies_along_the_road(placed, layout):
+                # Swung into from the road, like a car porch, so the gate has to span the
+                # long side. A 2.7 m gap in a 6 m wall, 3 m deep, cannot be turned into.
+                from app.rules import load_ruleset
+
+                needed = load_ruleset("refine_v1").data["vehicles"]["side_gate_min_m"]
+                widest = max(gate.width_m for gate in gates)
+                if widest < needed - TOLERANCE_M:
+                    findings.append(
+                        Finding(
+                            check="access",
+                            severity=Severity.ERROR,
+                            message=(
+                                f"{placed.room_id} lies along the road with a {widest:.1f} m "
+                                f"gate: a car turning in needs about {needed:.1f} m"
+                            ),
+                            rooms=[placed.room_id],
+                        )
+                    )
     return findings
+
+
+def _lies_along_the_road(placed, layout: Layout) -> bool:
+    """Is the bay's long side the one on the street, on every road edge it touches?
+
+    From the layout rectangle, not from `score`: a check that shares its implementation
+    with what it checks catches nothing. A corner bay whose short side meets either road
+    can be driven into nose first, so it does not lie along the road.
+    """
+    wide = placed.x_max_m - placed.x_min_m
+    deep = placed.y_max_m - placed.y_min_m
+    sides = []
+    for edge in layout.road_edges:
+        if edge is Facing.NORTH and abs(placed.y_max_m - layout.y_max_m) <= TOLERANCE_M:
+            sides.append(wide > deep)
+        elif edge is Facing.SOUTH and abs(placed.y_min_m - layout.y_min_m) <= TOLERANCE_M:
+            sides.append(wide > deep)
+        elif edge is Facing.EAST and abs(placed.x_max_m - layout.x_max_m) <= TOLERANCE_M:
+            sides.append(deep > wide)
+        elif edge is Facing.WEST and abs(placed.x_min_m - layout.x_min_m) <= TOLERANCE_M:
+            sides.append(deep > wide)
+    return bool(sides) and all(sides)
 
 
 def _on_a_road_boundary(placed, layout: Layout) -> bool:

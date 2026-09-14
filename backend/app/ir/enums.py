@@ -191,6 +191,9 @@ class OpeningKind(StrEnum):
     DOOR = "door"
     ENTRANCE = "entrance"
     WINDOW = "window"
+    # The car bay's opening to the road: a gap a car drives through, with no leaf to
+    # swing and no glass. Every bay used to be drawn with a window, sealed.
+    VEHICLE = "vehicle"
 
 
 class FixtureKind(StrEnum):
