@@ -21,6 +21,7 @@ import warnings
 
 from app.config import get_settings
 from app.ir.models import Assumption, IntentResult, Question
+from app.ir.units import area_text, feet_and_inches, square_feet
 from app.llm.intent import extract_brief
 from app.llm.providers import known_providers
 
@@ -323,8 +324,9 @@ def _summarise(result: IntentResult) -> str:
         programme.append(rooms)
 
     lines = [
-        f"  plot      {plot.width_m:.2f} x {plot.depth_m:.2f} m "
-        f"({plot.area_sq_m:.1f} m²) · {facing} facing"
+        f"  plot      {feet_and_inches(plot.width_m)} x {feet_and_inches(plot.depth_m)} "
+        f"({plot.width_m:.2f} x {plot.depth_m:.2f} m) · {area_text(plot.area_sq_m)} · "
+        f"{facing} facing"
         f"{' · corner' if plot.corner_plot else ''}{edges}",
         f"  program   {' · '.join(programme)}",
         f"  location  {where}",
@@ -357,12 +359,17 @@ def _envelope_summary(result: IntentResult, args: argparse.Namespace) -> str:
     except EnvelopeError as exc:
         return f"\n  envelope  \u2014 {type(exc).__name__}: {exc}"
 
-    margins = " ".join(f"{e.value[0].upper()}{v:g}" for e, v in env.setbacks.items())
+    # Feet for the reader. The metres stay beside them because the setback and FAR tables
+    # these come from are metric, and that is where anyone checking will look.
+    margins = " ".join(
+        f"{e.value[0].upper()}{feet_and_inches(v)}" for e, v in env.setbacks.items()
+    )
     return (
-        f"\n  envelope  {env.east_west_m:.2f} x {env.north_south_m:.2f} m "
-        f"({env.area_sq_m:.1f} m\u00b2) \u00b7 setbacks {margins}"
-        f"\n  caps      footprint \u2264 {env.max_footprint_sq_m:.1f} m\u00b2 \u00b7 "
-        f"built \u2264 {env.max_built_area_sq_m:.1f} m\u00b2 over \u2264{env.max_floors} floors "
+        f"\n  envelope  {feet_and_inches(env.east_west_m)} x "
+        f"{feet_and_inches(env.north_south_m)} ({env.east_west_m:.2f} x "
+        f"{env.north_south_m:.2f} m) · {area_text(env.area_sq_m)} · setbacks {margins}"
+        f"\n  caps      footprint ≤ {area_text(env.max_footprint_sq_m)} · "
+        f"built ≤ {area_text(env.max_built_area_sq_m)} over ≤{env.max_floors} floors "
         f"(FAR {env.max_far:g}, coverage {env.max_coverage:.0%}, road {env.road_width_m:g}m)"
         f"\n  rules     {env.authority} \u00b7 {env.ruleset}"
     )
@@ -502,13 +509,23 @@ def _write_svg(bundle, path: str) -> None:
             if len(clear_breaches) > 4:
                 print(f"        \u00b7 \u2026and {len(clear_breaches) - 4} more", file=sys.stderr)
 
-        doors = sum(1 for o in floor.openings if o.kind.value != "window")
-        windows = len(floor.openings) - doors
+        air = ("window", "ventilator")
+        doors = sum(1 for o in floor.openings if o.kind.value not in air)
+        windows = sum(1 for o in floor.openings if o.kind.value == "window")
+        vents = len(floor.openings) - doors - windows
         print(
-            f"[svg] {out} \u2014 score {layout.score:.0f}{flags} \u00b7 "
-            f"{len(floor.walls)} walls, {doors} doors, {windows} windows",
+            f"[svg] {out} — score {layout.score:.0f}{flags} · "
+            f"{len(floor.walls)} walls, {doors} doors, {windows} windows, "
+            f"{vents} ventilators",
             file=sys.stderr,
         )
+        if report.cross_ventilated or report.single_sided:
+            print(
+                f"[air] floor {layout.floor}: from two sides "
+                f"{', '.join(report.cross_ventilated) or 'none'} · one side only "
+                f"{', '.join(report.single_sided) or 'none'}",
+                file=sys.stderr,
+            )
 
 
 def _build_program(
@@ -574,14 +591,15 @@ def _program_summary(
     )
     lines = [
         f"\n  program   {len(program.rooms)} rooms, {len(program.adjacencies)} "
-        f"relationships \u00b7 min {program.min_area_sq_m:.1f} m\u00b2 \u00b7 "
-        f"target {program.target_area_sq_m:.1f} m\u00b2"
+        f"relationships · min {area_text(program.min_area_sq_m)} · "
+        f"target {area_text(program.target_area_sq_m)}"
     ]
     for room in program.rooms:
         sector = room.sector.value.replace("_", " ") if room.sector else ""
         lines.append(
             f"    {room.id:<12} {room.kind.value.replace('_', ' '):<15} "
-            f"{room.target_area_sq_m:5.1f} m\u00b2  {sector}"
+            f"{square_feet(room.target_area_sq_m):>11} "
+            f"({room.target_area_sq_m:4.1f} m²)  {sector}"
         )
 
     try:

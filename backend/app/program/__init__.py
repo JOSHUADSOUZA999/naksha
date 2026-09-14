@@ -17,6 +17,7 @@ from app.ir.enums import Facing, Relation, RoomKind, Sector, SpaceKind
 from app.ir.envelope import Envelope
 from app.ir.models import Brief
 from app.ir.plan import AdjacencySpec, Program, RoomSpec
+from app.ir.units import area_text
 from app.rules import load_ruleset
 
 SPACE_RULES = "spaces_v1"
@@ -419,15 +420,15 @@ def fits(program: Program, envelope: Envelope) -> tuple[bool, str]:
                 else f" — even {envelope.max_floors} floors is not enough"
             )
             return False, (
-                f"floor {floor} needs {needed:.1f} m² at legal minimums but only "
-                f"{footprint:.1f} m² is buildable{advice}"
+                f"floor {floor} needs {area_text(needed)} at legal minimums but only "
+                f"{area_text(footprint)} is buildable{advice}"
             )
 
     budget = envelope.max_built_area_sq_m
     if program.min_area_sq_m > budget:
         return False, (
-            f"needs {program.min_area_sq_m:.1f} m² at legal minimums but FAR allows "
-            f"{budget:.1f} m² — short by {program.min_area_sq_m - budget:.1f} m²"
+            f"needs {area_text(program.min_area_sq_m)} at legal minimums but FAR allows "
+            f"{area_text(budget)} — short by {area_text(program.min_area_sq_m - budget)}"
         )
 
     target = program.target_area_sq_m
@@ -436,10 +437,13 @@ def fits(program: Program, envelope: Envelope) -> tuple[bool, str]:
     )
     if per_floor_target > footprint:
         return True, (
-            f"fits at minimums, but the busiest floor wants {per_floor_target:.1f} m² "
-            f"of {footprint:.1f} m² buildable — rooms will be tight"
+            f"fits at minimums, but the busiest floor wants {area_text(per_floor_target)} "
+            f"of {area_text(footprint)} buildable — rooms will be tight"
         )
-    return True, f"{target:.1f} m² of {budget:.1f} m² allowed, across {len(floors_used)} floor(s)"
+    return True, (
+        f"{area_text(target)} of {area_text(budget)} allowed, "
+        f"across {len(floors_used)} floor(s)"
+    )
 
 
 def _grow(rooms: list[RoomSpec], envelope: Envelope | None) -> None:

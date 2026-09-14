@@ -52,6 +52,18 @@ class Report(DerivedFieldsAreOutputOnly):
         "nothing was wrong *and* something was looked at — without this the two are "
         "indistinguishable, and a check that silently stopped running reads as a pass.",
     )
+    cross_ventilated: list[str] = Field(
+        default_factory=list,
+        description="Rooms that want fresh air and get it from two sides or more — a "
+        "window or ventilator in two different outside walls. A measurement, not a "
+        "finding: a room open on one side is legal and common, and reporting each one "
+        "would bury the defects. Recorded so a person can see it and the judge can "
+        "prefer more of it.",
+    )
+    single_sided: list[str] = Field(
+        default_factory=list,
+        description="The same rooms that do not: open to the air on one side, or none.",
+    )
 
     @model_validator(mode="after")
     def _findings_come_from_checks_that_ran(self) -> Self:

@@ -498,6 +498,7 @@ class TestWallsChangeWhatALegalRoomIs:
 
     def test_the_label_shows_the_clear_area(self, floors):
         from app.export.svg import render
+        from app.ir.units import square_feet
 
         layout, program, floor = floors["40x60"]
         kinds = {room.id: room.kind.value for room in program.rooms}
@@ -505,8 +506,24 @@ class TestWallsChangeWhatALegalRoomIs:
 
         big = max(layout.rooms, key=lambda r: r.area_sq_m)
         clear = floor.clear_area_sq_m(big.room_id)
-        assert f"{clear:.1f} m²" in drawing
-        assert f"{big.area_sq_m:.1f} m²" not in drawing
+        assert f">{square_feet(clear)}<" in drawing
+        assert f">{square_feet(big.area_sq_m)}<" not in drawing
+
+    def test_the_label_sizes_the_room_in_feet(self, floors):
+        """"12 by 14" is how a room is sized in India, so that is what the label says —
+        inside the walls, like the area under it. No metric area reaches a label."""
+        from app.export.svg import render
+        from app.ir.units import feet_and_inches
+
+        layout, program, floor = floors["40x60"]
+        kinds = {room.id: room.kind.value for room in program.rooms}
+        drawing = render(layout, kinds, title="t", refined=floor)
+
+        big = max(layout.rooms, key=lambda r: r.area_sq_m)
+        x_min, y_min, x_max, y_max = floor.clear[big.room_id]
+        across, deep = feet_and_inches(x_max - x_min), feet_and_inches(y_max - y_min)
+        assert f">{across} × {deep}<" in drawing
+        assert " m²<" not in drawing
 
 
 class TestWindowsAreSizedToTheRoomTheyLight:
@@ -622,7 +639,7 @@ class TestWindowsAreSizedToTheRoomTheyLight:
         thing the code regulates."""
         _, _, floor = floors[name]
         for opening in floor.openings:
-            if opening.kind is OpeningKind.WINDOW:
+            if opening.kind in (OpeningKind.WINDOW, OpeningKind.VENTILATOR):
                 assert opening.height_m and opening.height_m > 0
             else:
                 assert opening.height_m is None
@@ -765,3 +782,91 @@ class TestTheCarBayOpensOntoTheRoad:
         layout, program = self._plan((4.6, 4.9), "north")
         found = breaches(refine(layout, program), program)
         assert any(message.startswith("bay") and "minimum length" in message for message in found)
+
+
+class TestEveryRoomThatMeetsTheOutsideBreathes:
+    """Only rooms that had to touch the outside used to get an opening. Across fourteen
+    plans every bathroom was drawn sealed, though all thirty-one had an outside wall, and
+    not one of seventy-eight halls, kitchens and bedrooms had windows on two sides."""
+
+    @staticmethod
+    def _air():
+        from app.rules import load_ruleset
+
+        return load_ruleset("refine_v1").data["ventilation"]
+
+    @staticmethod
+    def _free_outside_walls(floor, room_id, shortest):
+        """Outside walls long enough for an opening and not already holding a door."""
+        doorlike = (OpeningKind.DOOR, OpeningKind.ENTRANCE, OpeningKind.VEHICLE)
+        return [
+            w for w in floor.walls
+            if w.kind is WallKind.EXTERIOR and w.rooms == [room_id] and w.length_m >= shortest
+            and not any(o.wall_id == w.id and o.kind in doorlike for o in floor.openings)
+        ]
+
+    def test_a_bathroom_with_room_for_a_ventilator_gets_one(self, floors):
+        air = self._air()
+        checked = 0
+        for name, (_, program, floor) in floors.items():
+            for room in program.rooms:
+                if room.kind.value not in air["ventilator_kinds"] or room.id not in floor.clear:
+                    continue
+                if not self._free_outside_walls(floor, room.id, air["ventilator_min_wall_m"]):
+                    continue
+                area = floor.ventilation_area_sq_m(room.id)
+                assert area >= air["ventilator_min_area_sq_m"] - 1e-9, f"{name}/{room.id}"
+                checked += 1
+        assert checked, "no bathroom in the set meets an outside wall"
+
+    @pytest.mark.parametrize("name", list(BRIEFS))
+    def test_a_ventilator_is_small_high_and_only_in_a_bathroom_s_outside_wall(self, floors, name):
+        """Not a window by another name: a bathroom's is an area rule of its own, and a
+        ventilator anywhere else would be a room drawn with a slot for a view."""
+        air = self._air()
+        _, program, floor = floors[name]
+        kinds = {room.id: room.kind.value for room in program.rooms}
+        for opening in floor.openings:
+            if opening.kind is not OpeningKind.VENTILATOR:
+                continue
+            assert floor.by_id(opening.wall_id).kind is WallKind.EXTERIOR
+            assert len(opening.connects) == 1
+            assert kinds[opening.connects[0]] in air["ventilator_kinds"]
+            assert opening.width_m == pytest.approx(air["ventilator_width_m"])
+            assert opening.height_m == pytest.approx(air["ventilator_height_m"])
+
+    def test_a_room_with_a_second_outside_wall_gets_air_through_it(self, floors):
+        """Air comes in one side and leaves by another. A room people live in with two
+        outside walls long enough for a window must have an opening in both."""
+        from app.rules import load_ruleset
+
+        shortest = load_ruleset("refine_v1").data["windows"]["min_wall_m"]
+        air = self._air()
+        checked = 0
+        for name, (_, program, floor) in floors.items():
+            for room in program.rooms:
+                if room.kind.value not in air["cross_kinds"] or room.id not in floor.clear:
+                    continue
+                if len(self._free_outside_walls(floor, room.id, shortest)) < 2:
+                    continue
+                assert len(floor.air_sides(room.id)) >= 2, f"{name}/{room.id}"
+                checked += 1
+        assert checked, "no room in the set has two outside walls"
+
+    def test_a_stair_corridor_or_pooja_room_on_an_outside_wall_gets_a_window(self, floors):
+        """A corridor with a window at its end is what draws a breeze through a house."""
+        from app.rules import load_ruleset
+
+        shortest = load_ruleset("refine_v1").data["windows"]["min_wall_m"]
+        air = self._air()
+        checked = 0
+        for name, (_, program, floor) in floors.items():
+            for room in program.rooms:
+                if room.kind.value not in air["lit_kinds"] or room.id not in floor.clear:
+                    continue
+                if not self._free_outside_walls(floor, room.id, shortest):
+                    continue
+                assert floor.window_area_sq_m(room.id) > 0, f"{name}/{room.id}"
+                checked += 1
+        assert checked, "no stair, corridor or pooja room in the set meets the outside"
+

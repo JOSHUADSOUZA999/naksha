@@ -46,6 +46,24 @@
     "source": "NBC 2016 Part 3 requires an aggregate openable area of not less than one-tenth of the floor area for habitable rooms, with kitchens and sanitary spaces treated separately. TRANSCRIBED FROM PRACTICE KNOWLEDGE, not read first-hand — the clause number is not recorded here because we have not seen it. The Karnataka Municipalities Model Building Bye-Laws 2017 govern in Bengaluru and may differ. See VERIFY.md.",
     "verified": false
   },
+  "ventilation": {
+    "ventilator_kinds": ["bathroom", "wc"],
+    "ventilator_width_m": 0.6,
+    "ventilator_height_m": 0.6,
+    "ventilator_min_area_sq_m": 0.3,
+    "ventilator_min_wall_m": 0.9,
+    "glazed_if_outside": ["dining"],
+    "lit_kinds": ["staircase", "corridor", "pooja", "foyer"],
+    "lit_width_m": 0.9,
+    "cross_kinds": ["hall", "dining", "kitchen", "bedroom", "master_bedroom", "guest_room", "servant_room", "study", "office"],
+    "cross_width_m": 0.9,
+    "_ventilator": "A bathroom or WC is held to an opening of its own to the open air rather than a share of its floor: a ventilator high in an outside wall, 600 x 600 mm here, above anyone's eye line. 0.9 m of wall is a 0.6 m ventilator with a 150 mm pier either side. Before this block every bathroom was drawn sealed, though all 31 in the 14-plan measurement set had an outside wall.",
+    "_glazed_if_outside": "Rooms spaces_v1 does not require to touch the outside, glazed to the same one-tenth when they do. A dining room is habitable; the ruleset lets it sit inside the house, as it commonly does, but one that meets an outside wall should not be drawn blind.",
+    "_lit_kinds": "One ordinary window where the room meets the outside, for daylight and moving air rather than an area rule: a stair lit at its landing, a corridor with a window at its end, which is what draws a breeze through a house.",
+    "_cross": "Rooms people live in get a second window on another side when they have a second outside wall, so air comes in one side and leaves by the other. Glazing to one-tenth nearly always fits on the longest wall, and in the 14-plan set not one of 78 halls, dining rooms, kitchens and bedrooms had windows on two sides. Stage 7 records which rooms have it on the Report and never as a finding: a floor has four corners, and some rooms will always be open on one side only.",
+    "source": "Practice, and one figure as it is commonly quoted: 0.3 m2 as the least opening for a bathroom or WC ventilator, to the open air or a ventilation shaft. TRANSCRIBED FROM PRACTICE KNOWLEDGE, not read first-hand in NBC 2016 or the Karnataka Municipalities Model Building Bye-Laws 2017, so no clause is recorded. See VERIFY.md.",
+    "verified": false
+  },
   "_fixtures": "Sizes are the ones an Indian sanitaryware or modular-kitchen catalogue quotes, which is what a draughtsman reaches for at concept stage. They are drawing conventions, not code: the bye-laws regulate a bathroom's AREA and ventilation, not the model of WC in it. `depth_m` is measured out from the wall the fixture backs onto and `width_m` along it.",
   "fixtures": {
     "wc": {

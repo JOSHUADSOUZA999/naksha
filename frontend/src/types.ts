@@ -55,7 +55,7 @@ export interface Wall {
  *  carried its own coordinates could drift away from the wall it is a hole in. */
 export interface Opening {
   wall_id: string;
-  kind: "door" | "entrance" | "window" | "vehicle";
+  kind: "door" | "entrance" | "window" | "vehicle" | "ventilator";
   offset_m: number;
   width_m: number;
   height_m: number | null;
@@ -96,6 +96,10 @@ export interface Report {
   checks_run: string[];
   errors: number;
   ok: boolean;
+  /** Rooms that want fresh air and get it from two sides, and those that do not.
+   *  Measurements rather than findings; absent from plans drawn before they existed. */
+  cross_ventilated?: string[];
+  single_sided?: string[];
 }
 
 export interface PlanBundle {

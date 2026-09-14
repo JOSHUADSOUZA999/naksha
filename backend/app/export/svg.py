@@ -12,6 +12,7 @@ from xml.sax.saxutils import escape
 from app.ir.layout import Layout
 from app.ir.enums import Facing, OpeningKind
 from app.ir.refined import RefinedFloor
+from app.ir.units import feet_and_inches, square_feet
 
 _SCALE = 44          # px per metre
 _MARGIN = 56         # px around the plan, for the title and the compass
@@ -57,7 +58,17 @@ def render(
     # brief was clipping its own heading mid-word: the drawing was right and the sheet
     # was too small for it. 0.52em a character is an over-estimate for this font, and
     # over is the safe direction — the cost is white space, not a lost word.
-    w = max(width_m * _SCALE, len(title) * _TITLE_SIZE * 0.52) + _MARGIN * 2
+    #
+    # The footer is held to the same rule. Feet first, metres after: the owner reads the
+    # first, and the envelope and every legal minimum behind the drawing are metric.
+    footer = (
+        f"{feet_and_inches(width_m)} × {feet_and_inches(depth_m)} "
+        f"({width_m:.2f} × {depth_m:.2f} m) · areas in sq ft, inside the walls · "
+        f"schematic, not a sanction drawing"
+    )
+    w = max(
+        width_m * _SCALE, len(title) * _TITLE_SIZE * 0.52, len(footer) * 10 * 0.52
+    ) + _MARGIN * 2
 
     def px(x_m: float, y_m: float) -> tuple[float, float]:
         return (
@@ -93,18 +104,31 @@ def render(
         # centrelines and is the right number for the tiling and the wrong one to show
         # a person — it credits every room with half a wall on each side.
         area = room.area_sq_m
+        across, deep = room.width_m, room.depth_m
         if refined is not None:
             area = refined.clear_area_sq_m(room.room_id) or area
+            if (rect := refined.clear.get(room.room_id)) is not None:
+                across, deep = rect[2] - rect[0], rect[3] - rect[1]
         label = escape(kind.replace("_", " ") or room.room_id)
+        # Feet, because that is how the people this is for size a room: "12 by 14", and
+        # the house in square feet. The IR stays metric; only the label converts.
+        size = f"{feet_and_inches(across)} × {feet_and_inches(deep)}"
+        room_w, room_h = room.width_m * _SCALE, room.depth_m * _SCALE
         # Labels are dropped rather than overflowed on rooms too small to hold them —
         # a bathroom with its name spilling across the kitchen is worse than unlabelled.
-        if room.width_m * _SCALE > 52 and room.depth_m * _SCALE > 26:
-            out.append(
-                f'<text x="{cx:.1f}" y="{cy - 3:.1f}" font-size="11" text-anchor="middle" '
-                f'fill="#111">{label}</text>'
-                f'<text x="{cx:.1f}" y="{cy + 11:.1f}" font-size="9.5" '
-                f'text-anchor="middle" fill="#666">{area:.1f} m²</text>'
-            )
+        # The dimensions go first when space runs short: the name and area still say
+        # what the room is and how big.
+        if room_w > 52 and room_h > 26:
+            lines = [(label, 11, "#111")]
+            if room_h > 48 and len(size) * 9.5 * 0.55 < room_w - 8:
+                lines.append((escape(size), 9.5, "#666"))
+            lines.append((square_feet(area), 9.5, "#666"))
+            top = cy - 3 - 6.5 * (len(lines) - 2)
+            for index, (text, font, fill) in enumerate(lines):
+                out.append(
+                    f'<text x="{cx:.1f}" y="{top + 13 * index:.1f}" font-size="{font}" '
+                    f'text-anchor="middle" fill="{fill}">{text}</text>'
+                )
 
     if refined is not None:
         for outside in refined.outside:
@@ -141,7 +165,7 @@ def render(
     )
     out.append(
         f'<text x="{_MARGIN}" y="{h - 18:.0f}" font-size="10" fill="#888">'
-        f'{width_m:.2f} × {depth_m:.2f} m · schematic, not a sanction drawing</text>'
+        f'{escape(footer)}</text>'
     )
     out.append("</svg>")
     return "\n".join(out)
@@ -185,6 +209,13 @@ def _walls_and_openings(refined: RefinedFloor, layout: Layout, px) -> list[str]:
             arcs.append(
                 f'<line x1="{ax:.1f}" y1="{ay:.1f}" x2="{bx:.1f}" y2="{by:.1f}" '
                 f'stroke="#3f6f8f" stroke-width="1.4"/>'
+            )
+        elif opening.kind is OpeningKind.VENTILATOR:
+            # The window's colour, dotted: an opening for air above head height, which a
+            # reader should tell from a window at a glance and never mistake for a door.
+            arcs.append(
+                f'<line x1="{ax:.1f}" y1="{ay:.1f}" x2="{bx:.1f}" y2="{by:.1f}" '
+                f'stroke="#3f6f8f" stroke-width="1.4" stroke-dasharray="2 2"/>'
             )
         elif opening.kind is OpeningKind.VEHICLE:
             # The car bay's opening: no leaf and no glass, so a dashed line across the gap

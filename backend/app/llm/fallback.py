@@ -23,7 +23,7 @@ from app.ir.models import (
     PlotSpec,
     ProgramHints,
 )
-from app.ir.units import AreaUnit, LengthUnit, area_to_sq_m, to_metres
+from app.ir.units import AreaUnit, LengthUnit, area_to_sq_m, square_feet, to_metres
 
 # Typical Indian residential frontage-to-depth ratio. Used only when the text gives
 # an area with no dimensions — 1200 sqft becomes 8.6 m x 12.9 m rather than a square.
@@ -565,9 +565,9 @@ def _parse_floors(
             _assume(
                 "floors",
                 "ground only",
-                f"{plot.area_sq_m:.0f} m² fits a {bedrooms}BHK flat"
+                f"{square_feet(plot.area_sq_m)} fits a {bedrooms}BHK flat"
                 if roomy
-                else f"{plot.area_sq_m:.0f} m² is tight for a {bedrooms}BHK",
+                else f"{square_feet(plot.area_sq_m)} is tight for a {bedrooms}BHK",
                 0.9 if roomy else 0.5,
             )
         )

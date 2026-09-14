@@ -22,6 +22,7 @@ from app.ir.envelope import Envelope
 from app.ir.enums import SpaceKind
 from app.ir.plan import AdjacencySpec, Program, RoomSpec
 from app.ir.layout import Layout
+from app.ir.units import area_text
 from app.solver import (
     ROAD_FIRST_DEPTH, TUNE_SHORTLIST, TUNE_WORK, deeper, footprint, improve,
     shortlist_for, slicing, tuning,
@@ -146,8 +147,8 @@ def assess(program: Program, envelope: Envelope, *, floor: int = 1) -> Verdict:
     # impossibility on that evidence is a stronger statement than the measurement
     # supports, and it is the kind a plot owner would act on.
     reason = (
-        f"needs {needed:.1f} m² of rooms at legal minimums and only "
-        f"{envelope.max_footprint_sq_m:.1f} m² is buildable ({packed:.0%} packed) — "
+        f"needs {area_text(needed)} of rooms at legal minimums and only "
+        f"{area_text(envelope.max_footprint_sq_m)} is buildable ({packed:.0%} packed) — "
         f"none of the {TUNE_SHORTLIST} arrangements stage \u2464 tries came out legal"
         + (
             f", nor any of the {ROAD_FIRST_DEPTH} it tries past them"

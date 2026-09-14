@@ -63,7 +63,7 @@ uv venv --python 3.12 && source .venv/bin/activate
 uv pip install -e ".[dev]"
 cp .env.example .env          # one API key, or NAKSHA_INTENT_PROVIDER=claude_code
 
-pytest                        # 711 tests: no network, no key, independent of your .env
+pytest                        # 733 tests: no network, no key, independent of your .env
 pytest -m live                # the golden set against a real model; needs credentials
 ```
 
@@ -106,7 +106,7 @@ backend/app/
   feasibility/  ④ explain, with options that were actually measured
   solver/       ⑤ slicing.py (Stage A) · tuning.py (Stage B, CP-SAT) · score.py
   refine/       ⑥ walls · doors · windows · fixtures · setback spaces
-  validator/    ⑦ circulation · access · sanitation · size · light · legality
+  validator/    ⑦ circulation · access · sanitation · size · light · ventilation · legality
   export/       svg.py                                ← DXF/PDF still to come
 frontend/       Vite + React + react-konva viewer     ← runs on Node 20 (nvm)
 ```

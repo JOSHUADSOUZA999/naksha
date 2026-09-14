@@ -2,6 +2,7 @@ import { useMemo, useRef, useState } from "react";
 import { Stage, Layer, Rect, Text, Group, Line, Ellipse, Circle } from "react-konva";
 import type Konva from "konva";
 import type { Fixture, Layout, PlacedRoom, RefinedFloor, RoomSpec, Wall } from "./types";
+import { feetAndInches, squareFeet } from "./units";
 
 const FILLS: Record<string, string> = {
   hall: "#eef2f7", dining: "#eef2f7", kitchen: "#fdf1e3",
@@ -45,9 +46,11 @@ export function FloorPlan({ layout, refined, specs, width, height, selected, onS
    *  overstate every room by half a wall a side — the SVG renderer has shown the clear
    *  figure since ⑥ existed, and a viewer quoting the other one makes two consumers of
    *  one plan disagree about how big a bathroom is. */
-  const clearArea = (room: PlacedRoom) => {
+  const clearSize = (room: PlacedRoom) => {
     const r = refined?.clear?.[room.room_id];
-    return r ? Math.max(0, r[2] - r[0]) * Math.max(0, r[3] - r[1]) : room.area_sq_m;
+    return r
+      ? { across: Math.max(0, r[2] - r[0]), deep: Math.max(0, r[3] - r[1]) }
+      : { across: room.width_m, deep: room.depth_m };
   };
   const originX = (width - plan.width * scale) / 2;
   const originY = (height - plan.depth * scale) / 2;
@@ -84,6 +87,19 @@ export function FloorPlan({ layout, refined, specs, width, height, selected, onS
           const h = room.depth_m * scale;
           const isSelected = selected === room.room_id;
           const undersized = spec ? room.area_sq_m < spec.min_area_sq_m : false;
+          // Feet, the way the people this is for size a room ("12 by 14"), inside the
+          // walls like the area. The dimensions are the line dropped when space runs
+          // short: the name and the area still say what the room is and how big.
+          const { across, deep } = clearSize(room);
+          const size = `${feetAndInches(across)} × ${feetAndInches(deep)}`;
+          const lines = [
+            { text: kind.replace(/_/g, " ") || room.room_id, fontSize: 11, fill: "#111" },
+            ...(h > 52 && size.length * 9.5 * 0.55 < w - 8
+              ? [{ text: size, fontSize: 9.5, fill: "#666" }]
+              : []),
+            { text: squareFeet(across * deep), fontSize: 9.5, fill: "#666" },
+          ];
+          const labelTop = topLeft.y + h / 2 - 13 - 7 * (lines.length - 2);
 
           return (
             <Group
@@ -115,30 +131,19 @@ export function FloorPlan({ layout, refined, specs, width, height, selected, onS
                 stroke={isSelected ? "#2563eb" : undersized ? "#dc2626" : refined ? undefined : "#222"}
                 strokeWidth={isSelected ? 3 : undersized ? 2.5 : refined ? 0 : 1.5}
               />
-              {w > 56 && h > 30 && (
-                <>
-                  <Text
-                    x={topLeft.x}
-                    y={topLeft.y + h / 2 - 13}
-                    width={w}
-                    align="center"
-                    text={kind.replace(/_/g, " ") || room.room_id}
-                    fontSize={11}
-                    fill="#111"
-                    listening={false}
-                  />
-                  <Text
-                    x={topLeft.x}
-                    y={topLeft.y + h / 2 + 1}
-                    width={w}
-                    align="center"
-                    text={`${clearArea(room).toFixed(1)} m²`}
-                    fontSize={9.5}
-                    fill="#666"
-                    listening={false}
-                  />
-                </>
-              )}
+              {w > 56 && h > 30 && lines.map((line, i) => (
+                <Text
+                  key={i}
+                  x={topLeft.x}
+                  y={labelTop + 14 * i}
+                  width={w}
+                  align="center"
+                  text={line.text}
+                  fontSize={line.fontSize}
+                  fill={line.fill}
+                  listening={false}
+                />
+              ))}
             </Group>
           );
         })}
@@ -214,6 +219,7 @@ export function FloorPlan({ layout, refined, specs, width, height, selected, onS
           const b = t(op.offset_m + op.width_m / 2);
           const isWindow = op.kind === "window";
           const isVehicle = op.kind === "vehicle";
+          const isVentilator = op.kind === "ventilator";
           const room = op.connects.length ? layout.rooms.find(
             (r) => r.room_id === op.connects[op.connects.length - 1]) : undefined;
 
@@ -255,6 +261,10 @@ export function FloorPlan({ layout, refined, specs, width, height, selected, onS
                     strokeWidth={wall.thickness_m * scale + 1} />
               {isWindow ? (
                 <Line points={[a.x, a.y, b.x, b.y]} stroke="#3f6f8f" strokeWidth={1.4} />
+              ) : isVentilator ? (
+                // A ventilator: the window's colour, dotted — the SVG renderer's mark.
+                <Line points={[a.x, a.y, b.x, b.y]} stroke="#3f6f8f" strokeWidth={1.4}
+                      dash={[2, 2]} />
               ) : isVehicle ? (
                 // The car bay's opening: no leaf and no glass, just the gap, dashed — the
                 // same convention the SVG renderer uses.

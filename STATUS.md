@@ -12,7 +12,7 @@ Read in this order, then run the commands below:
 
 ```bash
 cd naksha
-.venv/bin/pytest -q                                  # 711 tests, no network, no key
+.venv/bin/pytest -q                                  # 733 tests, no network, no key
 
 # The whole pipeline, to a drawing on disk: ①②③④⑤⑥⑦
 .venv/bin/python -m app.cli -s -e -P --allow-unverified --fallback-only \
@@ -50,10 +50,11 @@ strict vastu` · `20x30 2bhk in Bengaluru` (tight) · `30x40 north facing corner
 
 Where the build actually is.
 
-**Last updated:** 2026-09-14 · 711 tests passing, offline, no key
+**Last updated:** 2026-09-14 · 733 tests passing, offline, no key
 
 > **naksha draws floor plans.** Text in, a dimensioned drawing out: walls with
-> thickness, doors with swings, windows sized to the bye-laws, sanitaryware and beds,
+> thickness, doors with swings, windows sized to the bye-laws, a ventilator in every
+> bathroom, sanitaryware and beds, room sizes in feet,
 > and a list of what is wrong with the result. Seven of eight stages are built. **Of the
 > nine reference plots, one is clean, six are legal with named defects, and two are
 > refused** — and both refusals are plots whose rooms cannot physically fit: their legal
@@ -123,6 +124,14 @@ plots still refused for their car bay:
 8. **Vastu zones count for something.** The judge ranks missed zones after warnings and
    before the penalty, and ⑤ adds corridor trees that follow the compass. Over eleven plans
    zones met rose from 18 to 28 of 110, with no warning or time added.
+9. **Every room that meets the outside gets air.** Across fourteen plans no bathroom had
+   a ventilator (0 of 31, all beside an outside wall) and no room had windows on two sides
+   (0 of 78). Now bathrooms get ventilators, stairs, corridors and pooja rooms a window,
+   and rooms people live in a second window on a second outside wall: 31 of 78 get air
+   from two sides. ⑦ warns about a bathroom that cannot breathe and records which rooms a
+   breeze can cross; the judge prefers more of them, after Vastu. No warning moved.
+10. **Sizes in feet.** Drawings label each room in feet-and-inches and sq ft; every
+   message an owner reads gives sq ft with m² in brackets.
 
 ## The model path — first end-to-end runs, 2026-09-13
 
@@ -298,6 +307,10 @@ of it; `--stilt` improves it from 8 errors to 6 and does not make it legal.
 
 ## Next
 
+**Agreed next, in order:** a staircase a person can climb — a minimum size a real stair
+fits in, and the same box on both floors — then the road strip that takes the whole
+frontage. Both are in the imperfections below, found on the JP Nagar 4BHK.
+
 **1. Make the legal plans good.** Nothing in the reference set is refused any more but
 the two plots whose rooms cannot fit. What ⑦ still reports, by what it costs a user: the
 living room reached through the kitchen (25x40, 30x40 2BHK, 30x50) and bedrooms beyond it
@@ -328,6 +341,15 @@ DXF wants. Open choice: add `ezdxf`, or write ASCII DXF R12 with no new dependen
 
 ## Known imperfections, in priority order
 
+- **A staircase can be a box no stair fits in.** The JP Nagar 4BHK's ground-floor stair is
+  1.5 × 3.5 m inside its walls: too narrow for a stair that turns (about 2 m) and too short
+  for a straight one (about 3.75 m of steps at ordinary sizes, before any landing). The
+  upstairs stair is a different box, 3.0 × 2.6 m, and ⑦ passed the pair because they
+  overlap by 76% against a 75% bar. The rule holds a stair to 5 m² and 1.0 m of width only.
+- **A road-first strip takes the whole frontage.** On the JP Nagar 4BHK two cars and a
+  foyer need about 43 m² and the strip is 64: one bay came out 28.8 m², the foyer a 2 × 6 m
+  passage, and the kitchen 6.8 m² against a 14 m² target, with 60% of the ground floor
+  parking and circulation. It also takes the north-east corner the pooja room wants.
 - **The judge counts warnings; it does not weigh them.** With missed zones ranked after
   the count, a plan can win on Vastu while its warnings cover more. The 30x40 2BHK now
   enters through its kitchen with six rooms behind it, where it had two rooms behind the
@@ -336,6 +358,12 @@ DXF wants. Open choice: add `ezdxf`, or write ASCII DXF R12 with no new dependen
   for geometric reasons: its east car bay and foyer take the north-east corner the pooja
   room wants, and its stair, fixed on the west by the ground floor, blocks the south-west
   the master bedroom wants upstairs. Choosing floors together is the untried lever.
+- **Most rooms get air from one side only: 47 of 78.** A corridor with a row of rooms
+  either side leaves most rooms one outside wall, and ⑥ can only open the walls ⑤ gives
+  it. More would take shallower plans or an internal courtyard, neither generated yet.
+- **An interior dining room has no window.** `spaces_v1` lets a dining room sit inside the
+  house, as it commonly does, though it is a habitable room. The usual answer is to open
+  it wide to the hall, which the IR cannot draw: every room is walled with doors.
 - **Two of nine reference plans are refused and six more carry warnings.** Every
   defect in the table above is real and was confirmed in the plan data, not only by eye.
 - **Upper-floor staircases absorb surplus area**, and the shaft pull makes it worse

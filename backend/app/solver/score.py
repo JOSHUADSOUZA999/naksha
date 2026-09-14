@@ -16,6 +16,7 @@ import functools
 from app.ir.enums import Relation, SpaceKind
 from app.ir.layout import TOLERANCE_M, Layout
 from app.ir.plan import Program
+from app.ir.units import area_text, length_text
 from app.rules import load_ruleset
 
 # Illegal beats unpleasant. A room under its NBC minimum cannot be built at all; a
@@ -154,21 +155,21 @@ def score(layout: Layout, program: Program) -> tuple[int, float, list[str]]:
         if clear_area < spec.min_area_sq_m - EPSILON:
             fail(
                 ILLEGAL,
-                f"{spec.id} has {clear_area:.1f} m² of floor inside its walls, below "
-                f"the {spec.min_area_sq_m:.1f} m² minimum",
+                f"{spec.id} has {area_text(clear_area)} of floor inside its walls, below "
+                f"the {area_text(spec.min_area_sq_m)} minimum",
             )
         if clear_side < spec.min_width_m - EPSILON:
             fail(
                 ILLEGAL,
-                f"{spec.id} is {clear_side:.2f} m clear across, below the "
-                f"{spec.min_width_m:.2f} m minimum width",
+                f"{spec.id} is {length_text(clear_side)} clear across, below the "
+                f"{length_text(spec.min_width_m)} minimum width",
             )
         clear_length = clear_area / clear_side if clear_side > 0 else 0.0
         if spec.min_length_m and clear_length < spec.min_length_m - EPSILON:
             fail(
                 ILLEGAL,
-                f"{spec.id} is {clear_length:.2f} m long inside its walls, below the "
-                f"{spec.min_length_m:.2f} m minimum length",
+                f"{spec.id} is {length_text(clear_length)} long inside its walls, below the "
+                f"{length_text(spec.min_length_m)} minimum length",
             )
         # Grossly oversized is a defect too, and until this existed nothing measured
         # it. Exact tiling fixes the total area, so whatever the programme does not
@@ -190,8 +191,8 @@ def score(layout: Layout, program: Program) -> tuple[int, float, list[str]]:
         if placed.area_sq_m > 1.5 * ceiling and excess > 3.0:
             fail(
                 STRUCTURAL,
-                f"{spec.id} is {placed.area_sq_m:.1f} m², "
-                f"{placed.area_sq_m / ceiling:.1f}x the {ceiling:.1f} m² "
+                f"{spec.id} is {area_text(placed.area_sq_m)}, "
+                f"{placed.area_sq_m / ceiling:.1f}x the {area_text(ceiling)} "
                 f"it should ever be",
             )
         if placed.aspect > spec.max_aspect + EPSILON:

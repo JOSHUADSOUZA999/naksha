@@ -204,6 +204,25 @@ class TestTheBundleReadsItsOwnOutput:
         payload = json.loads(bundle.model_dump_json())
         assert json.loads(PlanBundle.model_validate(payload).model_dump_json()) == payload
 
+    def test_a_drawn_and_checked_bundle_survives_a_round_trip(self, case):
+        """Walls and fixtures carry derived fields too — a wall's length, a fixture's area —
+        and refused their own JSON until this test. Nothing noticed, because nothing read
+        a drawn bundle back; an editor and an API both will."""
+        import json
+
+        from app.ir.layout import PlanBundle
+        from app.refine import draw
+        from app.solver import plan
+        from app.validator import check
+
+        program, envelope = case
+        brief = fallback.parse(BRIEF)
+        bundle = check(draw(plan(brief, envelope, program, candidates=40, seed=5), envelope))
+        assert any(floor.walls for floor in bundle.floors)
+        assert any(floor.fixtures for floor in bundle.floors)
+        payload = json.loads(bundle.model_dump_json())
+        assert json.loads(PlanBundle.model_validate(payload).model_dump_json()) == payload
+
     def test_derived_values_are_recomputed_not_trusted(self, case):
         """Arithmetic cannot meaningfully disagree, so a stale figure in a saved file
         is a stale file — recomputing is right, erroring is not."""
@@ -1281,7 +1300,7 @@ class TestAJudgeChoosesTheFinishedPlan:
         program = expand(brief, envelope)
         key = judge(program, envelope)
         for layout in solve(program, envelope, seed=7, keep=4):
-            errors, unusable, unbuildable, warnings, zones, penalty = key(layout)
+            errors, unusable, unbuildable, warnings, zones, stale, penalty = key(layout)
             # Refusals lead, and a plan nobody can enter leads the refusals.
             assert errors >= unusable >= 0
-            assert warnings >= 0 and zones >= 0 and penalty == layout.score
+            assert warnings >= 0 and zones >= 0 and stale >= 0 and penalty == layout.score

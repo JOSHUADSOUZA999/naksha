@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { FloorPlan } from "./FloorPlan";
 import type { PlanBundle, RoomSpec } from "./types";
+import { feetAndInches, squareFeet } from "./units";
 
 export default function App() {
   const [bundle, setBundle] = useState<PlanBundle | null>(null);
@@ -42,6 +43,12 @@ export default function App() {
   const report = bundle.reports?.[floorIndex];
   const spec = selected ? specs.get(selected) : undefined;
   const placed = selected ? layout.rooms.find((r) => r.room_id === selected) : undefined;
+  // Inside the walls, like the drawing's labels: the centreline rectangle credits every
+  // room with half a wall a side.
+  const inside = selected ? refined?.clear?.[selected] : undefined;
+  const clear = placed && (inside
+    ? { across: inside[2] - inside[0], deep: inside[3] - inside[1] }
+    : { across: placed.width_m, deep: placed.depth_m });
 
   return (
     <div style={{ display: "flex", height: "100vh" }}>
@@ -105,15 +112,26 @@ export default function App() {
           </section>
         )}
 
-        {spec && placed ? (
+        {report && (report.cross_ventilated?.length || report.single_sided?.length) ? (
+          <section style={{ marginBottom: 20 }}>
+            <h2 style={{ fontSize: 13, margin: "0 0 8px" }}>Air</h2>
+            {/* Not findings: a room open on one side is legal. Shown so an owner can see
+                which rooms a breeze can cross and which it cannot. */}
+            <Row label="from two sides" value={report.cross_ventilated?.join(", ") || "none"} />
+            <Row label="one side only" value={report.single_sided?.join(", ") || "none"} />
+          </section>
+        ) : null}
+
+        {spec && placed && clear ? (
           <section style={{ marginBottom: 20 }}>
             <h2 style={{ fontSize: 13, margin: "0 0 8px" }}>
               {spec.kind.replace(/_/g, " ")}
             </h2>
-            <Row label="area" value={`${placed.area_sq_m.toFixed(1)} m²`}
-                 note={`target ${spec.target_area_sq_m}, min ${spec.min_area_sq_m}`} />
-            <Row label="size" value={`${placed.width_m.toFixed(2)} × ${placed.depth_m.toFixed(2)} m`}
-                 note={`min width ${spec.min_width_m} m`} />
+            {/* Feet for the owner, metres beneath: the minimums are metric. */}
+            <Row label="area" value={squareFeet(clear.across * clear.deep)}
+                 note={`${(clear.across * clear.deep).toFixed(1)} m² · min ${spec.min_area_sq_m} m², target ${spec.target_area_sq_m} m²`} />
+            <Row label="size" value={`${feetAndInches(clear.across)} × ${feetAndInches(clear.deep)}`}
+                 note={`${clear.across.toFixed(2)} × ${clear.deep.toFixed(2)} m · min width ${spec.min_width_m} m`} />
             {spec.sector && <Row label="wanted" value={spec.sector.replace(/_/g, " ")} />}
           </section>
         ) : (

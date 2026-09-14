@@ -1,9 +1,13 @@
-"""The single place a non-metre number becomes metres.
+"""The single place a non-metre number becomes metres, and metres become feet again.
 
 The IR is metres throughout, but nobody in India describes a plot that way: sites are
 sold as "30x40" (feet), "1200 sqft", "200 gaj", or "4 cents". Those conversions happen
 here and nowhere else. A stray `* 0.3048` in a parser is a bug, because the moment two
 modules each own a conversion they drift and the drift is invisible.
+
+The way back out lives here for the same reason. Nothing downstream stores feet: they
+exist only in text a person reads — `area_text`, `feet_and_inches` — and in the viewer's
+mirror of these functions.
 """
 
 from __future__ import annotations
@@ -107,6 +111,42 @@ def area_to_sq_m(value: float, unit: AreaUnit | str) -> float:
 def area_from_sq_m(value_sq_m: float, unit: AreaUnit | str) -> float:
     """Convert square metres back out to `unit`."""
     return value_sq_m / _AREA_TO_SQ_M[_coerce_area(unit)]
+
+
+# Out again, for people. Plot owners in India buy, build and argue in feet — a "12 by 14"
+# bedroom, a "1,200 sq ft" house — while the bye-laws that decide legality are metric. So
+# a sentence gives both, feet first, and a drawing, which has room for one, gives feet.
+# Here rather than in each renderer so both directions share one constant: a second
+# `/ 0.3048` in an exporter is how the two would drift.
+_INCHES_PER_FOOT = 12
+
+
+def feet_and_inches(value_m: float) -> str:
+    """A length the way it is said aloud: 12'4". Rounded to the nearest inch."""
+    inches = round(abs(from_metres(value_m, LengthUnit.FOOT)) * _INCHES_PER_FOOT)
+    feet, rest = divmod(inches, _INCHES_PER_FOOT)
+    sign = "-" if value_m < 0 and inches else ""
+    return f"{sign}{feet}'{rest}\""
+
+
+def square_feet(value_sq_m: float) -> str:
+    """An area in whole square feet, grouped the way listings print it: 2,400 sq ft."""
+    return f"{area_from_sq_m(value_sq_m, AreaUnit.SQ_FOOT):,.0f} sq ft"
+
+
+def area_text(value_sq_m: float) -> str:
+    """An area for a sentence: 344 sq ft (32.0 m²).
+
+    Feet first, because that is what the reader measures in. Metres kept, because the
+    minimum a room is held to is a metric figure in the bye-laws, and the registered
+    architect who checks the plan will look for that number.
+    """
+    return f"{square_feet(value_sq_m)} ({value_sq_m:.1f} m²)"
+
+
+def length_text(value_m: float) -> str:
+    """A length for a sentence: 3'11" (1.20 m). Same reasoning as `area_text`."""
+    return f"{feet_and_inches(value_m)} ({value_m:.2f} m)"
 
 
 def parse_length_unit(token: str) -> LengthUnit | None:

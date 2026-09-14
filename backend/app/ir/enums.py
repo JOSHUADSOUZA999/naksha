@@ -194,6 +194,10 @@ class OpeningKind(StrEnum):
     # The car bay's opening to the road: a gap a car drives through, with no leaf to
     # swing and no glass. Every bay used to be drawn with a window, sealed.
     VEHICLE = "vehicle"
+    # A small high opening for air rather than a view — what a bathroom or WC gets. Not a
+    # `WINDOW`, because the bye-laws hold it to an area of its own rather than a tenth of
+    # the floor, and because it is built differently: above head height, so nobody sees in.
+    VENTILATOR = "ventilator"
 
 
 class FixtureKind(StrEnum):

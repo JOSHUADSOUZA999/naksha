@@ -34,8 +34,12 @@ from app.ir.enums import Facing, FixtureKind, OpeningKind, WallKind
 # scope by CLAUDE.md, and diagonal ones cannot arise from a rectangular tiling.
 AXIS_TOLERANCE_M = 1e-6
 
+# The openings air comes through. A door to the street does too, but only while it is
+# open, and nobody ventilates a bedroom by leaving the front door ajar.
+_AIR = frozenset({OpeningKind.WINDOW, OpeningKind.VENTILATOR})
 
-class Wall(BaseModel):
+
+class Wall(DerivedFieldsAreOutputOnly):
     """One straight run of wall, as a centreline plus a thickness.
 
     The centreline sits on the line stage ⑤ tiled to, so the wall eats equally into
@@ -97,7 +101,7 @@ class Wall(BaseModel):
 
 
 class Opening(BaseModel):
-    """A door or a window: a hole in one wall, positioned along it."""
+    """A door, a window or a ventilator: a hole in one wall, positioned along it."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -110,9 +114,9 @@ class Opening(BaseModel):
     height_m: float | None = Field(
         default=None,
         gt=0,
-        description="Head height above sill. Set for windows, because the bye-laws "
-        "regulate window *area* and an opening stored only as a width along a wall has "
-        "none. Null for doors, whose height decides nothing on a plan.",
+        description="Head height above sill. Set for windows and ventilators, because "
+        "the bye-laws regulate their *area* and an opening stored only as a width along a "
+        "wall has none. Null for doors, whose height decides nothing on a plan.",
     )
     connects: list[str] = Field(
         default_factory=list,
@@ -123,7 +127,7 @@ class Opening(BaseModel):
     )
 
 
-class Fixture(BaseModel):
+class Fixture(DerivedFieldsAreOutputOnly):
     """A WC, a bed, a kitchen counter — placed, as a rectangle.
 
     Carries its own geometry rather than an offset along a wall, unlike `Opening`. A
@@ -237,3 +241,43 @@ class RefinedFloor(DerivedFieldsAreOutputOnly):
             for opening in self.openings
             if opening.kind is OpeningKind.WINDOW and room_id in opening.connects
         )
+
+    def ventilation_area_sq_m(self, room_id: str) -> float:
+        """Area open to outside air for one room: windows and ventilators both.
+
+        The figure a bathroom is held to. `window_area_sq_m` is the daylight figure and
+        leaves ventilators out on purpose — a slot above head height lights nothing a
+        habitable room needs lit.
+        """
+        return sum(
+            opening.width_m * (opening.height_m or 0.0)
+            for opening in self.openings
+            if opening.kind in _AIR and room_id in opening.connects
+        )
+
+    def air_sides(self, room_id: str) -> set[Facing]:
+        """The sides of a room with a window or ventilator in an outside wall.
+
+        Two or more is cross-ventilation: air comes in one side and leaves by another,
+        which is what cools a room in a Bengaluru summer without a fan working for it.
+        One is a room that breathes only when its door is open. Read off the openings,
+        not off which walls the room has, because a wall too short to hold a window lets
+        in no more air than an interior one.
+        """
+        rect = self.clear.get(room_id)
+        if rect is None:
+            return set()
+        centre_x, centre_y = (rect[0] + rect[2]) / 2, (rect[1] + rect[3]) / 2
+        walls = {wall.id: wall for wall in self.walls}
+        sides: set[Facing] = set()
+        for opening in self.openings:
+            if opening.kind not in _AIR or room_id not in opening.connects:
+                continue
+            wall = walls.get(opening.wall_id)
+            if wall is None or wall.kind is not WallKind.EXTERIOR:
+                continue
+            if wall.is_vertical:
+                sides.add(Facing.WEST if wall.x1_m < centre_x else Facing.EAST)
+            else:
+                sides.add(Facing.SOUTH if wall.y1_m < centre_y else Facing.NORTH)
+        return sides

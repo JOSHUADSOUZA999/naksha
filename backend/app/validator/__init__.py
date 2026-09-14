@@ -16,13 +16,16 @@ from __future__ import annotations
 
 from collections import defaultdict, deque
 
-from app.ir.enums import Facing, OpeningKind, Relation, Severity, SpaceKind
+from app.ir.enums import Facing, OpeningKind, Relation, Severity, SpaceKind, WallKind
 from app.ir.layout import TOLERANCE_M, Layout
 from app.ir.plan import Program
 from app.ir.refined import RefinedFloor
+from app.ir.units import area_text, length_text
 from app.ir.validation import Finding, Report
 
-CHECKS = ["circulation", "access", "sanitation", "size", "light", "legality"]
+CHECKS = [
+    "circulation", "access", "sanitation", "size", "light", "ventilation", "legality",
+]
 
 # Where a person sleeps or bathes. A route may end in one of these; it may not pass
 # through one — except into a bathroom its own bedroom was built to serve.
@@ -44,8 +47,13 @@ def validate(layout: Layout, program: Program, floor: RefinedFloor) -> Report:
     findings += _sanitation(layout, program)
     findings += _size(layout, program, floor)
     findings += _light(program, floor)
+    findings += _ventilation(program, floor)
     findings += _legality(program, floor)
-    return Report(floor=layout.floor, findings=findings, checks_run=list(CHECKS))
+    cross, single = _airflow(program, floor)
+    return Report(
+        floor=layout.floor, findings=findings, checks_run=list(CHECKS),
+        cross_ventilated=cross, single_sided=single,
+    )
 
 
 def _circulation(layout: Layout, program: Program, floor: RefinedFloor) -> list[Finding]:
@@ -244,6 +252,95 @@ def _light(program: Program, floor: RefinedFloor) -> list[Finding]:
     return findings
 
 
+def _ventilation(program: Program, floor: RefinedFloor) -> list[Finding]:
+    """Does every bathroom have a way for its air to get out?
+
+    The bye-laws give a bathroom or WC an opening of its own to the open air — a
+    ventilator of a least area — rather than a share of its floor, and nothing checked
+    it: stage ⑥ gave openings only to rooms that had to touch the outside, so all
+    thirty-one bathrooms across fourteen plans were drawn sealed, every one of them
+    beside an outside wall a ventilator could have gone in.
+
+    Grouped by cause, one finding each, because the fixes differ. A bathroom with no
+    outside wall needs the layout changed; one whose wall could not take a ventilator,
+    or took too small a one, needs the drawing changed.
+    """
+    from app.rules import load_ruleset
+
+    air = load_ruleset("refine_v1").data["ventilation"]
+    kinds = {SpaceKind(kind) for kind in air["ventilator_kinds"]}
+    least = air["ventilator_min_area_sq_m"]
+    outside = {
+        room for wall in floor.walls if wall.kind is WallKind.EXTERIOR for room in wall.rooms
+    }
+
+    walled_in: list[str] = []
+    unvented: list[str] = []
+    too_small: list[str] = []
+    for room in program.rooms:
+        if room.kind not in kinds or room.id not in floor.clear:
+            continue
+        area = floor.ventilation_area_sq_m(room.id)
+        if area >= least - 1e-6:
+            continue
+        if area > 0:
+            too_small.append(room.id)
+        elif room.id in outside:
+            unvented.append(room.id)
+        else:
+            walled_in.append(room.id)
+
+    findings: list[Finding] = []
+    for rooms, message in (
+        (walled_in, "no outside wall, so no ventilator: its air has nowhere to go"),
+        (unvented, "no ventilator in its outside wall"),
+    ):
+        if rooms:
+            verb = "has" if len(rooms) == 1 else "have"
+            findings.append(
+                Finding(
+                    check="ventilation", severity=Severity.WARNING,
+                    message=f"{', '.join(rooms)} {verb} {message}", rooms=rooms,
+                )
+            )
+    if too_small:
+        verb = "is" if len(too_small) == 1 else "are"
+        findings.append(
+            Finding(
+                check="ventilation", severity=Severity.WARNING,
+                message=(
+                    f"{', '.join(too_small)} {verb} ventilated through less than the "
+                    f"{area_text(least)} a bathroom needs"
+                ),
+                rooms=too_small,
+            )
+        )
+    return findings
+
+
+def _airflow(program: Program, floor: RefinedFloor) -> tuple[list[str], list[str]]:
+    """Which rooms get air from two sides, and which from one or none.
+
+    A measurement, not a finding. A bedroom open to the air on one side is legal, and on
+    any floor some rooms cannot be anything else — there are four corners — so a warning
+    for each would bury the real defects and, through the judge, trade them for breezes.
+    It goes on the `Report` for a person to read and for the judge to prefer once
+    everything that matters more is equal.
+    """
+    from app.rules import load_ruleset
+
+    kinds = {
+        SpaceKind(kind) for kind in load_ruleset("refine_v1").data["ventilation"]["cross_kinds"]
+    }
+    cross: list[str] = []
+    single: list[str] = []
+    for room in program.rooms:
+        if room.kind not in kinds or room.id not in floor.clear:
+            continue
+        (cross if len(floor.air_sides(room.id)) >= 2 else single).append(room.id)
+    return cross, single
+
+
 def _legality(program: Program, floor: RefinedFloor) -> list[Finding]:
     """Rooms below a statutory minimum, measured on the clear floor.
 
@@ -268,9 +365,10 @@ def judge(program: Program, envelope=None):
     """A sort key that ranks finished candidates by what this stage would say of them.
 
     Errors first, then whether the house can be entered and walked, then rooms below a
-    minimum, then warnings, then Vastu zones missed, then stage ⑤'s own penalty as the
-    tiebreak — so a plan ⑦ refuses never beats one it passes, however much better its
-    penalty, and no Vastu gain buys a warning.
+    minimum, then warnings, then Vastu zones missed, then rooms open to the air on one
+    side only, then stage ⑤'s own penalty as the tiebreak — so a plan ⑦ refuses never
+    beats one it passes, however much better its penalty, and neither a Vastu gain nor a
+    breeze buys a warning.
 
     **Refusals are not all equal, and counting them as if they were picked the worst.**
     A 30x50 had two candidates, each with one error: one whose car bay did not touch the
@@ -301,12 +399,21 @@ def judge(program: Program, envelope=None):
             1 for placed in layout.rooms
             if placed.room_id in zoned and layout.sector_of(placed) is not zoned[placed.room_id]
         )
+        # **Air after Vastu, before the penalty.** Advisory in the same way: a room open to
+        # the air on one side only is legal and often unavoidable, so it never outranks a
+        # warning — but among plans otherwise equal, the one whose living rooms and
+        # bedrooms a breeze can cross should win. Measured over fourteen plans: ranked
+        # before the zones it gave five more rooms two-sided air and cost five zones, and
+        # on the 30x40 2BHK it bought one with a bedroom that has no window at all. After
+        # them it costs nothing. Most of the gain is stage ⑥'s — no room of 78 had air
+        # from two sides, and 30 do before any ranking; this tier adds one.
         return (
             report.errors,
             unusable,
             layout.unbuildable,
             len(report.findings) - report.errors,
             missed_zones,
+            len(report.single_sided),
             layout.score,
         )
 
@@ -549,8 +656,8 @@ def _access(
                             check="access",
                             severity=Severity.ERROR,
                             message=(
-                                f"{placed.room_id} lies along the road with a {widest:.1f} m "
-                                f"gate: a car turning in needs about {needed:.1f} m"
+                                f"{placed.room_id} lies along the road with a {length_text(widest)} "
+                                f"gate: a car turning in needs about {length_text(needed)}"
                             ),
                             rooms=[placed.room_id],
                         )
@@ -672,8 +779,8 @@ def _size(layout: Layout, program: Program, floor: RefinedFloor) -> list[Finding
                     check="size",
                     severity=Severity.WARNING,
                     message=(
-                        f"{placed.room_id} is {area:.1f} m², {area / ceiling:.1f}x the "
-                        f"{ceiling:.1f} m² a {spec.kind.value.replace('_', ' ')} should "
+                        f"{placed.room_id} is {area_text(area)}, {area / ceiling:.1f}x the "
+                        f"{area_text(ceiling)} a {spec.kind.value.replace('_', ' ')} should "
                         f"ever be"
                     ),
                     rooms=[placed.room_id],

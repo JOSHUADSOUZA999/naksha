@@ -759,6 +759,66 @@ west, and that blocks the south-west the master bedroom wants. Choosing the floo
 together, so the ground floor's stair leaves the upper floor its zones, is the next lever
 and has not been tried.
 
+### Air: every bathroom sealed, and no room open to the air on two sides
+
+Stage ⑥ gave an opening only to a room that had to touch the outside. Across fourteen
+plans — the nine reference plots, three recorded model answers and the two live runs —
+**all 31 bathrooms were drawn sealed, though every one had an outside wall**, and **not
+one of 78 halls, dining rooms, kitchens and bedrooms had windows on two sides**. A stair,
+corridor or pooja room on an outside wall got nothing: the JP Nagar 4BHK's 146 m² ground
+floor had two windows. Nothing reported it, because ⑦ asked only about daylight in rooms
+that must have it.
+
+What each kind of room gets from the outside is now data, `refine_v1`'s `ventilation`:
+a bathroom or WC a 0.6 × 0.6 m ventilator, which ⑦ wants to be at least 0.3 m² (the
+commonly quoted figure, unverified — VERIFY.md's window question); a dining room that
+meets the outside is glazed to one-tenth like the rooms that must be; a stair, corridor,
+pooja room or foyer gets one 0.9 m window; and a hall, dining room, kitchen or bedroom
+with a second outside wall gets a second window on it.
+
+Which rooms get air from two sides goes on the `Report` as a measurement, never as a
+finding. A floor has four corners and some rooms are always open on one side only; a
+warning each would bury the defects and, through the judge, trade them for breezes.
+
+Measured over the same fourteen plans (times taken with the test suite running alongside,
+so indicative):
+
+| | rooms with air from two sides | bathrooms ventilated | zones met | errors | warnings | time |
+|---|---|---|---|---|---|---|
+| before | 0 / 78 | 0 / 31 | 38 / 144 | 16 | 15 | 35 s |
+| ⑥'s openings for air | 30 / 78 | 31 / 31 | 38 / 144 | 16 | 15 | 38 s |
+| + judge counts one-sided rooms *after* zones | 31 / 78 | 31 / 31 | 38 / 144 | 16 | 15 | 37 s |
+| + judge counts them *before* zones | 36 / 78 | 31 / 31 | 33 / 144 | 16 | 15 | 41 s |
+| + judge counts zones and one-sided rooms as one sum | 35 / 78 | 31 / 31 | 35 / 144 | 16 | 15 | 38 s |
+
+The judge counts one-sided rooms after missed zones. Ranked before them, air cost five
+zones, and on the 30x40 2BHK it bought a breeze with a bedroom that has no window at all
+— the warning count unchanged, which is the judge-counts-warnings imperfection again.
+After them it costs nothing, and nearly all the gain is ⑥'s.
+
+Two bugs found on the way:
+
+- **A ventilator kept the WC out of the bathroom.** `_door_swings` skipped windows and
+  treated every other opening as a door, so the new ventilator got a keep-out square on
+  the very wall the WC backs onto, and the 50x80's bathrooms lost their WC. Caught by a
+  test that asserts a bathroom has sanitaryware. Only a door or the entrance swings now.
+- **A drawn plan could not be read back.** `Wall` and `Fixture` carry computed fields — a
+  wall's length, a fixture's area — but did not inherit `DerivedFieldsAreOutputOnly`, so a
+  `PlanBundle` with floors refused its own JSON. The round-trip test covered only bundles
+  before ⑥. Found by trying to redraw a saved plan; the test now round-trips a drawn and
+  checked bundle.
+
+### Feet for people, metres for rules
+
+The drawings labelled every room in m², and nobody the product is for sizes a room that
+way: a Bengaluru owner says "a 12 by 14 bedroom" and "a 2,400 sq ft site". Each room is
+now labelled in feet-and-inches and sq ft, measured inside the walls, and every sentence an
+owner reads gives sq ft first with m² in brackets — "kitchen has 45 sq ft (4.2 m²) … below
+the 54 sq ft (5.0 m²) minimum" — because the minimum it quotes is a metric figure in the
+bye-laws and the architect who stamps the plan will look for that number. `units.py` owns
+both directions, and the viewer mirrors its two display functions. Nothing stores feet;
+prompts to the model and IR validation errors stay metric.
+
 ---
 
 ## Corrections to things I got wrong

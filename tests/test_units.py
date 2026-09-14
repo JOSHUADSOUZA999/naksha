@@ -130,3 +130,42 @@ def test_no_silent_rounding():
     """
     assert not math.isclose(to_metres(30, LengthUnit.FOOT), 9.1, abs_tol=1e-6)
     assert to_metres(30, LengthUnit.FOOT) == pytest.approx(9.144, abs=1e-12)
+
+
+class TestFeetForPeople:
+    """The IR stays metric; what a plot owner reads is in feet.
+
+    A plan labelled 32.0 m² asks a Bengaluru owner to do arithmetic before they can
+    picture the room. The figures here are the ones they would say aloud."""
+
+    def test_the_numbers_people_actually_say(self):
+        from app.ir.units import area_text, feet_and_inches, length_text, square_feet
+
+        assert feet_and_inches(to_metres(40, LengthUnit.FOOT)) == "40'0\""
+        assert feet_and_inches(3.76) == "12'4\""
+        assert square_feet(area_to_sq_m(1200, AreaUnit.SQ_FOOT)) == "1,200 sq ft"
+        assert area_text(32.0) == "344 sq ft (32.0 m²)"
+        assert length_text(1.2) == "3'11\" (1.20 m)"
+
+    def test_twelve_inches_carry_into_a_foot(self):
+        """11.6 inches rounds to 12, which is 1'0" — never 0'12"."""
+        from app.ir.units import feet_and_inches
+
+        assert feet_and_inches(to_metres(11.6 / 12, LengthUnit.FOOT)) == "1'0\""
+
+    @given(value=st.floats(min_value=0, max_value=1e4, allow_nan=False, allow_infinity=False))
+    def test_feet_and_inches_is_within_half_an_inch(self, value: float):
+        from app.ir.units import feet_and_inches
+
+        feet, inches = feet_and_inches(value).rstrip('"').split("'")
+        assert 0 <= int(inches) < 12
+        total = int(feet) + int(inches) / 12
+        assert abs(to_metres(total, LengthUnit.FOOT) - value) <= 0.0127 + 1e-9
+
+    @given(value=st.floats(min_value=0, max_value=1e5, allow_nan=False, allow_infinity=False))
+    def test_square_feet_is_the_same_conversion_the_parser_uses(self, value: float):
+        """One constant for both directions, or the display drifts from what was read."""
+        from app.ir.units import square_feet
+
+        shown = float(square_feet(value).removesuffix(" sq ft").replace(",", ""))
+        assert abs(shown - area_from_sq_m(value, AreaUnit.SQ_FOOT)) <= 0.5 + 1e-9

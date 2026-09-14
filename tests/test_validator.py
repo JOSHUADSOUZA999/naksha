@@ -284,20 +284,29 @@ class TestGlazingIsMeasuredNotCountedPresence:
     a number that is too small."""
 
     def test_an_under_glazed_room_is_reported_with_its_ratio(self, plans):
+        """Every window of one room that must be lit is pinched — not the first window in
+        the drawing, which may now light a corridor no rule glazes to a ratio, or be a
+        room's second window with the first still enough."""
         layout, program, floor, _ = plans["50x80"]
-        glazed = next(
-            o for o in floor.openings if o.kind is OpeningKind.WINDOW
+        lit = max(
+            (r for r in program.rooms
+             if r.needs_exterior_wall and floor.window_area_sq_m(r.id) > 0),
+            key=lambda r: floor.clear_area_sq_m(r.id),
         )
         pinched = floor.model_copy(
             update={
                 "openings": [
-                    o.model_copy(update={"width_m": 0.3}) if o is glazed else o
+                    o.model_copy(update={"width_m": 0.3})
+                    if o.kind is OpeningKind.WINDOW and lit.id in o.connects else o
                     for o in floor.openings
                 ]
             }
         )
         findings = validate(layout, program, pinched).by_check("light")
-        assert any("below the" in f.message and "%" in f.message for f in findings)
+        assert any(
+            lit.id in f.rooms and "below the" in f.message and "%" in f.message
+            for f in findings
+        )
 
     def test_a_fully_glazed_room_is_not_reported(self, plans):
         """Stage ⑥ sizes to the fraction, so ⑦ must agree with it on every room that
@@ -898,3 +907,183 @@ class TestTheJudgeRanksRefusalsBySeverity:
         monkeypatch.setattr(validator_module, "validate", fake_validate)
         key = validator_module.judge(program)
         assert key(passing) < key(refused)
+
+
+class TestBathroomsBreathe:
+    """The bye-laws give a bathroom an opening of its own to the open air. Nothing
+    checked it, and every bathroom drawn was sealed. Tested by breaking plans on purpose,
+    so no test waits for a brief that happens to seal one."""
+
+    @staticmethod
+    def _least():
+        from app.rules import load_ruleset
+
+        return load_ruleset("refine_v1").data["ventilation"]["ventilator_min_area_sq_m"]
+
+    @staticmethod
+    def _vented_bath(program, floor):
+        return next(
+            r for r in program.rooms
+            if r.kind in (SpaceKind.BATHROOM, SpaceKind.WC)
+            and floor.ventilation_area_sq_m(r.id) > 0
+        )
+
+    def test_a_ventilated_bathroom_is_not_reported(self, plans):
+        least = self._least()
+        for name, (_, program, floor, report) in plans.items():
+            flagged = {r for f in report.by_check("ventilation") for r in f.rooms}
+            for room in program.rooms:
+                if room.kind not in (SpaceKind.BATHROOM, SpaceKind.WC):
+                    continue
+                if floor.ventilation_area_sq_m(room.id) >= least - 1e-9:
+                    assert room.id not in flagged, f"{name}/{room.id}"
+
+    def test_a_sealed_bathroom_is_a_warning(self, plans):
+        layout, program, floor, _ = plans["40x60"]
+        bath = self._vented_bath(program, floor)
+        sealed = floor.model_copy(update={"openings": [
+            o for o in floor.openings
+            if not (o.kind is OpeningKind.VENTILATOR and bath.id in o.connects)
+        ]})
+        findings = validate(layout, program, sealed).by_check("ventilation")
+        assert [f.severity for f in findings if bath.id in f.rooms] == [Severity.WARNING]
+
+    def test_a_bathroom_with_no_outside_wall_is_told_why(self, plans):
+        """The fix is the layout, not a missing opening, and the words say so."""
+        from app.ir.enums import WallKind
+
+        layout, program, floor, _ = plans["40x60"]
+        bath = self._vented_bath(program, floor)
+        gone = {w.id for w in floor.walls if w.kind is WallKind.EXTERIOR and bath.id in w.rooms}
+        walled_in = floor.model_copy(update={
+            "walls": [w for w in floor.walls if w.id not in gone],
+            "openings": [o for o in floor.openings if o.wall_id not in gone],
+        })
+        findings = validate(layout, program, walled_in).by_check("ventilation")
+        assert any(bath.id in f.rooms and "no outside wall" in f.message for f in findings)
+
+    def test_too_small_a_ventilator_is_reported_with_the_figure_it_misses(self, plans):
+        layout, program, floor, _ = plans["40x60"]
+        bath = self._vented_bath(program, floor)
+        pinched = floor.model_copy(update={"openings": [
+            o.model_copy(update={"width_m": 0.2})
+            if o.kind is OpeningKind.VENTILATOR and bath.id in o.connects else o
+            for o in floor.openings
+        ]})
+        findings = validate(layout, program, pinched).by_check("ventilation")
+        assert any(bath.id in f.rooms and "sq ft" in f.message for f in findings)
+
+
+class TestTheReportSaysWhereABreezeCanPass:
+    """Which rooms get air from two sides is measured, not reported as a defect."""
+
+    def test_every_room_that_wants_air_is_on_exactly_one_list(self, plans):
+        from app.rules import load_ruleset
+
+        kinds = set(load_ruleset("refine_v1").data["ventilation"]["cross_kinds"])
+        for name, (_, program, floor, report) in plans.items():
+            wanting = {r.id for r in program.rooms if r.kind.value in kinds and r.id in floor.clear}
+            assert set(report.cross_ventilated) | set(report.single_sided) == wanting, name
+            assert not set(report.cross_ventilated) & set(report.single_sided), name
+            for room_id in report.cross_ventilated:
+                assert len(floor.air_sides(room_id)) >= 2, f"{name}/{room_id}"
+            for room_id in report.single_sided:
+                assert len(floor.air_sides(room_id)) < 2, f"{name}/{room_id}"
+
+    def test_a_room_stripped_of_its_second_window_moves_to_one_side_only(self, plans):
+        """Searched for rather than named: which plan has a room open on two sides is the
+        solver's business, and a test pinned to one brief goes vacuous when it changes."""
+        found = next((name for name, plan in plans.items() if plan[3].cross_ventilated), None)
+        assert found, "no plan in the set has a room open on two sides"
+        layout, program, floor, report = plans[found]
+        room_id = report.cross_ventilated[0]
+        keep = next(o for o in floor.openings if room_id in o.connects
+                    and o.kind in (OpeningKind.WINDOW, OpeningKind.VENTILATOR))
+        one_sided = floor.model_copy(update={"openings": [
+            o for o in floor.openings
+            if o is keep or room_id not in o.connects
+            or o.kind not in (OpeningKind.WINDOW, OpeningKind.VENTILATOR)
+        ]})
+        after = validate(layout, program, one_sided)
+        assert room_id in after.single_sided and room_id not in after.cross_ventilated
+
+
+class TestAirRanksAfterWarningsAndBeforeThePenalty:
+    """A room open on one side is legal, so no breeze buys a warning. With everything
+    else equal, the plan a breeze can cross beats a better penalty. Faked reports, so
+    neither depends on a brief producing the tie."""
+
+    @staticmethod
+    def _candidates(plans, monkeypatch, warn_the_airy_one):
+        import app.validator as validator_module
+        from app.ir.validation import Finding, Report
+
+        layout, program, _, _ = plans["40x60"]
+        airy = layout.model_copy(update={"score": 900.0})
+        stuffy = layout.model_copy(update={"score": 1.0})
+        rooms = [
+            r.id for r in program.rooms
+            if r.kind in (SpaceKind.HALL, SpaceKind.BEDROOM, SpaceKind.MASTER_BEDROOM)
+        ]
+        assert rooms, "the fixture must have rooms that want air"
+
+        def validate(candidate, _program, _floor):
+            is_airy = candidate.score == airy.score
+            warned = warn_the_airy_one and is_airy
+            return Report(
+                findings=[Finding(check="light", severity=Severity.WARNING, message="x")]
+                if warned else [],
+                checks_run=list(CHECKS),
+                cross_ventilated=rooms if is_airy else [],
+                single_sided=[] if is_airy else rooms,
+            )
+
+        monkeypatch.setattr(validator_module, "validate", validate)
+        return validator_module.judge(program), airy, stuffy
+
+    def test_one_warning_outweighs_every_breeze(self, plans, monkeypatch):
+        key, airy, stuffy = self._candidates(plans, monkeypatch, warn_the_airy_one=True)
+        assert key(stuffy) < key(airy)
+
+    def test_with_warnings_and_zones_equal_air_decides_before_the_penalty(self, plans, monkeypatch):
+        key, airy, stuffy = self._candidates(plans, monkeypatch, warn_the_airy_one=False)
+        assert key(airy) < key(stuffy), "a far better penalty must not buy a stuffy house"
+
+    def test_a_vastu_zone_outweighs_every_breeze(self, plans, monkeypatch):
+        """Measured, not assumed: ranked before the zones, air cost five zones over fourteen
+        plans and bought a breeze on the 30x40 2BHK with a bedroom that has no window.
+        The zoned plan is given the worse penalty, so only the order can make it win."""
+        import app.validator as validator_module
+        from app.ir.enums import Sector
+        from app.ir.layout import Layout
+        from app.ir.validation import Report
+
+        layout, program, _, _ = plans["40x60"]
+        specs = {room.id: room for room in program.rooms}
+        assert any(room.sector for room in program.rooms), "the fixture must want some zones"
+        zoned = layout.model_copy(update={"score": 900.0})
+        airy = layout.model_copy(update={"score": 1.0})
+        rooms = [
+            r.id for r in program.rooms
+            if r.kind in (SpaceKind.HALL, SpaceKind.BEDROOM, SpaceKind.MASTER_BEDROOM)
+        ]
+
+        def sector_of(self, room):
+            wanted = specs[room.room_id].sector
+            if self.score == zoned.score or wanted is None:
+                return wanted
+            return Sector.NORTH if wanted is not Sector.NORTH else Sector.SOUTH
+
+        def validate(candidate, _program, _floor):
+            is_airy = candidate.score == airy.score
+            return Report(
+                checks_run=list(CHECKS),
+                cross_ventilated=rooms if is_airy else [],
+                single_sided=[] if is_airy else rooms,
+            )
+
+        monkeypatch.setattr(Layout, "sector_of", sector_of)
+        monkeypatch.setattr(validator_module, "validate", validate)
+        key = validator_module.judge(program)
+        assert key(zoned) < key(airy)
+

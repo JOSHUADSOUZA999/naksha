@@ -4,12 +4,13 @@ AI floor-plan generation for Indian residential plots. Vastu-aware, NBC-complian
 editable output. Target users: plot owners and small builders in tier-1/2 India.
 
 **What exists right now: stages ① through ⑦** — text in, a drawing out: walls with
-thickness, doors, windows, fixtures, and a list of what is wrong with the plan. Only ⑧
-CRITIC is unbuilt, and it is optional by design. This file is how to work here, not
-where we are: **`STATUS.md`** tracks what is done, blocked and next (start there when
-resuming), and **`DECISIONS.md`** records why the code is shaped this way, every bug
-found, and the open questions that need a human. When you add a stage, add it at its
-real path — the tree here matches the full naksha layout so nothing has to move later.
+thickness, doors, windows, ventilators, fixtures, and a list of what is wrong with the
+plan. Only ⑧ CRITIC is unbuilt, and it is optional by design. This file is how to work
+here, not where we are: **`STATUS.md`** tracks what is done, blocked and next (start
+there when resuming), and **`DECISIONS.md`** records why the code is shaped this way,
+every bug found, and the open questions that need a human. When you add a stage, add it
+at its real path — the tree here matches the full naksha layout so nothing has to move
+later.
 
 ---
 
@@ -49,7 +50,7 @@ text ──① INTENT ─────► Brief          schema-locked, 2 retries
      ──④ FEASIBILITY ─✗─► explain, with options that were measured  ← BUILT
      ──⑤ LAYOUT ─────► Stage A slicing tree → Stage B CP-SAT        ← BUILT
      ──⑥ REFINE ─────► walls → doors → windows → fixtures           ← BUILT
-     ──⑦ VALIDATE ───► circulation · access · sanitation · size · light · legality ← BUILT
+     ──⑦ VALIDATE ───► circulation · access · sanitation · size · light · ventilation · legality ← BUILT
      ──⑧ CRITIC ─────► rerank + rationale (optional, behind a flag)
 ```
 
@@ -77,7 +78,8 @@ naksha/
     feasibility/ __init__.py  ④ explain + measured options
     solver/      slicing.py (Stage A) · tuning.py (Stage B, CP-SAT) · score.py
     refine/      __init__.py  ⑥ walls · doors · windows · fixtures
-    validator/   __init__.py  ⑦ circulation · access · sanitation · size · light · legality
+    validator/   __init__.py  ⑦ circulation · access · sanitation · size · light
+                              · ventilation · legality
     export/      svg.py                                   ← DXF/PDF still to come
   frontend/      Vite + React + react-konva viewer        ← NODE 18+ (20 via nvm)
   tests/         test_ir_brief · test_ir_plan · test_units · test_fallback
@@ -100,7 +102,7 @@ uv venv --python 3.12 && source .venv/bin/activate
 uv pip install -e ".[dev]"
 cp .env.example .env          # set one key, or NAKSHA_INTENT_PROVIDER=claude_code
 
-pytest                        # 711 tests, no network, no key, and independent
+pytest                        # 733 tests, no network, no key, and independent
                               # of whatever is in your .env — see conftest
 pytest -m live                # real model; needs credentials
 
@@ -155,7 +157,9 @@ Everything downstream inherits its mistakes.
   serialised but rejected on input, so a strict model refuses its own output and the
   contract becomes write-only. Dropping is right for arithmetic (`area_sq_m` cannot
   meaningfully disagree; a mismatch means a stale file). `PlotSpec` keeps the stricter
-  rule because `facing` names a *choice* someone might have hand-edited.
+  rule because `facing` names a *choice* someone might have hand-edited. **Every model
+  with a computed field inherits it** — `Wall` and `Fixture` did not, and a drawn bundle
+  could not be read back until a test round-tripped one.
 - **`plan.py` has no coordinates, and that is the architecture.** Decision 1: the
   LLM decides *what rooms, how big, next to what, which sector*; the solver decides
   where. An `x` on a `RoomSpec` moves the hardest part of the problem to the component
@@ -170,6 +174,12 @@ Everything downstream inherits its mistakes.
   asks for a pooja room and does not get one.
 - `units.py` is the **only** place a non-metre number becomes metres. A conversion
   anywhere else is a bug. Indian inputs arrive in feet, sq ft, and gaj/yards.
+- **It is also the only place metres become feet, and only for a person to read.**
+  Nothing stores feet. Owners size a room as "12 by 14" and a house in sq ft while the
+  bye-laws are metric, so a sentence gives both — `area_text` is "344 sq ft (32.0 m²)" —
+  and a drawing, with room for one, labels each room in feet-and-inches and sq ft. The
+  viewer mirrors the two in `frontend/src/units.ts`. Prompts to the model and IR
+  validation errors stay metric: neither is read by an owner.
 
 ### `rules/` — versioned data, never constants in a module
 
@@ -391,6 +401,13 @@ makes 11 of 60 layouts legal" is a decision they can take.
   of one lying along it. ⑦ refuses a bay on the road with no gate, or with a narrow gate
   along the road, and its daylight rule skips car bays. Requiring every bay to be driven
   into nose first refused three single-storey plans; the user chose the car porch.
+- **Every room that meets the outside gets air, and what it gets is data.** `refine_v1`'s
+  `ventilation` block: a bathroom a ventilator, a stair, corridor, pooja room or foyer a
+  window, a dining room on an outside wall glazed like a habitable room, and a room people
+  live in a second window on a second outside wall. Only rooms that *had* to touch the
+  outside used to get an opening — all 31 bathrooms in fourteen plans were sealed and no
+  room had air from two sides. **Only a leaf swings:** a ventilator counted as a door
+  swing kept the WC off the wall it belongs against.
 
 ### `validator/` — stage ⑦
 
@@ -431,7 +448,7 @@ that happens to fail — that test goes vacuous the day the pipeline improves.
   `layout.shafts`. Nothing checked this, and three plans called clean could not be
   climbed.
 - **The judge ranks Vastu after warnings and before the penalty.** Errors, unreachable
-  rooms, rooms below a minimum, warnings, missed zones, penalty. Vastu is advisory, so no
+  rooms, rooms below a minimum, warnings, missed zones, one-sided rooms, penalty. Vastu is advisory, so no
   zone buys a warning, but inside the penalty it lost to everything: plans met 18 zones in
   110, and counting them here raised that to 24.
 - **The front door leads into the house.** A ground floor whose entrance room has no
@@ -440,6 +457,12 @@ that happens to fail — that test goes vacuous the day the pipeline improves.
 - **Rooms the programme keeps apart must not share a wall** — a toilet against the
   kitchen or the pooja room. Reported from the programme's `SEPARATED` edges, so the rule
   lives in stage ③, not in a list in ⑦.
+- **A bathroom that cannot breathe is a warning; air from two sides is a measurement.**
+  `_ventilation` groups bathrooms by cause — no outside wall, no ventilator, too small a
+  one — because the fixes differ. Which rooms get air from two sides goes on
+  `Report.cross_ventilated` and `single_sided`, never as a finding: a floor has four
+  corners. The judge counts one-sided rooms after missed zones; before them, over
+  fourteen plans, it cost five zones and bought a breeze with a windowless bedroom.
 
 ### `llm/`
 

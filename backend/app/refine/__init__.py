@@ -21,6 +21,7 @@ from app.ir.enums import Facing, FixtureKind, OpeningKind, Relation, SpaceKind, 
 from app.ir.layout import TOLERANCE_M, Layout, PlacedRoom
 from app.ir.plan import Program
 from app.ir.refined import Fixture, Opening, RefinedFloor, Wall
+from app.ir.units import area_text, length_text
 from app.rules import load_ruleset
 
 REFINE_RULES = "refine_v1"
@@ -45,7 +46,9 @@ def refine(layout: Layout, program: Program, envelope=None) -> RefinedFloor:
         for placed in layout.rooms
     }
     # After the clear rects, because a window is sized from the floor area it lights.
-    openings += _windows(walls, program, rules["windows"], openings, clear)
+    openings += _windows(
+        walls, program, rules["windows"], openings, clear, rules["ventilation"]
+    )
     fixtures = _fixtures(layout, program, walls, openings, rules)
     return RefinedFloor(
         floor=layout.floor, walls=walls, openings=openings,
@@ -318,75 +321,144 @@ def _windows(
     rules: dict,
     taken: list[Opening],
     clear: dict[str, tuple[float, float, float, float]],
+    air: dict | None = None,
 ) -> list[Opening]:
-    """Glaze every room that needs light, to the area the bye-laws ask for.
+    """Give every room that meets the outside the opening its use calls for.
 
-    **Sized to the room, not to a convention.** Every window used to be 1.2 m wide, so
-    a 19 m² hall and a 3 m² bathroom got the same opening — which satisfies neither the
-    code nor anyone living there. The rule is an aggregate area of one tenth of the
-    floor, so the width follows from the floor area and the window height.
+    **Glaze every room that needs light, to the area the bye-laws ask for.** Sized to the
+    room, not to a convention: every window used to be 1.2 m wide, so a 19 m² hall and a
+    3 m² bathroom got the same opening — which satisfies neither the code nor anyone
+    living there. The rule is an aggregate area of one tenth of the floor, so the width
+    follows from the floor area and the window height.
 
-    Spills onto a second wall when one cannot hold it. Past the maximum width an
-    opening wants a mullion and is really two windows, so drawing it as two is not a
-    workaround — it is what gets built. Rooms with only one short exterior wall end up
-    under-glazed, and that is a finding for stage ⑦ rather than something to fake here
-    by drawing a window wider than its wall.
+    Spills onto a second wall when one cannot hold it. Past the maximum width an opening
+    wants a mullion and is really two windows, so drawing it as two is not a workaround —
+    it is what gets built. Rooms with only one short exterior wall end up under-glazed,
+    and that is a finding for stage ⑦ rather than something to fake here by drawing a
+    window wider than its wall.
+
+    **Then air, which is a different question from light.** Only rooms that had to touch
+    the outside used to get an opening, so across fourteen plans every bathroom was drawn
+    sealed — all thirty-one had an outside wall — and not one of seventy-eight halls,
+    kitchens and bedrooms had windows on two sides. Now a bathroom gets a ventilator; a
+    stair, corridor, pooja room or foyer a window where it meets the outside; and a room
+    people live in a second window on another side when it has one, so air can come in
+    one side and leave by the other. Which kind gets what is `refine_v1`'s `ventilation`
+    block, not a list in this function.
     """
-    # Not the car bay: its opening to the road lights and airs it, and a window there was
-    # the only opening it ever had, which is how every bay came out sealed.
-    needs = {
-        room.id for room in program.rooms
-        if room.needs_exterior_wall and room.kind is not SpaceKind.CAR_PARKING
-    }
+    if air is None:
+        air = load_ruleset(REFINE_RULES).data["ventilation"]
     height = rules["height_m"]
     fraction = rules["area_fraction"]
     smallest = rules["min_width_m"]
     widest = rules["max_width_m"]
     shortest_wall = rules["min_wall_m"]
+    glazed_too = {SpaceKind(kind) for kind in air["glazed_if_outside"]}
+    lit = {SpaceKind(kind) for kind in air["lit_kinds"]}
+    vented = {SpaceKind(kind) for kind in air["ventilator_kinds"]}
+    crossed = {SpaceKind(kind) for kind in air["cross_kinds"]}
+    by_id = {wall.id: wall for wall in walls}
     openings: list[Opening] = []
 
-    for room_id in sorted(needs):
-        rect = clear.get(room_id)
-        if rect is None:
-            continue
-        floor_area = max(0.0, rect[2] - rect[0]) * max(0.0, rect[3] - rect[1])
-        wanted = floor_area * fraction / height if height > 0 else 0.0
-
-        outer = sorted(
+    def outside(room_id: str, shortest: float) -> list[Wall]:
+        """The room's own outside walls long enough for an opening, longest first."""
+        return sorted(
             (
                 wall for wall in walls
                 if wall.kind is WallKind.EXTERIOR
                 and wall.rooms == [room_id]
-                and wall.length_m >= shortest_wall
+                and wall.length_m >= shortest
             ),
             key=lambda w: w.length_m,
             reverse=True,
         )
-        # The minimum width is a floor on a window, not a reason to skip one. A 6.6 m²
-        # kitchen wants 0.55 m of glazing at one tenth, which is under the smallest
-        # window anybody builds — and the first version read that as "no window", so
-        # every kitchen in the set came out blind. Small rooms get the minimum; only
-        # the *remainder* after a window is placed has to clear it to earn another.
-        first = True
-        for wall in outer:
-            if not first and wanted < smallest:
-                break
-            placed = _fit(
-                wall, min(max(wanted, smallest), widest), 0.0, [*taken, *openings],
-                floor_width=smallest,
-            )
-            if placed is None:
-                continue
-            offset, fitted = placed
-            openings.append(
-                Opening(
-                    wall_id=wall.id, kind=OpeningKind.WINDOW, offset_m=offset,
-                    width_m=fitted, height_m=height, connects=[room_id],
+
+    def add(
+        wall: Wall, kind: OpeningKind, width: float, tall: float, room_id: str,
+        floor_width: float | None,
+    ) -> Opening | None:
+        placed = _fit(wall, width, 0.0, [*taken, *openings], floor_width=floor_width)
+        if placed is None:
+            return None
+        offset, fitted = placed
+        opening = Opening(
+            wall_id=wall.id, kind=kind, offset_m=offset, width_m=fitted,
+            height_m=tall, connects=[room_id],
+        )
+        openings.append(opening)
+        return opening
+
+    for room in sorted(program.rooms, key=lambda r: r.id):
+        rect = clear.get(room.id)
+        # Not the car bay: its opening to the road lights and airs it, and a window there
+        # was the only opening it ever had, which is how every bay came out sealed.
+        if rect is None or room.kind is SpaceKind.CAR_PARKING:
+            continue
+
+        if room.kind in vented:
+            # One, high and small: the bye-laws give a bathroom an opening of its own
+            # rather than a share of its floor, and nobody wants a view into it.
+            for wall in outside(room.id, air["ventilator_min_wall_m"]):
+                if add(
+                    wall, OpeningKind.VENTILATOR, air["ventilator_width_m"],
+                    air["ventilator_height_m"], room.id, None,
+                ) is not None:
+                    break
+        elif room.needs_exterior_wall or room.kind in glazed_too:
+            floor_area = max(0.0, rect[2] - rect[0]) * max(0.0, rect[3] - rect[1])
+            wanted = floor_area * fraction / height if height > 0 else 0.0
+            # The minimum width is a floor on a window, not a reason to skip one. A 6.6 m²
+            # kitchen wants 0.55 m of glazing at one tenth, which is under the smallest
+            # window anybody builds — and the first version read that as "no window", so
+            # every kitchen in the set came out blind. Small rooms get the minimum; only
+            # the *remainder* after a window is placed has to clear it to earn another.
+            first = True
+            for wall in outside(room.id, shortest_wall):
+                if not first and wanted < smallest:
+                    break
+                window = add(
+                    wall, OpeningKind.WINDOW, min(max(wanted, smallest), widest),
+                    height, room.id, smallest,
                 )
-            )
-            wanted -= fitted
-            first = False
+                if window is None:
+                    continue
+                wanted -= window.width_m
+                first = False
+        elif room.kind in lit:
+            # One ordinary window: daylight on a stair, and a corridor with a window at
+            # its end is what pulls a breeze through the house.
+            for wall in outside(room.id, shortest_wall):
+                if add(
+                    wall, OpeningKind.WINDOW, air["lit_width_m"], height, room.id, smallest,
+                ) is not None:
+                    break
+
+        if room.kind in crossed:
+            # A second side, where the room has one. Glazing to a tenth nearly always fits
+            # on the longest wall, which left every corner room open on one side only.
+            sides = {
+                _side(by_id[opening.wall_id], rect)
+                for opening in openings
+                if room.id in opening.connects
+            }
+            if len(sides) == 1:
+                for wall in outside(room.id, shortest_wall):
+                    if _side(wall, rect) in sides:
+                        continue
+                    if add(
+                        wall, OpeningKind.WINDOW, air["cross_width_m"], height, room.id,
+                        smallest,
+                    ) is not None:
+                        break
     return openings
+
+
+def _side(wall: Wall, rect: tuple[float, float, float, float]) -> Facing:
+    """Which side of a room a wall bounds, from where it lies against the room's middle."""
+    if wall.is_vertical:
+        return Facing.WEST if wall.x1_m < (rect[0] + rect[2]) / 2 else Facing.EAST
+    return Facing.SOUTH if wall.y1_m < (rect[1] + rect[3]) / 2 else Facing.NORTH
+
 
 
 def _fit(
@@ -525,7 +597,10 @@ def _door_swings(
     by_id = {wall.id: wall for wall in walls}
     zones = []
     for opening in openings:
-        if opening.kind is OpeningKind.WINDOW:
+        # Only a leaf swings. A window or a ventilator has none, and counting the
+        # ventilator as a door kept the WC off the one wall it belongs against — the
+        # outside wall under the ventilator — and dropped it from the 50x80's bathrooms.
+        if opening.kind not in (OpeningKind.DOOR, OpeningKind.ENTRANCE):
             continue
         if placed.room_id not in opening.connects:
             continue
@@ -645,19 +720,19 @@ def breaches(floor: RefinedFloor, program: Program) -> list[str]:
         width = min(max(0.0, x_max - x_min), max(0.0, y_max - y_min))
         if area < spec.min_area_sq_m - TOLERANCE_M:
             found.append(
-                f"{room_id} has {area:.1f} m² of floor inside its walls, below the "
-                f"{spec.min_area_sq_m:.1f} m² minimum"
+                f"{room_id} has {area_text(area)} of floor inside its walls, below the "
+                f"{area_text(spec.min_area_sq_m)} minimum"
             )
         if width < spec.min_width_m - TOLERANCE_M:
             found.append(
-                f"{room_id} is {width:.2f} m clear across, below the "
-                f"{spec.min_width_m:.2f} m minimum width"
+                f"{room_id} is {length_text(width)} clear across, below the "
+                f"{length_text(spec.min_width_m)} minimum width"
             )
         length = max(max(0.0, x_max - x_min), max(0.0, y_max - y_min))
         if spec.min_length_m and length < spec.min_length_m - TOLERANCE_M:
             found.append(
-                f"{room_id} is {length:.2f} m long inside its walls, below the "
-                f"{spec.min_length_m:.2f} m minimum length"
+                f"{room_id} is {length_text(length)} long inside its walls, below the "
+                f"{length_text(spec.min_length_m)} minimum length"
             )
     return found
 

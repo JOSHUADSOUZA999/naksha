@@ -238,8 +238,15 @@ For a plan sanctioned in Bengaluru, is the operative figure:
 **Is it measured on the openable area or the whole opening?**
 [ ] openable only  [ ] whole opening including fixed lights
 
-**Does a bathroom or WC have its own figure**, or is a mechanical vent accepted
-instead? ____________________________________
+**Does a bathroom or WC have its own figure?** naksha now gives every bathroom a
+ventilator high in an outside wall, 0.6 × 0.6 m, and warns when one has less than
+**0.3 m²** open to the air — the figure commonly quoted from Indian model bye-laws, and
+again **not read first-hand**.
+
+- [ ] **0.3 m²** — as we assume
+- [ ] a different area: ______________________
+- [ ] a mechanical exhaust or a ventilation shaft is accepted instead of an opening to
+      the outside: ______________________
 
 *What it changes:* the window on a 19 m² hall is currently 0.93 m wide at 1.2 m high.
 At 1/6 it would be 1.6 m, which changes which walls can carry it and therefore which
