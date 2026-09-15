@@ -343,3 +343,31 @@ class TestSvgOutput:
         assert main(["--svg", str(out), "--fallback-only", "30x40 3bhk in Pune"]) == 0
         assert not out.exists()
         assert "[no layout]" in capsys.readouterr().err
+
+
+class TestTheCheckSaysWhatToChange:
+    """A refused storey prints its fix under the finding, and every storey prints its
+    circulation verdict, most severe findings first."""
+
+    def test_a_critical_finding_prints_its_fix_and_the_storey_its_verdict(self):
+        from pathlib import Path
+
+        from app.cli import _report_lines
+        from app.ir.layout import Layout
+        from app.ir.plan import Program
+        from app.ir.refined import RefinedFloor
+        from app.validator import validate
+
+        data = json.loads(
+            (Path(__file__).parent / "golden" / "circulation_jpnagar.json").read_text()
+        )
+        program = Program.model_validate(data["program"])
+        upstairs = validate(
+            Layout.model_validate(data["layouts"][1]), program,
+            RefinedFloor.model_validate(data["floors"][1]),
+        )
+        lines = _report_lines(2, upstairs)
+        assert any(line.strip().startswith("→ Extend corridor (corridor2)") for line in lines)
+        assert any(line.startswith("[circulation] floor 2: FAIL") for line in lines)
+        graded = [line.split()[1] for line in lines if line.strip().startswith("·")]
+        assert graded == sorted(graded, key=["critical", "major", "minor"].index)

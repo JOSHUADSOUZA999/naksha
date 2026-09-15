@@ -81,7 +81,7 @@ naksha/
     validator/   __init__.py  ⑦ circulation · access · sanitation · size · light
                               · ventilation · legality
     circulation/ graph · topology · journeys · analysis · scoring · diagnose
-                 how a drawn storey is walked; tested, not yet called by ⑦
+                 how a drawn storey is walked: ⑦'s circulation check
     export/      svg.py                                   ← DXF/PDF still to come
   frontend/      Vite + React + react-konva viewer        ← NODE 18+ (20 via nvm)
   tests/         test_ir_brief · test_ir_plan · test_units · test_fallback
@@ -105,7 +105,7 @@ uv venv --python 3.12 && source .venv/bin/activate
 uv pip install -e ".[dev]"
 cp .env.example .env          # set one key, or NAKSHA_INTENT_PROVIDER=claude_code
 
-pytest                        # 786 tests, no network, no key, and independent
+pytest                        # 788 tests, no network, no key, and independent
                               # of whatever is in your .env — see conftest
 pytest -m live                # real model; needs credentials
 pytest -m benchmark           # the 14-plan regression set, ~40 s — run after any
@@ -324,6 +324,13 @@ CP-SAT fail decision 2's twenty-second test.
   candidates per floor and takes the minimum of `validator.judge`. The solver imports
   neither ⑥ nor ⑦; the judge is passed in. The lowest penalty had picked a 30x50 with no
   front door.
+- **A storey is chosen with the storeys above it.** The stair a floor settles on is the
+  one thing the floor above cannot change, and the judge ranks one storey at a time: on
+  the JP Nagar 4BHK the best-ranked ground floor left a 5.5 x 1.7 m stair no first floor
+  could stand on. When a storey ⑦ passes carries one it refuses, `plan` tries the next
+  candidates below it, up to `STACK_TRIES`, and keeps the stack whose judge keys add up
+  best. The key's first element is the contract: truthy when ⑦ refuses the storey. A
+  first choice the floor above can stand on costs nothing.
 - **A swap may not take the car bay or the front door off the street.** `improve` ranks
   `(unbuildable, off_the_road, penalty)`. On the 30x40 2BHK and the 30x50 the one
   road-first plan that dimensioned was legal before the climb and refused after it: a
@@ -431,6 +438,8 @@ that happens to fail — that test goes vacuous the day the pipeline improves.
 - **A route may end in a private room, never pass through one** — except into the
   bathroom stage ③ connected to that bedroom, which is what an en-suite is. Narrowing
   the rule to "is the corridor reached through a bedroom" is what hid the defects above.
+  The circulation engine asks it now, of the best route to every room: through a bedroom
+  or a bathroom is critical, through the kitchen major.
 - **Walk every route, not the shortest.** One honest way into a room is enough.
 - **A car bay off the road is an error**, not a warning: it does not satisfy the parking
   requirement that put it in the programme.
@@ -438,27 +447,36 @@ that happens to fail — that test goes vacuous the day the pipeline improves.
 - **The judge turns every check into an objective, and an optimiser finds its holes.**
   The walk once fell back to the staircase on a *ground* floor with no front door, called
   the house clean, and the judge preferred it to every house you could enter. The
-  staircase start is for upper storeys only. `judge` ranks unreachable rooms worst among
-  refusals.
-- **Living rooms behind a private room are an error, not a warning.** A second bedroom
-  reached through the master is bad and livable. A hall, kitchen or dining room reached
-  only through a bedroom or bathroom means the way in does not lead into the house — a
-  30x50 went front door, foyer, *bathroom*, corridor, hall — and as one warning the judge
-  preferred it to a plan refused for its car bay.
-- **The hall behind the kitchen is reported.** Both plots the deeper search made legal
-  were entered foyer → kitchen → hall and ⑦ said nothing. A dining room behind the
-  kitchen is an ordinary arrangement and stays unreported.
+  staircase start is for upper storeys only. `judge` ranks critical circulation first
+  among refusals.
+- **Any room reached only through a bedroom or bathroom is critical.** A second bedroom
+  reached through the master used to be a warning, "bad and livable"; the circulation
+  brief made it a failure, because that bedroom has no privacy and the master has become
+  a corridor. Living rooms behind a private room were errors already, since a 30x50 went
+  front door, foyer, *bathroom*, corridor, hall, and as one warning the judge preferred it
+  to a plan refused for its car bay.
+- **Behind the kitchen is major, the dining room included.** Both plots the deeper search
+  made legal were entered foyer → kitchen → hall and ⑦ said nothing. A dining room
+  reachable only through the kitchen used to go unreported as an ordinary arrangement;
+  the engine reports it, because guests cross the working kitchen to reach the table.
 - **Compare a storey with the one below.** Upstairs the walk starts at the stair, and a
   stair that does not sit over the stair below is no way up — ⑦ refuses it, reading
   `layout.shafts`. Nothing checked this, and three plans called clean could not be
   climbed.
-- **The judge ranks Vastu after warnings and before the penalty.** Errors, unreachable
-  rooms, rooms below a minimum, warnings, missed zones, one-sided rooms, penalty. Vastu is advisory, so no
-  zone buys a warning, but inside the penalty it lost to everything: plans met 18 zones in
-  110, and counting them here raised that to 24.
-- **The front door leads into the house.** A ground floor whose entrance room has no
-  door to the hall or dining room is reported, even when every room is reachable: a
-  model's 3BHK was entered foyer → staircase → corridor → hall and passed everything.
+- **The judge ranks refusals, then majors, then Vastu, then circulation quality.** In
+  order: refused at all, rooms below a legal minimum, critical circulation, other critical
+  findings, major findings of any check, missed zones, circulation quality, minor
+  findings, one-sided rooms, penalty. Vastu is advisory, so no zone buys a major finding,
+  but inside the penalty it lost to everything: plans met 18 zones in 110, and counting
+  them here raised that to 24. Quality ranks after the zones because it almost never
+  ties, so anything after it is a tiebreak. **Majors are counted together:** ranked ahead
+  of the rest, circulation majors bought one fewer with a windowless bedroom on the 30x40
+  2BHK and a windowless hall on the 50x80.
+- **The front door leads into the house.** A model's 3BHK was entered foyer → staircase
+  → corridor → hall and passed everything. The engine walks a visitor's arrival: a foyer
+  into the living room is right, one corridor between them is ordinary, two circulation
+  spaces are roundabout (minor), and a dining room or kitchen on the way reverses the
+  hierarchy (major).
 - **Rooms the programme keeps apart must not share a wall** — a toilet against the
   kitchen or the pooja room. Reported from the programme's `SEPARATED` edges, so the rule
   lives in stage ③, not in a list in ⑦.
@@ -466,15 +484,17 @@ that happens to fail — that test goes vacuous the day the pipeline improves.
   `_ventilation` groups bathrooms by cause — no outside wall, no ventilator, too small a
   one — because the fixes differ. Which rooms get air from two sides goes on
   `Report.cross_ventilated` and `single_sided`, never as a finding: a floor has four
-  corners. The judge counts one-sided rooms after missed zones; before them, over
-  fourteen plans, it cost five zones and bought a breeze with a windowless bedroom.
+  corners. The judge counts one-sided rooms after circulation quality and minor findings;
+  ranked before the zones, over fourteen plans, it cost five zones and bought a breeze with
+  a windowless bedroom.
 
 ### `circulation/` — the engine stage ⑦ will judge circulation with
 
-**Built and tested, not yet wired in.** Nothing in ⑤, ⑥ or ⑦ calls it, so no plan changes
-until the judge reads it, and `pytest -m benchmark` must show the plans unchanged until
-that wiring is measured. `evaluate(layout, program, floor)` returns a
-`CirculationSummary` and graded findings for one drawn storey.
+**Stage ⑦'s circulation check.** `validate` calls `evaluate(layout, program, floor)` on
+every drawn storey: its graded findings are the report's circulation findings, its
+`CirculationSummary` goes on `Report.circulation`, and the judge ranks by both. The
+reachability walk ⑦ used to do itself is gone, and every defect that walk was built to
+catch has a test in `test_circulation.py`.
 
 - **Reachable is not properly reached.** A room behind a bedroom is reachable and still a
   critical failure. Access is graded by the worst room the *best* route must cross, by

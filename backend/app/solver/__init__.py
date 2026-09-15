@@ -54,6 +54,10 @@ TUNE_SHORTLIST = 24
 # and each one costs a refine and a validate on top of its tuning.
 JUDGED_KEEP = 12
 
+# How many candidates for one storey are tried when the storey above cannot stand on the
+# judge's first choice. Only a storey stage ⑦ passes, under one it refuses, pays for it.
+STACK_TRIES = 3
+
 # Road-first topologies generated per floor that has a car bay, on top of the random
 # pool. Generation and scoring are microseconds each; the cost is in tuning, and only the
 # best TUNE_SHORTLIST of these are ever tuned.
@@ -645,6 +649,15 @@ def plan(
     for itself. Solved independently, a 30x40 G+1 put it at (0.73, 7.30) downstairs and
     (0.73, 0.98) upstairs — two floors with no way between them. So the floors are
     solved bottom-up and each one hands the shaft to the next.
+
+    **So a storey is chosen with the storeys above it.** The judge ranks one storey at a
+    time, and on the JP Nagar 4BHK it preferred a ground floor whose stair was a 5.5 x
+    1.7 m strip that no first floor could stand a stair on: a house nobody could climb,
+    chosen over one whose upper floor had nothing wrong. When a storey the judge passes
+    carries one it refuses, the next candidates for the lower storey are tried, up to
+    STACK_TRIES, and the stack whose keys add up best wins. The judge's key carries the
+    contract: its first element says whether stage ⑦ refuses the storey, and every element
+    adds up across storeys. A storey that passes under the first choice costs nothing.
     """
     from app.ir.layout import PlanBundle
 
@@ -654,30 +667,59 @@ def plan(
     # floor that decides where the stair goes, and it cannot decide well without
     # knowing how far the storey above reaches.
     zone = _shaft_zone(program, envelope, floors)
+    kinds = _kinds(program)
+    settled: dict = {}
 
-    layouts = []
-    fixed: dict = {}
-    for floor in floors:
+    def shaft(layout) -> dict:
+        # Whatever a storey decided about the staircase is no longer negotiable: the floor
+        # above is solved and scored against it.
+        return {
+            kinds[placed.room_id]: placed
+            for placed in layout.rooms
+            if kinds.get(placed.room_id) is SpaceKind.STAIRCASE
+        }
+
+    def stack(index: int, fixed: dict) -> tuple[list, list]:
+        """The layouts for `floors[index:]` standing on `fixed`, with the judge's keys."""
+        if index == len(floors):
+            return [], []
+        # Two candidates can leave the same stair behind, and then the storey above is the
+        # same problem; solving it twice would change nothing but the time.
+        memo = (index, tuple(sorted(
+            (kind.value, p.x_min_m, p.y_min_m, p.x_max_m, p.y_max_m)
+            for kind, p in fixed.items()
+        )))
+        if memo in settled:
+            return settled[memo]
         pool = solve(
-            program, envelope, floor=floor, candidates=candidates, seed=seed,
+            program, envelope, floor=floors[index], candidates=candidates, seed=seed,
             keep=JUDGED_KEEP if judge is not None else 1,
             shafts=fixed, shaft_zone=zone,
         )
         if not pool:
-            continue
-        # `min` keeps the first of equal keys, and `pool` is already best-penalty first.
-        chosen = min(pool, key=judge) if judge is not None else pool[0]
-        best = [chosen]
-        layouts.append(chosen)
-        # Carry the shaft upward. Whatever this storey decided about the staircase is
-        # no longer negotiable — the floor above is scored against it.
-        kinds = _kinds(program)
-        fixed = {
-            kinds[placed.room_id]: placed
-            for placed in best[0].rooms
-            if kinds.get(placed.room_id) is SpaceKind.STAIRCASE
-        }
+            result = stack(index + 1, fixed)
+        elif judge is None:
+            above, keys = stack(index + 1, shaft(pool[0]))
+            result = ([pool[0], *above], keys)
+        else:
+            # Stable on equal keys, so the pool's best-penalty-first order breaks ties.
+            ranked = sorted(
+                ((judge(layout), position, layout) for position, layout in enumerate(pool)),
+                key=lambda row: row[:2],
+            )
+            result = None
+            for tried, (own, _, layout) in enumerate(ranked):
+                above, above_keys = stack(index + 1, shaft(layout))
+                option = ([layout, *above], [own, *above_keys])
+                if result is None or _added(option[1]) < _added(result[1]):
+                    result = option
+                stranded = any(_refuses(key) for key in above_keys)
+                if _refuses(own) or not stranded or tried + 1 >= STACK_TRIES:
+                    break
+        settled[memo] = result
+        return result
 
+    layouts, _ = stack(0, {})
     return PlanBundle(
         brief_text=brief.raw_text,
         envelope=envelope,
@@ -686,3 +728,17 @@ def plan(
         seed=seed,
         candidates=candidates,
     )
+
+
+def _refuses(key) -> bool:
+    """Whether a judge's key says stage ⑦ refuses the storey: its first element, when it
+    has one. A judge that returns a bare number says nothing either way."""
+    return bool(key[0]) if isinstance(key, tuple) and key else False
+
+
+def _added(keys: list) -> tuple:
+    """A stack's keys added storey by storey, element by element."""
+    if all(isinstance(key, tuple) for key in keys):
+        return tuple(sum(values) for values in zip(*keys))
+    return (sum(keys),)
+

@@ -3,8 +3,9 @@
 Two questions, kept apart on purpose. **Did the generated plans change?** Answered by
 a hash of each plan's geometry — room rectangles, walls, openings, fixtures — and never
 of its reports, so adding a field to a report or rewording a finding is not a change to
-the house. **Did they get worse?** Answered by counts a person can argue with: errors and
-warnings by check, Vastu zones met, rooms with air from two sides, bathrooms ventilated.
+the house. **Did they get worse?** Answered by counts a person can argue with: findings by
+grade and by check, storeys whose circulation fails, Vastu zones met, rooms with air from
+two sides, bathrooms ventilated.
 
 A change that is meant to alter plans will fail the first question by design. That is
 the point at which someone reads the second, and re-baselines deliberately:
@@ -55,6 +56,8 @@ class CaseResult:
     floors: int
     errors: int
     warnings: int
+    major: int = 0
+    minor: int = 0
     by_check: dict[str, int] = field(default_factory=dict)
     zones_met: int = 0
     zones_wanted: int = 0
@@ -63,6 +66,8 @@ class CaseResult:
     no_air: int = 0
     baths_vented: int = 0
     baths: int = 0
+    circulation_failed: int = 0
+    circulation_scores: list[float] = field(default_factory=list)
     geometry: str = ""
     seconds: float = 0.0
 
@@ -141,6 +146,11 @@ def measure(case: dict, seed: int) -> tuple[CaseResult, object]:
     for layout, floor, report in zip(bundle.layouts, bundle.floors, bundle.reports):
         result.errors += report.errors
         result.warnings += len(report.findings) - report.errors
+        result.major += report.major
+        result.minor += report.minor
+        if report.circulation is not None:
+            result.circulation_failed += int(not report.circulation.passed)
+            result.circulation_scores.append(report.circulation.score)
         for finding in report.findings:
             result.by_check[finding.check] = result.by_check.get(finding.check, 0) + 1
         for placed in layout.rooms:
@@ -166,7 +176,9 @@ def run_all() -> list[CaseResult]:
 
 
 # Counts where more is worse, and counts where fewer is worse.
-_LOWER_IS_BETTER = ("errors", "warnings", "no_air")
+# Minor findings are recorded, not guarded: they are optimisation, and the judge ranks
+# them after Vastu and circulation quality.
+_LOWER_IS_BETTER = ("errors", "major", "circulation_failed", "no_air")
 _HIGHER_IS_BETTER = ("zones_met", "two_sided_air", "baths_vented")
 
 
@@ -174,10 +186,10 @@ def regressions(result: CaseResult, baseline: dict) -> list[str]:
     """How this case is worse than its baseline, in words. Empty when it is not."""
     worse = []
     for name in _LOWER_IS_BETTER:
-        if getattr(result, name) > baseline[name]:
+        if name in baseline and getattr(result, name) > baseline[name]:
             worse.append(f"{name} {baseline[name]} → {getattr(result, name)}")
     for name in _HIGHER_IS_BETTER:
-        if getattr(result, name) < baseline[name]:
+        if name in baseline and getattr(result, name) < baseline[name]:
             worse.append(f"{name} {baseline[name]} → {getattr(result, name)}")
     return worse
 
@@ -195,7 +207,7 @@ def write_baseline(results: list[CaseResult]) -> None:
             "`seconds` is recorded for information and never compared."
         ),
         "rulesets": {
-            name: load_ruleset(name).stamp for name in ("spaces_v1", "refine_v1", "setbacks_v1")
+            name: load_ruleset(name).stamp for name in ("spaces_v1", "refine_v1", "setbacks_v1", "circulation_v1")
         },
         "cases": [asdict(r) for r in results],
     }
@@ -203,7 +215,10 @@ def write_baseline(results: list[CaseResult]) -> None:
 
 
 def _table(results: list[CaseResult], baseline: dict | None) -> str:
-    lines = [f"{'case':28} {'err':>3} {'warn':>4} {'zones':>7} {'air':>5} {'baths':>5} {'time':>6}  change"]
+    lines = [
+        f"{'case':28} {'err':>3} {'maj':>3} {'min':>3} {'circulation':>15} {'zones':>7} "
+        f"{'air':>5} {'baths':>5} {'time':>6}  change"
+    ]
     for r in results:
         base = (baseline or {}).get(r.id)
         if base is None:
@@ -213,15 +228,20 @@ def _table(results: list[CaseResult], baseline: dict | None) -> str:
             note = "PLANS CHANGED" + (f" — worse: {'; '.join(worse)}" if worse else " — no metric worse")
         else:
             note = "same plans" if not regressions(r, base) else f"same plans, worse: {'; '.join(regressions(r, base))}"
+        circulation = " ".join(f"{score:.0f}" for score in r.circulation_scores)
+        if r.circulation_failed:
+            circulation += f" ({r.circulation_failed} fail)"
         lines.append(
-            f"{r.id:28} {r.errors:>3} {r.warnings:>4} {r.zones_met:>3}/{r.zones_wanted:<3} "
-            f"{r.two_sided_air:>2}/{r.air_rooms:<2} {r.baths_vented:>2}/{r.baths:<2} {r.seconds:>5.1f}s  {note}"
+            f"{r.id:28} {r.errors:>3} {r.major:>3} {r.minor:>3} {circulation:>15} "
+            f"{r.zones_met:>3}/{r.zones_wanted:<3} {r.two_sided_air:>2}/{r.air_rooms:<2} "
+            f"{r.baths_vented:>2}/{r.baths:<2} {r.seconds:>5.1f}s  {note}"
         )
     total = lambda name: sum(getattr(r, name) for r in results)  # noqa: E731
     lines.append(
-        f"{'TOTAL':28} {total('errors'):>3} {total('warnings'):>4} {total('zones_met'):>3}/{total('zones_wanted'):<3} "
-        f"{total('two_sided_air'):>2}/{total('air_rooms'):<2} {total('baths_vented'):>2}/{total('baths'):<2} "
-        f"{sum(r.seconds for r in results):>5.1f}s"
+        f"{'TOTAL':28} {total('errors'):>3} {total('major'):>3} {total('minor'):>3} "
+        f"{str(total('circulation_failed')) + ' storeys fail':>15} "
+        f"{total('zones_met'):>3}/{total('zones_wanted'):<3} {total('two_sided_air'):>2}/{total('air_rooms'):<2} "
+        f"{total('baths_vented'):>2}/{total('baths'):<2} {sum(r.seconds for r in results):>5.1f}s"
     )
     return "\n".join(lines)
 

@@ -450,6 +450,44 @@ def _write_layout(
         _write_svg(bundle, args.svg)
 
 
+_SEVERITY_FIRST = {"critical": 0, "major": 1, "minor": 2}
+
+
+def _report_lines(floor: int, report) -> list[str]:
+    """Stage ⑦'s verdict on one storey, as a person at a terminal reads it.
+
+    Most severe first, with the fix under each critical finding: a refused plan should say
+    what to change, not only what is wrong. The circulation line is printed even when
+    nothing is wrong, because the score is how a person tells a good plan from one that
+    merely passes.
+    """
+    lines: list[str] = []
+    findings = sorted(report.findings, key=lambda f: _SEVERITY_FIRST[f.grade.value])
+    if findings:
+        state = "✗" if not report.ok else "⚠"
+        lines.append("")
+        lines.append(
+            f"[check] {state} floor {floor}: {report.errors} error(s), "
+            f"{len(findings) - report.errors} warning(s)"
+        )
+        for finding in findings[:5]:
+            lines.append(f"        · {finding.grade.value:<8} {finding.message}")
+            if finding.grade.value == "critical" and finding.fix:
+                lines.append(f"          → {finding.fix}")
+        if len(findings) > 5:
+            lines.append(f"        · …and {len(findings) - 5} more")
+    summary = report.circulation
+    if summary is not None:
+        health = "FAIL" if not summary.passed else summary.health.value
+        quality = "" if summary.passed else f", quality {summary.quality:.0f}"
+        lines.append(
+            f"[circulation] floor {floor}: {health} · {summary.score:.0f}/100{quality} · "
+            f"{summary.critical} critical, {summary.major} major, {summary.minor} minor · "
+            f"corridors and foyers take {summary.circulation_share:.0%}"
+        )
+    return lines
+
+
 def _write_svg(bundle, path: str) -> None:
     """Draw each storey. Multi-floor briefs get one file per floor, never a merge.
 
@@ -478,20 +516,8 @@ def _write_svg(bundle, path: str) -> None:
         )
         flags = f", {layout.unbuildable} unbuildable" if layout.unbuildable else ""
         report = bundle.reports[bundle.layouts.index(layout)]
-        if not report.ok or report.findings:
-            state = "\u2717" if not report.ok else "\u26a0"
-            print(
-                f"\n[check] {state} floor {layout.floor}: {report.errors} error(s), "
-                f"{len(report.findings) - report.errors} warning(s)",
-                file=sys.stderr,
-            )
-            for finding in report.findings[:5]:
-                print(f"        \u00b7 {finding.message}", file=sys.stderr)
-            if len(report.findings) > 5:
-                print(
-                    f"        \u00b7 \u2026and {len(report.findings) - 5} more",
-                    file=sys.stderr,
-                )
+        for line in _report_lines(layout.floor, report):
+            print(line, file=sys.stderr)
 
         # Recheck legality on the clear floor, independently of the scorer. Silent
         # when the plan is clean; when it is not, these are the same rooms `score`

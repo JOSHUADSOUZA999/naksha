@@ -7,6 +7,15 @@ Append-only. Why the code is shaped the way it is, what broke, and what is still
 
 ## Open questions — these need you, not me
 
+**11. Is a habitable room with no window at all a warning, or illegal?** `light` reports
+it as a warning, on the reasoning that a wall may be too short to hold an opening, so the
+judge weighs a windowless bedroom the same as an en-suite that opens off the corridor.
+The bye-laws ask a habitable room for openings of a tenth of its floor, and a room with
+none meets no part of that. With circulation majors ranked first, the judge chose two
+windowless rooms on the benchmark; graded as illegal, no order could have. Changing it is
+a product decision, because plans that pass today with a warning would be refused: the
+20x30 and the 30x50 each have one.
+
 **10. The circulation rules are practice, and need an architect's eye.** Bye-laws say
 nothing about how a house is walked, so every grade and threshold in
 `circulation_v1.json` is residential design practice written down: a corridor wider than
@@ -867,6 +876,57 @@ Three of the five failures are storeys ⑦ already refuses. The two new ones are
 first floor and the 30x50's ground floor, whose shared bathroom opens only off a bedroom
 though stage ③ connected it to the corridor. What the judge does with that is Step 3,
 measured on the same set.
+
+### Circulation decides which plan is shown
+
+The engine is now stage ⑦'s circulation check: `validate` reports its graded findings and
+puts its summary on the report, and ⑦'s own reachability walk is gone. Every defect that
+walk was built to catch has a test in `test_circulation.py`. Two judgments changed with
+it, by the circulation brief's decision: a bedroom reached only through another bedroom
+is critical, not a warning, and a dining room reachable only through the kitchen is
+reported.
+
+The order the judge ranks in was measured over the 14 benchmark plans. Each run is the
+whole pipeline with one judge; "before" is the plans the old judge chose, checked again
+by the engine.
+
+| run | critical (circulation) | major | minor | storeys failing | mean quality | zones | two-sided air |
+|---|---|---|---|---|---|---|---|
+| before | 19 (6) | 30 | 35 | 5 | 80.7 | 38/144 | 31/78 |
+| the brief's order, storey by storey | 18 (5) | 24 | 33 | 5 | 79.2 | 41/144 | 29/78 |
+| the old key fed the engine's findings | 17 (4) | 25 | 28 | 4 | 82.0 | 36/144 | 29/78 |
+| the brief's order, storeys stacked | 17 (4) | 25 | 31 | 4 | 82.9 | 39/144 | 30/78 |
+| **majors counted together, stacked** | **17 (4)** | **25** | **31** | **4** | **82.0** | **41/144** | **29/78** |
+
+Placing air straight after the zones, or quality in 5-point steps, chose the same plans
+as the brief's order.
+
+**The brief's order alone stranded JP Nagar's first floor.** It preferred a ground floor
+at 84 whose stair was a 5.5 x 1.7 m strip, and no first-floor candidate could stand a
+stair on it: a house nobody could climb, counted as one critical finding against the two
+it replaced. The judge ranks one storey at a time, so `solver.plan` now tries the next
+candidates for a storey when the storey above it is refused, up to `STACK_TRIES` (3), and
+keeps the stack whose keys add up best. Only JP Nagar paid for it, and the benchmark still
+takes 36 s.
+
+**Circulation majors ranked ahead of the rest traded light for circulation.** The 30x40
+2BHK's chosen plan gave up its kitchen entrance for a bedroom with no window at all, and
+the 50x80's took a hall with none: five windowless rooms against three before. Counted
+together, majors kept both windows (two in the set, as before) and two Vastu zones, with
+the same failures and findings. That is the order: refusals with circulation first, then
+majors, zones, circulation quality, minor findings, one-sided rooms and the penalty.
+
+What the chosen plans still give up, all accepted in the new baseline: JP Nagar meets 2 of
+its 14 Vastu zones where it met 6, because the ground floors that met them strand the
+stair; the model's 30x50 goes from 88 and 96 to 96 and 100 and loses its 3 zones and a
+bathroom's ventilator; three plans have one fewer room with air from two sides; and the
+30x50 counts an error it did not, a shared bathroom reachable only through a bedroom,
+which no candidate avoids.
+
+An oversized foyer was one defect reported twice, by the engine and by the size check,
+and counted twice by the judge. ⑦ now keeps the engine's finding alone, which took the
+50x80 from five majors to four without changing any plan. The baseline records 17
+critical findings, 24 major and 31 minor, 4 storeys failing and 41 of 144 zones.
 
 ---
 

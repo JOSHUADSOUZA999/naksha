@@ -3,17 +3,20 @@
   "rulesets": {
     "spaces_v1": "spaces_v1@a67e18",
     "refine_v1": "refine_v1@665846",
-    "setbacks_v1": "setbacks_v1@90b243"
+    "setbacks_v1": "setbacks_v1@90b243",
+    "circulation_v1": "circulation_v1@b90995"
   },
   "cases": [
     {
       "id": "20x30-2bhk",
       "floors": 3,
       "errors": 11,
-      "warnings": 2,
+      "warnings": 5,
+      "major": 4,
+      "minor": 1,
       "by_check": {
         "access": 1,
-        "circulation": 3,
+        "circulation": 6,
         "legality": 8,
         "light": 1
       },
@@ -24,14 +27,22 @@
       "no_air": 1,
       "baths_vented": 2,
       "baths": 2,
+      "circulation_failed": 2,
+      "circulation_scores": [
+        20.2,
+        95.8,
+        0.0
+      ],
       "geometry": "46df80da5bd720b17f3078571c6bb662ff9a03acb78ddbbc2ec2389c632ffd37",
-      "seconds": 0.62
+      "seconds": 0.66
     },
     {
       "id": "25x40-2bhk",
       "floors": 2,
       "errors": 0,
       "warnings": 2,
+      "major": 1,
+      "minor": 1,
       "by_check": {
         "circulation": 2
       },
@@ -42,16 +53,23 @@
       "no_air": 0,
       "baths_vented": 2,
       "baths": 2,
-      "geometry": "a94adc79fd158326b09a7f0ef5dcb40eb26f2a496305974cbf001a71aed2bbc8",
-      "seconds": 3.46
+      "circulation_failed": 0,
+      "circulation_scores": [
+        79.4,
+        100.0
+      ],
+      "geometry": "f9d19780ef103188a12c1112a656737bad7a1d8d68ee46b3a7e04b5095a39413",
+      "seconds": 4.37
     },
     {
       "id": "30x30-2bhk",
       "floors": 2,
       "errors": 0,
       "warnings": 1,
+      "major": 0,
+      "minor": 1,
       "by_check": {
-        "sanitation": 1
+        "circulation": 1
       },
       "zones_met": 3,
       "zones_wanted": 8,
@@ -60,16 +78,23 @@
       "no_air": 0,
       "baths_vented": 2,
       "baths": 2,
-      "geometry": "4f6c7d9f593997c9c54319a2e959c7d3ad15ef10f04d7a59b87e599f4ff55a4e",
-      "seconds": 1.68
+      "circulation_failed": 0,
+      "circulation_scores": [
+        92.8,
+        100.0
+      ],
+      "geometry": "b49d9880cfe9890903ce7835a201daa4077fd7774c2906c2fce7b825f787a30b",
+      "seconds": 2.01
     },
     {
       "id": "30x40-2bhk",
       "floors": 1,
       "errors": 0,
-      "warnings": 2,
+      "warnings": 3,
+      "major": 2,
+      "minor": 1,
       "by_check": {
-        "circulation": 2
+        "circulation": 3
       },
       "zones_met": 1,
       "zones_wanted": 6,
@@ -78,17 +103,23 @@
       "no_air": 0,
       "baths_vented": 2,
       "baths": 2,
+      "circulation_failed": 0,
+      "circulation_scores": [
+        73.2
+      ],
       "geometry": "4b517e52427c6fb69ba6e9b74888bdb8de3b70b8226ce4446376753dc9a94d20",
-      "seconds": 3.42
+      "seconds": 3.81
     },
     {
       "id": "30x40-3bhk",
       "floors": 2,
       "errors": 5,
-      "warnings": 1,
+      "warnings": 4,
+      "major": 1,
+      "minor": 3,
       "by_check": {
         "access": 1,
-        "circulation": 1,
+        "circulation": 4,
         "legality": 3,
         "sanitation": 1
       },
@@ -99,32 +130,48 @@
       "no_air": 0,
       "baths_vented": 2,
       "baths": 2,
+      "circulation_failed": 1,
+      "circulation_scores": [
+        0.0,
+        98.1
+      ],
       "geometry": "2ae07762bec888015a3b3b35264964909b891957b83b3d43838e62ffb530d5f3",
-      "seconds": 0.98
+      "seconds": 1.14
     },
     {
       "id": "30x40-3bhk-stilt",
       "floors": 3,
       "errors": 0,
-      "warnings": 1,
+      "warnings": 7,
+      "major": 2,
+      "minor": 5,
       "by_check": {
+        "circulation": 6,
         "sanitation": 1
       },
-      "zones_met": 3,
+      "zones_met": 5,
       "zones_wanted": 12,
-      "two_sided_air": 4,
+      "two_sided_air": 3,
       "air_rooms": 6,
       "no_air": 0,
       "baths_vented": 2,
       "baths": 2,
-      "geometry": "e197c9285537838a92459d102b1080331a0a2fa919e3b76dae6ee1e46ce19eb5",
-      "seconds": 0.71
+      "circulation_failed": 0,
+      "circulation_scores": [
+        91.8,
+        87.6,
+        98.0
+      ],
+      "geometry": "aa05e9e156bd220371da2c6d7318ca7912e6a083a6a365ade3ced49e8d757ee3",
+      "seconds": 1.08
     },
     {
       "id": "30x50-3bhk",
       "floors": 1,
-      "errors": 0,
-      "warnings": 4,
+      "errors": 1,
+      "warnings": 3,
+      "major": 2,
+      "minor": 1,
       "by_check": {
         "circulation": 3,
         "light": 1
@@ -136,32 +183,46 @@
       "no_air": 1,
       "baths_vented": 2,
       "baths": 2,
+      "circulation_failed": 1,
+      "circulation_scores": [
+        29.6
+      ],
       "geometry": "ce04b05e9429b9cd8c16beb2376b88089a5dd38ebca1c064d4a3116a26db5fc5",
-      "seconds": 4.12
+      "seconds": 4.48
     },
     {
       "id": "40x60-3bhk",
       "floors": 1,
       "errors": 0,
-      "warnings": 0,
-      "by_check": {},
-      "zones_met": 0,
+      "warnings": 6,
+      "major": 2,
+      "minor": 4,
+      "by_check": {
+        "circulation": 6
+      },
+      "zones_met": 2,
       "zones_wanted": 9,
-      "two_sided_air": 1,
+      "two_sided_air": 0,
       "air_rooms": 6,
       "no_air": 0,
       "baths_vented": 2,
       "baths": 2,
-      "geometry": "814c1029ff5e1dfb2a42c34d88ed9d6e8300b90098f870ed026e867eca526fed",
-      "seconds": 2.08
+      "circulation_failed": 0,
+      "circulation_scores": [
+        73.6
+      ],
+      "geometry": "0e03973008d483216e2f174fe89c10501d14dfe2944b840218d33d547aeeedb2",
+      "seconds": 2.32
     },
     {
       "id": "50x80-4bhk",
       "floors": 1,
       "errors": 0,
-      "warnings": 1,
+      "warnings": 7,
+      "major": 4,
+      "minor": 3,
       "by_check": {
-        "size": 1
+        "circulation": 7
       },
       "zones_met": 3,
       "zones_wanted": 11,
@@ -170,47 +231,74 @@
       "no_air": 0,
       "baths_vented": 3,
       "baths": 3,
-      "geometry": "10b64e59c5da99c081f36e611b9c80c1add8ef51d27e12c13b2dfea6d01f9c20",
-      "seconds": 2.31
+      "circulation_failed": 0,
+      "circulation_scores": [
+        76.1
+      ],
+      "geometry": "1b6eb4d86b17b3299a902d1206fe8c16a13121cb644010c9a1ab9b908ba92dbd",
+      "seconds": 2.77
     },
     {
       "id": "model-30x40-3bhk",
       "floors": 2,
       "errors": 0,
-      "warnings": 0,
-      "by_check": {},
-      "zones_met": 3,
+      "warnings": 2,
+      "major": 0,
+      "minor": 2,
+      "by_check": {
+        "circulation": 2
+      },
+      "zones_met": 5,
       "zones_wanted": 12,
-      "two_sided_air": 4,
+      "two_sided_air": 3,
       "air_rooms": 5,
       "no_air": 0,
       "baths_vented": 2,
       "baths": 2,
-      "geometry": "eed88b1e48d997b987754c3ec627709dcd56716181dd4aacd37f813779367968",
-      "seconds": 2.55
+      "circulation_failed": 0,
+      "circulation_scores": [
+        91.4,
+        100.0
+      ],
+      "geometry": "734471224f7ef40ed2c60ab1429ce62c9a2e50533cb16c1894d7b87341797c9a",
+      "seconds": 3.18
     },
     {
       "id": "model-30x50-3bhk",
       "floors": 2,
       "errors": 0,
-      "warnings": 0,
-      "by_check": {},
-      "zones_met": 3,
+      "warnings": 3,
+      "major": 1,
+      "minor": 2,
+      "by_check": {
+        "circulation": 2,
+        "ventilation": 1
+      },
+      "zones_met": 0,
       "zones_wanted": 11,
       "two_sided_air": 3,
       "air_rooms": 6,
       "no_air": 0,
-      "baths_vented": 2,
+      "baths_vented": 1,
       "baths": 2,
-      "geometry": "f91eee20fedc34eda07459d58314fb8bde7d6e4ae6c05cf91f98e3ee9a4d61f5",
-      "seconds": 2.97
+      "circulation_failed": 0,
+      "circulation_scores": [
+        96.4,
+        100.0
+      ],
+      "geometry": "633b4281d5ed24b6e2ef573215c8be9e929b52d5aea1026142f4ec98b7e95029",
+      "seconds": 3.66
     },
     {
       "id": "model-40x60-joint-family",
       "floors": 2,
       "errors": 0,
-      "warnings": 0,
-      "by_check": {},
+      "warnings": 4,
+      "major": 2,
+      "minor": 2,
+      "by_check": {
+        "circulation": 4
+      },
       "zones_met": 4,
       "zones_wanted": 13,
       "two_sided_air": 1,
@@ -218,42 +306,63 @@
       "no_air": 0,
       "baths_vented": 3,
       "baths": 3,
+      "circulation_failed": 0,
+      "circulation_scores": [
+        85.1,
+        100.0
+      ],
       "geometry": "8523e99faa52ab63fa10d47cc3d4d9617043725de977b083dbb1ed15499f7d7a",
-      "seconds": 3.72
+      "seconds": 4.53
     },
     {
       "id": "live-whitefield-30x40-3bhk",
       "floors": 2,
       "errors": 0,
-      "warnings": 0,
-      "by_check": {},
-      "zones_met": 3,
+      "warnings": 4,
+      "major": 0,
+      "minor": 4,
+      "by_check": {
+        "circulation": 4
+      },
+      "zones_met": 7,
       "zones_wanted": 12,
-      "two_sided_air": 2,
+      "two_sided_air": 3,
       "air_rooms": 5,
       "no_air": 0,
       "baths_vented": 2,
       "baths": 2,
-      "geometry": "6bf25c480a77bc3b3d529463707d208fbe048db07129a18faa73d55cbf4c8533",
-      "seconds": 2.51
+      "circulation_failed": 0,
+      "circulation_scores": [
+        88.6,
+        98.9
+      ],
+      "geometry": "316135d3eabf74d7d43768a8f3f5cced2c9da932511611e0c5c77cf5ec0fea1b",
+      "seconds": 2.76
     },
     {
       "id": "live-jpnagar-40x60-4bhk",
       "floors": 2,
       "errors": 0,
-      "warnings": 1,
+      "warnings": 4,
+      "major": 3,
+      "minor": 1,
       "by_check": {
-        "circulation": 1
+        "circulation": 4
       },
-      "zones_met": 6,
+      "zones_met": 2,
       "zones_wanted": 14,
       "two_sided_air": 3,
       "air_rooms": 7,
-      "no_air": 1,
+      "no_air": 0,
       "baths_vented": 3,
       "baths": 3,
-      "geometry": "c0b2e4bd4025e2848f66c7d1f2069d6fb5d2db750f68644eca3f0522a0d5655f",
-      "seconds": 3.82
+      "circulation_failed": 0,
+      "circulation_scores": [
+        80.8,
+        100.0
+      ],
+      "geometry": "9c71ba093b290293a41961875d5521c9eae91d41999d0523cc5ad5c2d40786b8",
+      "seconds": 6.47
     }
   ]
 }

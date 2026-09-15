@@ -12,7 +12,7 @@ Read in this order, then run the commands below:
 
 ```bash
 cd naksha
-.venv/bin/pytest -q                                  # 786 tests, no network, no key
+.venv/bin/pytest -q                                  # 788 tests, no network, no key
 .venv/bin/pytest -m benchmark                        # the 14-plan regression set, ~40 s
 
 # The whole pipeline, to a drawing on disk: ①②③④⑤⑥⑦
@@ -51,43 +51,46 @@ strict vastu` · `20x30 2bhk in Bengaluru` (tight) · `30x40 north facing corner
 
 Where the build actually is.
 
-**Last updated:** 2026-09-14 · 786 tests passing, offline, no key
+**Last updated:** 2026-09-15 · 788 tests passing, offline, no key
 
 > **naksha draws floor plans.** Text in, a dimensioned drawing out: walls with
 > thickness, doors with swings, windows sized to the bye-laws, a ventilator in every
-> bathroom, sanitaryware and beds, room sizes in feet,
-> and a list of what is wrong with the result. Seven of eight stages are built. **Of the
-> nine reference plots, one is clean, six are legal with named defects, and two are
-> refused** — and both refusals are plots whose rooms cannot physically fit: their legal
-> minimums come to 166% and 101% of the footprint. The 30x30 lost its clean result when ⑦
-> learned to see a kitchen against a bathroom; the 40x60 gained one when corridor-first
-> layouts let every room open off the corridor.
+> bathroom, sanitaryware and beds, room sizes in feet, and a list of what is wrong with
+> the result, graded critical, major or minor, each with why and what to do. Seven of
+> eight stages are built. **Of the nine reference plots, six are legal and three are
+> refused.** Two refusals are plots whose rooms cannot physically fit, their legal minimums
+> 166% and 101% of the footprint; the third is the 30x50, whose shared bathroom opens only
+> off a bedroom in every candidate. None is clean now: the circulation engine grades how a
+> house is walked, and it has something to say about every plan.
 
 ## What it produces, per plot
 
-Measured 2026-09-14, seed 7, `--fallback-only`, with ⑦'s six checks — connecting stairs, a front
-door into the house, rooms kept apart and a car bay a car can use included — choosing among ⑤'s 12 best finished candidates per floor. A
-seed now replays the same plan on any machine. Time is end to end, Python start-up
-included.
+Measured 2026-09-15, seed 7, `--fallback-only`, from the 14-plan benchmark's baseline:
+⑦'s checks, circulation graded by the engine, choosing among ⑤'s 12 best finished
+candidates per floor, each storey chosen with the storeys above it. Time is the pipeline
+alone, programme to checked drawing. Circulation is each storey's score out of 100.
 
-| plot | storeys | result | time |
-|---|---|---|---|
-| 20x30 2BHK | G+2 | **refused** — 29.3 m² buildable and the car bay alone is 18; minimums are 166% of the footprint | 1.9 s |
-| 25x40 2BHK | G+1 | legal · 2 warnings — the front door opens into the kitchen · a bathroom, the corridor, the stair and the hall only through the kitchen | 4.0 s |
-| 30x30 2BHK | G+1 | legal · 1 warning — the kitchen shares a wall with a bathroom | 2.6 s |
-| 30x40 2BHK | G | legal · 2 warnings — the front door opens into the kitchen · both bedrooms, both bathrooms, the corridor and the hall only through the kitchen | 3.9 s |
-| 30x40 3BHK | G+1 | **refused** — minimums are 101% of the footprint; `--stilt` is the answer | 3.6 s |
-| 30x40 3BHK `--stilt` | stilt+2 | legal · 1 warning — no bathroom on the top floor. Its stairs connect only since 2026-09-14 | 1.1 s |
-| 30x50 3BHK | G | legal · 4 warnings — the front door opens into a corridor · the hall, two bedrooms and a bathroom only through the kitchen · a bathroom only through a bedroom · a bedroom with no window | 4.5 s |
-| 40x60 3BHK | G | **clean** | 2.5 s |
-| 50x80 4BHK | G | legal · 1 warning — a 19.6 m² foyer, 2.8× its ceiling | 2.7 s |
+| plot | storeys | result | circulation | time |
+|---|---|---|---|---|
+| 20x30 2BHK | G+2 | **refused** — 11 critical: minimums are 166% of the footprint, the stair cannot be reached, the top stair misses the one below | 20 · 96 · 0 | 0.6 s |
+| 25x40 2BHK | G+1 | legal · 1 major, 1 minor — a bathroom, the stair and the hall only through the kitchen | 79 · 100 | 3.4 s |
+| 30x30 2BHK | G+1 | legal · 1 minor — the car bay has no door into the house | 93 · 100 | 1.8 s |
+| 30x40 2BHK | G | legal · 2 major, 1 minor — both bedrooms, a bathroom, the corridor and the hall only through the kitchen · the master's en-suite opens off the corridor | 73 | 3.4 s |
+| 30x40 3BHK | G+1 | **refused** — minimums are 101% of the footprint and there is no front door; `--stilt` is the answer | 0 · 98 | 1.0 s |
+| 30x40 3BHK `--stilt` | stilt+2 | legal · 2 major, 5 minor — dining and kitchen not joined · no bathroom on the top floor | 92 · 88 · 98 | 0.8 s |
+| 30x50 3BHK | G | **refused** — a shared bathroom reachable only through a bedroom · the hall, dining and two bedrooms only through the kitchen · a bedroom with no window | 30 | 4.0 s |
+| 40x60 3BHK | G | legal · 2 major, 4 minor — both bedrooms, a bathroom, the corridor and the hall only through the kitchen · hall and dining not joined | 74 | 2.1 s |
+| 50x80 4BHK | G | legal · 4 major, 3 minor — a 19.6 m² foyer · hall, dining and kitchen not joined · the master's en-suite off the corridor | 76 | 2.4 s |
 
-An **error** is a plan naksha refuses: a room below its statutory minimum measured inside
-its walls, a room with no route to it, a hall, kitchen or dining room reachable only
-through a bedroom or bathroom, a stair that misses the stair below, or a car bay no driveway reaches. A **warning** is
-legal and wrong: a route through a bedroom or the kitchen, a bedroom floor with no
-bathroom, a room more than twice the size it should ever be, a room short of daylight, a
-front door that does not open into the hall, a toilet against the kitchen or pooja room.
+A **critical** finding is a plan naksha refuses: a room below its statutory minimum
+measured inside its walls; a room with no route to it, or reachable only through a
+bedroom or bathroom; an en-suite reached through another private room; a stair that misses
+the stair below or whose only way on is a bathroom; no front door; a car bay no driveway
+reaches. A **major** one is legal and wrong: rooms only through the kitchen, a visitor's
+arrival through the dining room, a living and dining room not joined, a bedroom with no
+window, a bedroom floor with no bathroom, a room twice the size it should be, a toilet
+against the kitchen or pooja room. A **minor** one is worth optimising: a car porch with no
+door into the house, a corridor wider or longer than its doors need.
 
 **What moved this table, in order.** ⑤ grows *road-first* slicing trees — car bay and
 foyer as a strip along the road, the house behind — beside the random pool, and ⑦ picks
@@ -133,6 +136,15 @@ plots still refused for their car bay:
    breeze can cross; the judge prefers more of them, after Vastu. No warning moved.
 10. **Sizes in feet.** Drawings label each room in feet-and-inches and sq ft; every
    message an owner reads gives sq ft with m² in brackets.
+11. **Circulation is graded, and it picks the plan.** ⑦'s reachability walk became the
+   circulation engine: access graded by what the best route must cross, the walks a house
+   is used for, corridors judged by their work, a score no critical finding can pass. The
+   judge ranks refusals with circulation first, then majors, Vastu, circulation quality,
+   and chooses each storey with the storeys above it. Over the 14-plan benchmark, against
+   the plans the old judge chose checked by the engine: critical findings 19 to 17,
+   majors 30 to 24, storeys failing 5 to 4, zones 38 to 41. The 30x50 is refused for a
+   defect ⑦ used to call a warning, and the JP Nagar 4BHK, whose first floor the engine
+   fails, is now chosen with one that scores 100.
 
 ## The model path — first end-to-end runs, 2026-09-13
 
@@ -304,32 +316,26 @@ of it; `--stilt` improves it from 8 errors to 6 and does not make it legal.
   models and enums *by inspection*, so ③'s `RoomSpec` and `AdjacencySpec` are covered
   the moment they exist.
 
-## Circulation engine — built, tested, not yet wired in
+## Circulation — graded, and choosing the plan
 
-`backend/app/circulation/` asks what ⑦'s reachability walk could not: can a person move
-through the house the way it is meant to be used? For each drawn storey it builds the
-graph of every way through it, grades each room's access by what the best route must
-cross, walks the everyday journeys, judges corridors and foyers by their work, and scores
-seven dimensions that no critical finding can pass. Its rules are
-`rules/circulation_v1.json`, residential practice marked `verified: false`. Nothing calls
-it yet, so the 14-plan benchmark is unchanged.
-
-Read-only over the benchmark's 26 storeys: 12 good, 9 fair, 5 fail. JP Nagar's first floor
-fails on its two real defects (bed2 through bed3, the master's en-suite through a second
-bathroom) and its ground floor passes with five major findings. The 30x50's ground floor
-fails for a shared bathroom that opens only off a bedroom. The other three failures are
-storeys ⑦ already refuses.
+Stage ⑦'s circulation check is the engine in `backend/app/circulation/`, its rules in
+`rules/circulation_v1.json` (practice, marked `verified: false`). Each report carries graded
+findings with why and fix, and a summary: score and health, seven dimensions, every room's
+access, the journeys and the corridor verdicts. The CLI prints a `[circulation]` line per
+storey and the fix under each critical finding. The viewer shows none of it yet; that is
+Step 4. How the judge's order was measured, and what the chosen plans give up for it, is in
+DECISIONS.md.
 
 ---
 
 ## Next
 
-**Agreed next, in order — the circulation plan.** Step 3: ⑦'s checker and judge read the
-engine, critical circulation ranked first, with the 14-plan table measured before and
-after. Step 4: the viewer's circulation panel. Then door-aware adjacency in ⑤, ranking by
-proper access, the staircase minimum size, a landing-first upper-floor generator, repair
-and fallback, and the docs. The road strip that takes the whole frontage stays in the
-imperfections below.
+**Agreed next, in order — the circulation plan.** Step 4: the viewer's circulation panel,
+with score and health, each finding's why and fix, and its route drawn on the plan. That
+closes Phase 1. Phase 2, measured on the same 14 plans: door-aware adjacency in ⑤, ranking
+by proper access, the staircase minimum size, and a landing-first upper-floor generator.
+Then repair and fallback, and the docs. The road strip that takes the whole frontage stays
+in the imperfections below.
 
 **1. Make the legal plans good.** Nothing in the reference set is refused any more but
 the two plots whose rooms cannot fit. What ⑦ still reports, by what it costs a user: the
@@ -370,10 +376,11 @@ DXF wants. Open choice: add `ezdxf`, or write ASCII DXF R12 with no new dependen
   foyer need about 43 m² and the strip is 64: one bay came out 28.8 m², the foyer a 2 × 6 m
   passage, and the kitchen 6.8 m² against a 14 m² target, with 60% of the ground floor
   parking and circulation. It also takes the north-east corner the pooja room wants.
-- **The judge counts warnings; it does not weigh them.** With missed zones ranked after
-  the count, a plan can win on Vastu while its warnings cover more. The 30x40 2BHK now
-  enters through its kitchen with six rooms behind it, where it had two rooms behind the
-  kitchen and a bedroom with no window — the same count of two.
+- **The judge counts majors; it does not weigh them.** One finding naming six rooms behind
+  the kitchen ties with one naming a single room, and circulation quality, which does see
+  the difference, ranks after the zones. The 30x40 2BHK keeps the plan entered through its
+  kitchen, 73/100, over one at 89 whose bedroom has no window at all: the two tie on
+  majors, and the first meets a zone. DECISIONS.md question 11 is the better fix.
 - **Vastu is still mostly missed: 28 of 110 zones.** The live 30x40 3BHK meets 3 of 12,
   for geometric reasons: its east car bay and foyer take the north-east corner the pooja
   room wants, and its stair, fixed on the west by the ground floor, blocks the south-west

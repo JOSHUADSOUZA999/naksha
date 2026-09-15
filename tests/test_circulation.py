@@ -520,6 +520,82 @@ class TestTheRulesAreData:
                 assert set(f.rooms) <= rooms, f.message
 
 
+class TestWhatTheOldWalkWasBuiltToCatch:
+    """Stage ⑦'s reachability walk grew a rule for each of these, every one found by
+    looking at a drawing it had called clean. The engine replaced the walk, so each is
+    asked of the engine."""
+
+    def test_a_ground_floor_with_a_stair_and_no_front_door_is_refused(self):
+        """The 25x40: the walk fell back to the staircase on a ground floor, found every
+        room, and called a house nobody could enter clean."""
+        rooms = [("stair", K.STAIRCASE, (0, 0, 3, 4)), ("hall", K.HALL, (3, 0, 10, 4))]
+        result = judged(rooms, [("stair", "hall")], floor=1)
+        assert rules_of(result) == ["circulation.no_front_door"]
+
+    def test_a_house_entered_through_a_bedroom_fails(self):
+        """The 30x50: front door, foyer, a bedroom, and only then the hall."""
+        rooms = [
+            ("foyer", K.FOYER, (0, 0, 2.5, 3)),
+            ("bed1", K.BEDROOM, (2.5, 0, 7, 3)),
+            ("kitchen", K.KITCHEN, (7, 0, 12, 3)),
+            ("hall", K.HALL, (0, 3, 12, 8)),
+        ]
+        doors = [("foyer", "bed1"), ("bed1", "hall"), ("hall", "kitchen")]
+        access = only(judged(rooms, doors, front="foyer"), "circulation.access")
+        assert access.grade is Grade.CRITICAL and {"hall", "kitchen"} <= set(access.rooms)
+
+    def test_a_bedroom_behind_the_kitchen_is_major(self):
+        """The 40x60: every bedroom lay beyond the kitchen. A kitchen is somewhere you
+        walk through to a utility, not the way to the bedrooms."""
+        rooms = [
+            ("foyer", K.FOYER, (0, 0, 2.5, 3)),
+            ("hall", K.HALL, (2.5, 0, 12, 3)),
+            ("kitchen", K.KITCHEN, (0, 3, 5, 8)),
+            ("bed1", K.BEDROOM, (5, 3, 12, 8)),
+        ]
+        doors = [("foyer", "hall"), ("hall", "kitchen"), ("kitchen", "bed1")]
+        result = judged(rooms, doors, front="foyer")
+        access = only(result, "circulation.access")
+        assert access.grade is Grade.MAJOR and access.rooms == ["bed1"]
+        assert result.summary.passed
+
+    def test_a_front_door_through_the_stair_hall_and_a_corridor_is_roundabout(self):
+        """The model's 30x40 3BHK was entered foyer, staircase, corridor, hall, and
+        nothing objected: every room reachable, no private room crossed."""
+        rooms = [
+            ("foyer", K.FOYER, (0, 0, 2.5, 3)),
+            ("stair", K.STAIRCASE, (2.5, 0, 6, 3)),
+            ("corridor", K.CORRIDOR, (6, 0, 7.5, 3)),
+            ("kitchen", K.KITCHEN, (7.5, 0, 12, 3)),
+            ("hall", K.HALL, (0, 3, 12, 8)),
+        ]
+        doors = [("foyer", "stair"), ("stair", "corridor"), ("corridor", "hall"), ("hall", "kitchen")]
+        sequence = only(judged(rooms, doors, front="foyer"), "circulation.arrival_sequence")
+        assert sequence.grade is Grade.MINOR and sequence.path[-1] == "hall"
+        direct = judged(rooms, doors + [("foyer", "hall")], front="foyer")
+        assert "circulation.arrival_sequence" not in rules_of(direct)
+
+    def test_a_second_honest_route_clears_the_room(self):
+        """Every route, not the shortest. One good way in is enough."""
+        result = judged(UPSTAIRS, OFF_THE_LANDING + [("master", "bed2")], floor=2)
+        row = next(r for r in result.summary.access if r.room == "bed2")
+        assert row.status == "appropriate"
+        assert "circulation.access" not in rules_of(result)
+
+    def test_an_en_suite_behind_someone_else_s_bedroom_fails(self):
+        """The exception is the edge stage ③ drew, not any bathroom beside a bed."""
+        rooms = TestAnEnSuiteIsJudgedFromItsBedroom.ROOMS[:-1] + [
+            ("bed2", K.BEDROOM, (6.5, 5, 10, 8)),
+        ]
+        doors = [
+            ("stair", "corridor"), ("corridor", "bed3"), ("corridor", "master"),
+            ("corridor", "bed2"), ("bed2", "suite"),
+        ]
+        result = judged(rooms, doors, floor=2, connected=[("master", "suite")])
+        en_suite = only(result, "circulation.en_suite")
+        assert en_suite.grade is Grade.CRITICAL and "bed2" in en_suite.path
+
+
 @pytest.fixture(scope="module")
 def jp_nagar():
     data = json.loads(GOLDEN.read_text())

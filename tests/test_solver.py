@@ -1292,7 +1292,7 @@ class TestAJudgeChoosesTheFinishedPlan:
         assert bundle.layouts[0].score == dear.score
 
     def test_the_real_judge_never_prefers_a_refused_plan(self):
-        """Errors outrank everything below them in the key."""
+        """A refusal outranks everything below it in the key, and says so first."""
         from app.validator import judge
 
         brief = fallback.parse("40x60 3bhk in Bengaluru with pooja room")
@@ -1300,7 +1300,86 @@ class TestAJudgeChoosesTheFinishedPlan:
         program = expand(brief, envelope)
         key = judge(program, envelope)
         for layout in solve(program, envelope, seed=7, keep=4):
-            errors, unusable, unbuildable, warnings, zones, stale, penalty = key(layout)
-            # Refusals lead, and a plan nobody can enter leads the refusals.
-            assert errors >= unusable >= 0
-            assert warnings >= 0 and zones >= 0 and stale >= 0 and penalty == layout.score
+            (refused, illegal, unbuildable, critical_circulation, critical_other,
+             major, zones, quality, minor, one_sided, penalty) = key(layout)
+            # The refusal flag leads, and it is set exactly when something below it is.
+            assert refused == int(
+                bool(illegal or unbuildable or critical_circulation or critical_other)
+            )
+            assert min(major, zones, minor, one_sided) >= 0
+            assert -100 <= quality <= 0 and penalty == layout.score
+
+
+class TestAStoreyIsChosenWithTheStoreysAboveIt:
+    """The judge ranks one storey at a time, and the stair a ground floor settles on is the
+    one thing the floor above cannot change. On the JP Nagar 4BHK the best-ranked ground
+    floor left a stair no first floor could stand on. Tested with two ground floors and a
+    stand-in solver, so no brief has to produce that situation."""
+
+    @staticmethod
+    def _stack(monkeypatch):
+        import app.solver as solver_module
+        from app.ir.enums import SpaceKind
+
+        def stair_of(layout, kinds):
+            placed = next(p for p in layout.rooms if kinds[p.room_id] is SpaceKind.STAIRCASE)
+            return (placed.x_min_m, placed.y_min_m, placed.x_max_m, placed.y_max_m)
+
+        # Two real ground floors whose stairs differ, so each leaves the floor above a
+        # different problem. Real layouts, because a bundle refuses a layout with a gap.
+        for text in ("25x40 2bhk in Bengaluru", "30x30 2bhk in Bengaluru", "30x40 3bhk in Bengaluru"):
+            brief = fallback.parse(text)
+            envelope = build_envelope(brief, allow_unverified=True)
+            program = expand(brief, envelope)
+            if {room.floor for room in program.rooms} != {1, 2}:
+                continue
+            kinds = {room.id: room.kind for room in program.rooms}
+            pool = solver_module.solve(program, envelope, floor=1, seed=7, keep=6)
+            others = [lay for lay in pool[1:] if stair_of(lay, kinds) != stair_of(pool[0], kinds)]
+            if others:
+                break
+        else:
+            pytest.fail("no G+1 fixture has two ground floors with different stairs")
+        upper = solver_module.solve(program, envelope, floor=2, seed=7, keep=1)[0]
+        first_stair = stair_of(pool[0], kinds)
+        layouts = {
+            "first": pool[0].model_copy(update={"score": 1.0}),
+            "second": others[0].model_copy(update={"score": 2.0}),
+            "stranded": upper.model_copy(update={"score": 3.0}),
+            "standing": upper.model_copy(update={"score": 4.0}),
+        }
+        calls: list[int] = []
+
+        def stand_in(program, envelope, *, floor, shafts, **_):
+            calls.append(floor)
+            if floor == 1:
+                return [layouts["first"], layouts["second"]]
+            below = shafts[SpaceKind.STAIRCASE]
+            on_first = (below.x_min_m, below.y_min_m, below.x_max_m, below.y_max_m) == first_stair
+            return [layouts["stranded" if on_first else "standing"]]
+
+        monkeypatch.setattr(solver_module, "solve", stand_in)
+        return solver_module, brief, envelope, program, layouts, calls
+
+    def test_a_ground_floor_that_strands_the_floor_above_loses(self, monkeypatch):
+        solver_module, brief, envelope, program, layouts, _ = self._stack(monkeypatch)
+        keys = {
+            id(layouts["first"]): (0, 1), id(layouts["second"]): (0, 2),
+            id(layouts["stranded"]): (1, 0), id(layouts["standing"]): (0, 0),
+        }
+        bundle = solver_module.plan(
+            brief, envelope, program, seed=7, judge=lambda layout: keys[id(layout)]
+        )
+        assert [layout.score for layout in bundle.layouts] == [2.0, 4.0]
+
+    def test_a_first_choice_the_floor_above_can_stand_on_costs_nothing(self, monkeypatch):
+        solver_module, brief, envelope, program, layouts, calls = self._stack(monkeypatch)
+        keys = {
+            id(layouts["first"]): (0, 1), id(layouts["second"]): (0, 2),
+            id(layouts["stranded"]): (0, 5), id(layouts["standing"]): (0, 0),
+        }
+        bundle = solver_module.plan(
+            brief, envelope, program, seed=7, judge=lambda layout: keys[id(layout)]
+        )
+        assert [layout.score for layout in bundle.layouts] == [1.0, 3.0]
+        assert calls == [1, 2], "one solve per storey when nothing above is refused"

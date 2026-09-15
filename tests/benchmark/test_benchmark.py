@@ -1,8 +1,8 @@
 """The 14-plan benchmark as tests. Deselected by default; run it with `pytest -m benchmark`.
 
 Two tests that answer different questions and are meant to fail differently. **No plan
-gets worse** guards the counts a person argues with — errors, warnings, Vastu zones, air,
-ventilation — and should pass through every change. **The plans are unchanged** fails on
+gets worse** guards the counts a person argues with — errors, major findings, storeys
+whose circulation fails, Vastu zones, air, ventilation — and should pass through every change. **The plans are unchanged** fails on
 any change to the generated geometry, including one that was intended: that failure is
 the moment to read the metrics and re-baseline deliberately, not a bug to silence.
 """

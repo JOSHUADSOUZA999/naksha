@@ -10,13 +10,18 @@ the front door and reached one room out of eleven. Nothing measured it, because 
 had reason to — stage ⑤ scores adjacency, and two rooms sharing a wall is not the same
 claim as being able to get from one to the other. Doors are ⑥'s output, so reachability
 is the first question that can only be asked here.
+
+Reachability turned out to be the smaller question. A bedroom that is the only way into
+another bedroom is reachable; `app.circulation` asks whether each room is *properly*
+reached, grades what it finds, and scores the storey, and this stage reports it.
 """
 
 from __future__ import annotations
 
-from collections import defaultdict, deque
+from collections import Counter
 
-from app.ir.enums import Facing, OpeningKind, Relation, Severity, SpaceKind, WallKind
+from app.circulation import evaluate
+from app.ir.enums import Facing, Grade, OpeningKind, Relation, Severity, SpaceKind, WallKind
 from app.ir.layout import TOLERANCE_M, Layout
 from app.ir.plan import Program
 from app.ir.refined import RefinedFloor
@@ -27,179 +32,38 @@ CHECKS = [
     "circulation", "access", "sanitation", "size", "light", "ventilation", "legality",
 ]
 
-# Where a person sleeps or bathes. A route may end in one of these; it may not pass
-# through one — except into a bathroom its own bedroom was built to serve.
+# Where a person sleeps, and where they wash: a storey with the first and none of the
+# second is reported by `_sanitation`.
 _BEDROOMS = {
     SpaceKind.BEDROOM, SpaceKind.MASTER_BEDROOM, SpaceKind.GUEST_ROOM,
     SpaceKind.SERVANT_ROOM,
 }
 _BATHS = {SpaceKind.BATHROOM, SpaceKind.WC}
-# The rooms a house is lived in. Reached only through a private room, the plan has no
-# honest way in at all — see `_through_private_rooms`.
-_COMMON = {SpaceKind.HALL, SpaceKind.DINING, SpaceKind.KITCHEN}
 
 
 def validate(layout: Layout, program: Program, floor: RefinedFloor) -> Report:
-    """Every check, against the drawn plan."""
-    findings: list[Finding] = []
-    findings += _circulation(layout, program, floor)
+    """Every check, against the drawn plan.
+
+    Circulation is the circulation engine's: it tells a room that is reachable from one
+    that is properly reached, grades each finding, and scores the storey. Its summary goes
+    on the report beside the findings.
+    """
+    circulation = evaluate(layout, program, floor)
+    findings: list[Finding] = list(circulation.findings)
     findings += _access(layout, program, floor)
     findings += _sanitation(layout, program)
-    findings += _size(layout, program, floor)
+    # One finding per defect: a foyer the circulation engine already calls oversized is its
+    # finding, with the why and the fix, not the size check's as well.
+    foyers = {room for f in circulation.findings if f.rule == "circulation.foyer" for room in f.rooms}
+    findings += [f for f in _size(layout, program, floor) if not set(f.rooms) & foyers]
     findings += _light(program, floor)
     findings += _ventilation(program, floor)
     findings += _legality(program, floor)
     cross, single = _airflow(program, floor)
     return Report(
         floor=layout.floor, findings=findings, checks_run=list(CHECKS),
-        cross_ventilated=cross, single_sided=single,
+        cross_ventilated=cross, single_sided=single, circulation=circulation.summary,
     )
-
-
-def _circulation(layout: Layout, program: Program, floor: RefinedFloor) -> list[Finding]:
-    """Can you get from the front door to every room?
-
-    Reachability over the *doors*, not the adjacency graph. Two rooms sharing a wall is
-    stage ⑤'s claim; a door in that wall is ⑥'s, and only the second one lets anybody
-    through. The graph is undirected because a door works both ways, and the walk
-    starts at the entrance because a house is entered from the street — starting
-    anywhere else would call a perfectly sealed cluster of rooms connected.
-    """
-    walk_in = {room.id for room in program.rooms if room.needs_door}
-
-    # **Where you arrive depends on the storey.** A ground floor is entered from the
-    # street; a first floor is entered off the stair, and demanding a front door up
-    # there reported every upper floor in the project as unreachable — which is how a
-    # 25x40 and a 30x30, both of them freshly working, came back with errors.
-    entrance = next(
-        (o for o in floor.openings if o.kind is OpeningKind.ENTRANCE), None
-    )
-    if entrance is not None and entrance.connects:
-        start = entrance.connects[0]
-    elif layout.floor > 1:
-        start = next(
-            (
-                placed.room_id
-                for placed in layout.rooms
-                if program_kind(program, placed.room_id) is SpaceKind.STAIRCASE
-            ),
-            None,
-        )
-    else:
-        # **Never the stair on the ground floor.** The fallback to the stair was written
-        # for upper storeys and fired on floor 1 too whenever a stair existed — so a
-        # ground floor with no front door was walked from its staircase instead, found
-        # every room reachable, and could come back clean. The judge trusts this verdict,
-        # which made it a way for a house nobody can enter to win.
-        start = None
-    if start is None:
-        message = (
-            "the plan has no front door, so no room is reachable at all"
-            if layout.floor == 1
-            else "this storey has no staircase, so there is no way up to it"
-        )
-        return [
-            Finding(check="circulation", severity=Severity.ERROR, message=message)
-        ]
-
-    # **A stair that does not sit over the stair below is not a way up.** Upstairs the
-    # walk starts at the staircase, and nothing asked whether that staircase met the one
-    # on the storey beneath. A 30x40 3BHK from the model put the ground-floor stair in
-    # the north-east and the first-floor stair in the north-west, zero overlap, and both
-    # floors came back clean — as did a 30x50, the stilt plans and a 20x30. The judge
-    # trusted that verdict, so a house nobody could climb was free to win. `layout.shafts`
-    # carries the stair the storey below settled on; empty means solved alone, and then
-    # there is nothing to compare with.
-    below = layout.shafts.get(SpaceKind.STAIRCASE)
-    if layout.floor > 1 and below is not None:
-        stairs = [
-            placed for placed in layout.rooms
-            if program_kind(program, placed.room_id) is SpaceKind.STAIRCASE
-        ]
-        if not any(_stacked_share(stair, below) >= _STAIR_LANDING for stair in stairs):
-            ids = sorted(stair.room_id for stair in stairs)
-            return [
-                Finding(
-                    check="circulation",
-                    severity=Severity.ERROR,
-                    message=(
-                        f"{', '.join(ids)} does not sit over the staircase below, "
-                        "so there is no way up to this storey"
-                    ),
-                    rooms=ids,
-                )
-            ]
-
-    graph: dict[str, set[str]] = defaultdict(set)
-    for opening in floor.openings:
-        if opening.kind is not OpeningKind.DOOR or len(opening.connects) != 2:
-            continue
-        a, b = opening.connects
-        graph[a].add(b)
-        graph[b].add(a)
-
-    seen = {start}
-    queue = deque([start])
-    while queue:
-        for neighbour in graph[queue.popleft()]:
-            if neighbour not in seen:
-                seen.add(neighbour)
-                queue.append(neighbour)
-
-    stranded = sorted(
-        placed.room_id
-        for placed in layout.rooms
-        if placed.room_id not in seen and placed.room_id in walk_in
-    )
-
-    # Reachable *only* through a bedroom is its own defect, and a plan can have it
-    # while every room is technically reachable. A 40x60 came out with the route to the
-    # master bedroom's bathroom running hall → dining → bed2 → corridor → bed1 → bath1:
-    # every check passed and a bedroom was serving as a corridor.
-    findings = _through_private_rooms(layout, program, floor, graph, start)
-
-    # **The front door should lead into the house.** The model's 30x40 3BHK was entered
-    # foyer → staircase → corridor → hall: every room reachable, no private room crossed,
-    # so nothing here objected. The room you step into from the foyer is where the house
-    # is lived in, not the stair hall. Only where this storey has a hall or dining room —
-    # the ground floor of a stilt holds neither, and its entrance leads rightly to the stair.
-    if entrance is not None:
-        living = {
-            placed.room_id for placed in layout.rooms
-            if program_kind(program, placed.room_id) in (SpaceKind.HALL, SpaceKind.DINING)
-        }
-        if living and start not in living and not graph[start] & living:
-            beyond = ", ".join(sorted(graph[start])) or "no other room"
-            findings.append(
-                Finding(
-                    check="circulation",
-                    severity=Severity.WARNING,
-                    message=(
-                        f"the front door does not lead into the house: {start} opens "
-                        f"into {beyond}, not the {' or '.join(sorted(living))}"
-                    ),
-                    rooms=[start],
-                )
-            )
-
-    if not stranded:
-        return findings
-
-    # One finding, not one per room. Twelve separate "you cannot reach the kitchen"
-    # lines describe a single defect — the plan is not connected — and splitting it up
-    # makes one large problem look like twelve small ones.
-    return [
-        Finding(
-            check="circulation",
-            severity=Severity.ERROR,
-            message=(
-                f"{len(stranded)} of {len(layout.rooms)} rooms cannot be reached from "
-                f"the front door: {', '.join(stranded)}"
-            ),
-            rooms=stranded,
-        ),
-        *findings,
-    ]
 
 
 def _light(program: Program, floor: RefinedFloor) -> list[Finding]:
@@ -364,19 +228,36 @@ def _legality(program: Program, floor: RefinedFloor) -> list[Finding]:
 def judge(program: Program, envelope=None):
     """A sort key that ranks finished candidates by what this stage would say of them.
 
-    Errors first, then whether the house can be entered and walked, then rooms below a
-    minimum, then warnings, then Vastu zones missed, then rooms open to the air on one
-    side only, then stage ⑤'s own penalty as the tiebreak — so a plan ⑦ refuses never
-    beats one it passes, however much better its penalty, and neither a Vastu gain nor a
-    breeze buys a warning.
+    In order: whether this stage refuses the storey; rooms below a legal minimum, measured
+    inside the walls and then on the tiling; critical circulation, then every other
+    critical finding; major findings, whichever check made them; Vastu zones missed;
+    circulation quality; minor findings; rooms open to the air on one side only; and stage
+    ⑤'s own penalty as the tiebreak.
 
-    **Refusals are not all equal, and counting them as if they were picked the worst.**
-    A 30x50 had two candidates, each with one error: one whose car bay did not touch the
-    road, and one whose foyer had no street wall at all, so no front door could be drawn.
-    Tied on errors and warnings, the lower penalty won — a house nobody can walk into,
-    chosen over one whose car has to park on the street. A circulation error means the
-    plan does not function as a house; every other error is about part of it. So it
-    ranks worst among refusals.
+    **A storey with a critical finding never beats one without.** A critical finding means
+    the storey does not work as a house — a bedroom that is the only way into another, a
+    front door into nothing — and no quantity of anything ranked below it compensates.
+
+    **Circulation leads the refusals, because a storey that cannot be walked is not a
+    house** where a car bay off the road is a house with a parking problem. A 30x50 once had
+    two candidates with one error each, a car bay off the road and a foyer with no street
+    wall, and the lower penalty chose the house nobody could walk into.
+
+    **Among major findings, a major is a major.** Ranked ahead of the others, circulation
+    majors bought one fewer each with a bedroom that had no window at all on the 30x40
+    2BHK and a hall with none on the 50x80; counted together, the 14 benchmark plans kept
+    both windows, met two more Vastu zones, and failed and found exactly as much.
+
+    **Vastu after the majors, circulation quality after Vastu.** Vastu is advisory, so no
+    zone buys a major finding. Quality is a 0-100 number that almost never ties, so
+    anything ranked after it is a tiebreak; ahead of the zones it would decide every choice
+    the findings leave open and the zones would count for nothing. Minor findings already
+    cost quality, and a room open to the air on one side, legal and often unavoidable,
+    follows them.
+
+    **The first element is a contract with stage ⑤.** It is truthy when this stage refuses
+    the storey, and every element adds up across storeys, which is how `solver.plan` tells
+    a storey that strands the one above it from one that does not.
 
     Handed to `solver.plan`, which takes a callable precisely so ⑤ does not have to
     import the stages downstream of it.
@@ -387,37 +268,36 @@ def judge(program: Program, envelope=None):
 
     def key(layout: Layout) -> tuple:
         report = validate(layout, program, refine(layout, program, envelope))
-        unusable = sum(
-            1 for finding in report.by_check("circulation")
-            if finding.severity is Severity.ERROR
-        )
-        # **Vastu after warnings, before the penalty.** Advisory, so a missed zone never
-        # outranks a route through a bedroom or a room with no window — but inside the
-        # penalty it was one 5-point term among dozens, and plans met 18 zones in 110.
-        # Counted here, the same candidates met 24.
+        graded = _graded(report)
+        critical = graded["circulation", Grade.CRITICAL] + graded["other", Grade.CRITICAL]
         missed_zones = sum(
             1 for placed in layout.rooms
             if placed.room_id in zoned and layout.sector_of(placed) is not zoned[placed.room_id]
         )
-        # **Air after Vastu, before the penalty.** Advisory in the same way: a room open to
-        # the air on one side only is legal and often unavoidable, so it never outranks a
-        # warning — but among plans otherwise equal, the one whose living rooms and
-        # bedrooms a breeze can cross should win. Measured over fourteen plans: ranked
-        # before the zones it gave five more rooms two-sided air and cost five zones, and
-        # on the 30x40 2BHK it bought one with a bedroom that has no window at all. After
-        # them it costs nothing. Most of the gain is stage ⑥'s — no room of 78 had air
-        # from two sides, and 30 do before any ranking; this tier adds one.
+        quality = report.circulation.quality if report.circulation is not None else 100.0
         return (
-            report.errors,
-            unusable,
+            int(bool(critical or layout.unbuildable)),
+            len(report.by_check("legality")),
             layout.unbuildable,
-            len(report.findings) - report.errors,
+            graded["circulation", Grade.CRITICAL],
+            graded["other", Grade.CRITICAL],
+            graded["circulation", Grade.MAJOR] + graded["other", Grade.MAJOR],
             missed_zones,
+            -quality,
+            graded["circulation", Grade.MINOR] + graded["other", Grade.MINOR],
             len(report.single_sided),
             layout.score,
         )
 
     return key
+
+
+def _graded(report: Report) -> Counter:
+    """Findings counted by grade, circulation apart from every other check."""
+    return Counter(
+        ("circulation" if finding.check == "circulation" else "other", finding.grade)
+        for finding in report.findings
+    )
 
 
 def check(bundle):
@@ -435,160 +315,6 @@ def check(bundle):
         for layout, floor in zip(bundle.layouts, bundle.floors)
     ]
     return bundle.model_copy(update={"reports": reports})
-
-
-def _through_private_rooms(layout, program, floor, graph, start) -> list[Finding]:
-    """Rooms you can only get to by walking through a bedroom, a bathroom, or the kitchen.
-
-    **This used to check only the corridor, and ⑦ called five bad plans clean.** It was
-    narrowed that way to stop it flagging en-suites, and the narrowing threw out
-    everything else: a 30x50 you entered *through a bedroom*, a second bedroom reachable
-    only through the master, a stilt house where the stairs led through the master
-    bedroom to the living room. All of them passed, because none of them routed the
-    corridor itself through a bedroom.
-
-    The en-suite is handled as what it is instead: a bathroom reached through the
-    bedroom stage ③ connected it to. Every other passage through a private room is
-    reported, and so is a bedroom, stair or corridor that can only be reached through
-    the kitchen — a kitchen is a room you may walk through to a utility behind it, not
-    the way to the bedrooms.
-
-    Walks every route, not the shortest one. A room is only reported if *no* door-route
-    avoids the room in question — a plan with one bad route and one good one is fine.
-    """
-    kinds = {r.id: r.kind for r in program.rooms}
-    through = {r.id for r in program.rooms if r.is_through_route}
-    walk_in = {r.id for r in program.rooms if r.needs_door}
-    en_suites = {
-        frozenset({edge.a, edge.b})
-        for edge in program.adjacencies
-        if edge.relation is Relation.CONNECTED
-        and {kinds.get(edge.a), kinds.get(edge.b)} & _BATHS
-        and {kinds.get(edge.a), kinds.get(edge.b)} & _BEDROOMS
-    }
-
-    def walk(kitchen_passable: bool) -> set[str]:
-        seen = {start}
-        stack = [start]
-        while stack:
-            here = stack.pop()
-            passable = here == start or (
-                here in through
-                and (kitchen_passable or kinds.get(here) is not SpaceKind.KITCHEN)
-            )
-            for neighbour in graph.get(here, ()):
-                if neighbour in seen:
-                    continue
-                if passable or (
-                    frozenset({here, neighbour}) in en_suites
-                    and kinds.get(neighbour) in _BATHS
-                ):
-                    seen.add(neighbour)
-                    stack.append(neighbour)
-        return seen
-
-    everything = {start}
-    stack = [start]
-    parents: dict[str, str] = {}
-    while stack:
-        here = stack.pop()
-        for neighbour in graph.get(here, ()):
-            if neighbour not in everything:
-                everything.add(neighbour)
-                parents[neighbour] = here
-                stack.append(neighbour)
-
-    placed = [r.room_id for r in layout.rooms if r.room_id in walk_in]
-    honest = walk(kitchen_passable=True)
-    no_kitchen = walk(kitchen_passable=False)
-    findings: list[Finding] = []
-
-    detoured = sorted(r for r in placed if r in everything and r not in honest)
-    if detoured:
-        via = sorted({
-            node
-            for room in detoured
-            for node in _ancestors(room, parents, start)
-            if node not in through
-        })
-        message = (
-            f"{', '.join(detoured)} can only be reached by walking through a "
-            f"bedroom or bathroom ({', '.join(via)})"
-        )
-        # **Behind a private room, the living rooms are an error, not a warning.** A
-        # second bedroom reached through the master is a bad plan somebody could live
-        # in. A hall, kitchen or dining room reached only that way means the way in does
-        # not lead into the house: the 30x50 went front door, foyer, *bathroom*, and only
-        # then corridor and hall. As one warning among others, the judge ranked that
-        # above a plan refused for its car bay.
-        common = [room for room in detoured if kinds.get(room) in _COMMON]
-        if common:
-            among = (
-                "" if len(common) == len(detoured)
-                else f", the {', '.join(common)} among them"
-            )
-            message += f"{among} — so every way in passes through one"
-        findings.append(
-            Finding(
-                check="circulation",
-                severity=Severity.ERROR if common else Severity.WARNING,
-                message=message,
-                rooms=detoured,
-            )
-        )
-
-    via_kitchen = sorted(
-        r for r in placed
-        if r in honest and r not in no_kitchen
-        # The hall too. Both plots the deeper search made legal were entered foyer →
-        # kitchen → hall, and this said nothing, because the list stopped at bedrooms,
-        # baths, stairs and corridors. A dining room behind the kitchen is an ordinary
-        # arrangement; the room a visitor is received in is not.
-        and kinds.get(r) in _BEDROOMS | _BATHS | {
-            SpaceKind.STAIRCASE, SpaceKind.CORRIDOR, SpaceKind.HALL,
-        }
-    )
-    if via_kitchen:
-        findings.append(
-            Finding(
-                check="circulation",
-                severity=Severity.WARNING,
-                message=f"{', '.join(via_kitchen)} can only be reached through the kitchen",
-                rooms=via_kitchen,
-            )
-        )
-    return findings
-
-
-# How much of the smaller of two stacked stairs they must share to be one flight. A
-# flight arrives where the one below leaves; the storeys tile independently, so the
-# rectangles are never identical to the centimetre, but at half a flight lands a metre
-# off its landing. Measured here, not borrowed from `score` — a guard that shares its
-# implementation with what it guards catches nothing.
-_STAIR_LANDING = 0.75
-
-
-def _stacked_share(upper, lower) -> float:
-    """The fraction of the smaller rectangle that two stacked rooms have in common."""
-    wide = min(upper.x_max_m, lower.x_max_m) - max(upper.x_min_m, lower.x_min_m)
-    tall = min(upper.y_max_m, lower.y_max_m) - max(upper.y_min_m, lower.y_min_m)
-    if wide <= 0 or tall <= 0:
-        return 0.0
-    smaller = min(
-        (upper.x_max_m - upper.x_min_m) * (upper.y_max_m - upper.y_min_m),
-        (lower.x_max_m - lower.x_min_m) * (lower.y_max_m - lower.y_min_m),
-    )
-    return wide * tall / smaller
-
-
-def _ancestors(room: str, parents: dict[str, str], start: str) -> list[str]:
-    """The rooms between the entrance and this one, on the route the walk found."""
-    out: list[str] = []
-    here = parents.get(room)
-    while here is not None and here != start:
-        out.append(here)
-        here = parents.get(here)
-    return out
 
 
 def _access(
@@ -787,8 +513,3 @@ def _size(layout: Layout, program: Program, floor: RefinedFloor) -> list[Finding
                 )
             )
     return findings
-
-
-def program_kind(program: Program, room_id: str):
-    """The `SpaceKind` of a placed room, or None if the programme does not know it."""
-    return next((r.kind for r in program.rooms if r.id == room_id), None)

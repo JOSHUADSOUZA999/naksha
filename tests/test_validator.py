@@ -49,23 +49,21 @@ class TestYouCanWalkThroughTheHouse:
         only a door in it lets anyone through. This held on none of the four briefs
         when it was first measured.
 
-        Errors only, and only this error. Circulation running through a bedroom is the
-        narrower defect — ⑥ accepts it as a last resort when the alternative is a room
-        with no way in — and it has tests of its own. Once the living rooms are behind
-        it that defect is an error too, but every room on such a route can still be
-        *reached*, and reaching is the claim this test makes.
+        Only this finding. A room reached only through a bedroom is still reachable; the
+        circulation engine grades that narrower defect, with tests of its own in
+        `test_circulation.py`.
         """
         layout, program, floor, report = plans[name]
-        errors = [
+        no_way_in = [
             f for f in report.by_check("circulation")
-            if f.severity is Severity.ERROR and "by walking through" not in f.message
+            if f.rule in ("circulation.unreachable", "circulation.no_front_door")
         ]
         if not any(o.kind is OpeningKind.ENTRANCE for o in floor.openings):
             # Stage ⑤ put the foyer off the street, so there is no front door to walk
             # from. That is a defect ⑦ must report — and only that one.
-            assert errors and all("no front door" in f.message for f in errors)
+            assert [f.rule for f in no_way_in] == ["circulation.no_front_door"]
             return
-        assert errors == [], errors[0].message if errors else ""
+        assert no_way_in == [], no_way_in[0].message if no_way_in else ""
 
     def test_a_finding_names_the_rooms_it_is_about(self, plans, name):
         """A defect a user cannot locate on the drawing is one they cannot fix."""
@@ -89,17 +87,21 @@ class TestCirculationIsMeasuredNotAssumed:
         producing one.
         """
         layout, program, floor, report = plans["40x60"]
-        assert report.ok or not report.by_check("circulation")
 
+        def stranded(findings):
+            return [f for f in findings if f.rule == "circulation.unreachable"]
+
+        assert not stranded(report.by_check("circulation"))
         doors = [o for o in floor.openings if o.kind is OpeningKind.DOOR]
         assert doors
-        for index in range(len(doors)):
-            keep = [o for o in floor.openings if o is not doors[index]]
-            severed = floor.model_copy(update={"openings": keep})
-            findings = validate(layout, program, severed).by_check("circulation")
-            if findings:
-                assert findings[0].severity is Severity.ERROR
-                assert findings[0].rooms
+        for door in doors:
+            severed = floor.model_copy(
+                update={"openings": [o for o in floor.openings if o is not door]}
+            )
+            found = stranded(validate(layout, program, severed).by_check("circulation"))
+            if found:
+                assert found[0].severity is Severity.ERROR
+                assert found[0].rooms
                 return
         pytest.fail("no single door was load-bearing — the plan cannot be severed")
 
@@ -138,15 +140,15 @@ class TestCirculationIsMeasuredNotAssumed:
 
     def test_a_car_porch_is_not_stranded_by_having_no_internal_door(self, plans):
         """It is entered from the street. Demanding a door from the house would push a
-        driveway through the hall."""
+        driveway through the hall. Whether a door into the house would help is a
+        separate, graded point: the walk from its gate to the front door."""
         _, program, _, report = plans["50x80"]
-        parking = [
-            room.id for room in program.rooms if room.kind is SpaceKind.CAR_PARKING
-        ]
+        parking = {room.id for room in program.rooms if room.kind is SpaceKind.CAR_PARKING}
         assert parking
+        assert not parking & {row.room for row in report.circulation.access}
         for finding in report.by_check("circulation"):
-            assert not set(finding.rooms) & set(parking)
-
+            if finding.rule in ("circulation.unreachable", "circulation.access"):
+                assert not set(finding.rooms) & parking
 
 class TestTheOtherChecks:
     def test_a_room_below_a_minimum_is_an_error(self, plans):
@@ -231,14 +233,13 @@ class TestOneJudgmentInOnePlace:
 
     def test_the_two_stages_read_the_same_flag(self, plans):
         """Not the same *value* — the same field. Stage ⑥ connects `needs_door` rooms
-        and stage ⑦ strands them, so a room can never be one stage's business and not
-        the other's."""
-        _, program, floor, report = plans["50x80"]
+        and stage ⑦ judges their access, so a room can never be one stage's business and
+        not the other's."""
+        layout, program, _, report = plans["50x80"]
         walk_in = {room.id for room in program.rooms if room.needs_door}
         assert walk_in, "the fixture must have rooms to walk into"
-
-        stranded = {r for f in report.by_check("circulation") for r in f.rooms}
-        assert stranded <= walk_in
+        placed = {p.room_id for p in layout.rooms}
+        assert {row.room for row in report.circulation.access} == walk_in & placed
 
     def test_daylight_follows_the_ruleset_not_a_second_opinion(self, plans):
         """The validator carried its own list of habitable rooms and it disagreed with
@@ -380,14 +381,14 @@ class TestCirculationDoesNotRunThroughBedrooms:
             update={"openings": [o for o in floor.openings if o not in spine_doors]}
         )
         findings = validate(layout, program, severed).by_check("circulation")
-        assert findings, "severing the circulation must be reported"
-
-        stranded = {
-            r for f in findings if f.severity is Severity.ERROR for r in f.rooms
-        }
-        detoured = {
-            r for f in findings if "through a bedroom" in f.message for r in f.rooms
-        }
+        stranded = {r for f in findings if f.rule == "circulation.unreachable" for r in f.rooms}
+        detoured: set[str] = set()
+        for f in findings:
+            if f.rule == "circulation.access":
+                detoured |= set(f.rooms)
+            elif f.rule == "circulation.en_suite":
+                detoured.add(f.rooms[0])
+        assert stranded, "severing the circulation must strand rooms"
         assert not stranded & detoured
 
     def test_stage_five_scores_the_same_property_on_the_tiling(self, plans):
@@ -434,209 +435,6 @@ class TestEveryDefectTheDrawingsShowed:
             for rid, kind in rooms
         ]
         return layout, specs
-
-    def test_a_bedroom_reached_only_through_another_bedroom_is_reported(self):
-        """The 30x40 2BHK: bed2 was only reachable through the master bedroom."""
-        from app.ir.plan import Program
-        from app.validator import _through_private_rooms
-
-        layout, specs = self._row(
-            ("foyer", SpaceKind.FOYER), ("bed1", SpaceKind.MASTER_BEDROOM),
-            ("bed2", SpaceKind.BEDROOM), through={"foyer"},
-        )
-        graph = {"foyer": {"bed1"}, "bed1": {"foyer", "bed2"}, "bed2": {"bed1"}}
-        findings = _through_private_rooms(layout, Program(rooms=specs), None, graph, "foyer")
-        assert any("bed2" in f.rooms and "through a bedroom" in f.message for f in findings)
-        # A bad plan somebody could still live in: reported, not refused.
-        assert all(f.severity is Severity.WARNING for f in findings)
-
-    def test_an_en_suite_is_not_a_defect(self):
-        """A bathroom reached through the bedroom stage ③ connected it to is what an
-        en-suite is. The first version of this rule flagged every one."""
-        from app.ir.enums import Relation
-        from app.ir.plan import AdjacencySpec, Program
-        from app.validator import _through_private_rooms
-
-        layout, specs = self._row(
-            ("foyer", SpaceKind.FOYER), ("bed1", SpaceKind.MASTER_BEDROOM),
-            ("bath1", SpaceKind.BATHROOM), through={"foyer"},
-        )
-        program = Program(
-            rooms=specs,
-            adjacencies=[AdjacencySpec(a="bed1", b="bath1", relation=Relation.CONNECTED)],
-        )
-        graph = {"foyer": {"bed1"}, "bed1": {"foyer", "bath1"}, "bath1": {"bed1"}}
-        assert _through_private_rooms(layout, program, None, graph, "foyer") == []
-
-    def test_a_bathroom_behind_someone_else_s_bedroom_is_not_an_en_suite(self):
-        """The exception is the edge stage ③ drew, not any bathroom next to a bed."""
-        from app.ir.plan import Program
-        from app.validator import _through_private_rooms
-
-        layout, specs = self._row(
-            ("foyer", SpaceKind.FOYER), ("bed1", SpaceKind.BEDROOM),
-            ("bath2", SpaceKind.BATHROOM), through={"foyer"},
-        )
-        graph = {"foyer": {"bed1"}, "bed1": {"foyer", "bath2"}, "bath2": {"bed1"}}
-        findings = _through_private_rooms(layout, Program(rooms=specs), None, graph, "foyer")
-        assert any("bath2" in f.rooms for f in findings)
-
-    def test_a_house_entered_through_a_bedroom_is_reported(self):
-        """The 30x50: the front door opened into a bedroom and every room lay beyond it."""
-        from app.ir.plan import Program
-        from app.validator import _through_private_rooms
-
-        layout, specs = self._row(
-            ("foyer", SpaceKind.FOYER), ("bed3", SpaceKind.BEDROOM),
-            ("hall", SpaceKind.HALL), ("kitchen", SpaceKind.KITCHEN),
-            through={"foyer", "hall", "kitchen"},
-        )
-        graph = {
-            "foyer": {"bed3"}, "bed3": {"foyer", "hall"},
-            "hall": {"bed3", "kitchen"}, "kitchen": {"hall"},
-        }
-        findings = _through_private_rooms(layout, Program(rooms=specs), None, graph, "foyer")
-        flagged = {r for f in findings for r in f.rooms}
-        assert {"hall", "kitchen"} <= flagged
-        # With the hall and kitchen behind it, the front door does not lead into the
-        # house at all — refused, so the judge can never prefer it to a plan with a
-        # smaller defect.
-        assert any(f.severity is Severity.ERROR for f in findings)
-
-    def test_a_ground_floor_with_no_front_door_is_refused_even_with_a_stair(self):
-        """The 25x40 once listed as the one clean plot had no entrance. The walk fell back
-        to the staircase — a rule written for upper storeys — found every room, and
-        reported nothing; the judge then preferred that house to every one you could
-        walk into."""
-        from types import SimpleNamespace
-
-        from app.ir.plan import Program
-        from app.validator import _circulation
-
-        layout, specs = self._row(
-            ("stair", SpaceKind.STAIRCASE), ("hall", SpaceKind.HALL), through={"hall"},
-        )
-        sealed = SimpleNamespace(openings=[])
-        ground = layout.model_copy(update={"floor": 1})
-        findings = _circulation(ground, Program(rooms=specs), sealed)
-        assert [f.severity for f in findings] == [Severity.ERROR]
-        assert "no front door" in findings[0].message
-
-    def test_an_upper_floor_is_still_entered_from_its_stair(self):
-        """The other half: upstairs there is no front door to demand."""
-        from types import SimpleNamespace
-
-        from app.ir.enums import OpeningKind
-        from app.ir.plan import Program
-        from app.validator import _circulation
-
-        layout, specs = self._row(
-            ("stair", SpaceKind.STAIRCASE), ("hall", SpaceKind.HALL), through={"hall"},
-        )
-        door = SimpleNamespace(kind=OpeningKind.DOOR, connects=("stair", "hall"))
-        upper = layout.model_copy(update={"floor": 2})
-        findings = _circulation(upper, Program(rooms=specs), SimpleNamespace(openings=[door]))
-        assert not any(f.severity is Severity.ERROR for f in findings)
-
-    def test_an_upper_floor_whose_stair_misses_the_one_below_has_no_way_up(self):
-        """The model's 30x40 3BHK: the ground-floor stair in the north-east, the
-        first-floor stair in the north-west, zero overlap — and both floors came back
-        clean, because nothing here compared a storey with the one below it."""
-        from types import SimpleNamespace
-
-        from app.ir.enums import OpeningKind
-        from app.ir.layout import PlacedRoom
-        from app.ir.plan import Program
-        from app.validator import _circulation
-
-        layout, specs = self._row(
-            ("stair", SpaceKind.STAIRCASE), ("hall", SpaceKind.HALL), through={"hall"},
-        )
-        floor = SimpleNamespace(
-            openings=[SimpleNamespace(kind=OpeningKind.DOOR, connects=("stair", "hall"))]
-        )
-
-        def stair_below_at(x_min):
-            return {
-                SpaceKind.STAIRCASE: PlacedRoom(
-                    room_id="stair1", x_min_m=x_min, y_min_m=0, x_max_m=x_min + 2.0, y_max_m=3
-                )
-            }
-
-        missed = layout.model_copy(update={"floor": 2, "shafts": stair_below_at(2.0)})
-        findings = _circulation(missed, Program(rooms=specs), floor)
-        assert [f.severity for f in findings] == [Severity.ERROR]
-        assert "no way up" in findings[0].message
-
-        # The same storey with its stair over the one below is an ordinary first floor.
-        landed = layout.model_copy(update={"floor": 2, "shafts": stair_below_at(0.0)})
-        assert not any(
-            f.severity is Severity.ERROR
-            for f in _circulation(landed, Program(rooms=specs), floor)
-        )
-
-    def test_a_bedroom_behind_the_kitchen_is_reported(self):
-        """The 40x60: every bedroom lay beyond the kitchen. A kitchen is somewhere you
-        walk through to a utility, not the way to the bedrooms."""
-        from app.ir.plan import Program
-        from app.validator import _through_private_rooms
-
-        layout, specs = self._row(
-            ("foyer", SpaceKind.FOYER), ("kitchen", SpaceKind.KITCHEN),
-            ("bed1", SpaceKind.BEDROOM), through={"foyer", "kitchen"},
-        )
-        graph = {"foyer": {"kitchen"}, "kitchen": {"foyer", "bed1"}, "bed1": {"kitchen"}}
-        findings = _through_private_rooms(layout, Program(rooms=specs), None, graph, "foyer")
-        assert any("through the kitchen" in f.message and "bed1" in f.rooms for f in findings)
-
-    def test_the_hall_behind_the_kitchen_is_reported(self):
-        """The 30x40 2BHK and the 30x50, once the deeper search made them legal: both
-        were entered foyer → kitchen → hall, and ⑦ listed only the bedrooms beyond it."""
-        from app.ir.plan import Program
-        from app.validator import _through_private_rooms
-
-        layout, specs = self._row(
-            ("foyer", SpaceKind.FOYER), ("kitchen", SpaceKind.KITCHEN),
-            ("hall", SpaceKind.HALL), through={"foyer", "kitchen", "hall"},
-        )
-        graph = {"foyer": {"kitchen"}, "kitchen": {"foyer", "hall"}, "hall": {"kitchen"}}
-        findings = _through_private_rooms(layout, Program(rooms=specs), None, graph, "foyer")
-        assert any("through the kitchen" in f.message and "hall" in f.rooms for f in findings)
-        # A kitchen is a room people do walk through: reported, not refused.
-        assert all(f.severity is Severity.WARNING for f in findings)
-
-    def test_a_front_door_that_does_not_lead_into_the_house_is_reported(self):
-        """The model's 30x40 3BHK was entered foyer → staircase → corridor → hall. Every
-        room was reachable and no private room was crossed, so nothing objected."""
-        from types import SimpleNamespace
-
-        from app.ir.enums import OpeningKind
-        from app.ir.plan import Program
-        from app.validator import _circulation
-
-        layout, specs = self._row(
-            ("foyer", SpaceKind.FOYER), ("stair", SpaceKind.STAIRCASE),
-            ("hall", SpaceKind.HALL), through={"foyer", "stair", "hall"},
-        )
-        entrance = SimpleNamespace(kind=OpeningKind.ENTRANCE, connects=("foyer",))
-
-        def door(a, b):
-            return SimpleNamespace(kind=OpeningKind.DOOR, connects=(a, b))
-
-        via_stair = SimpleNamespace(
-            openings=[entrance, door("foyer", "stair"), door("stair", "hall")]
-        )
-        findings = _circulation(layout, Program(rooms=specs), via_stair)
-        assert any("does not lead into the house" in f.message for f in findings)
-        assert all(f.severity is Severity.WARNING for f in findings)
-
-        direct = SimpleNamespace(
-            openings=[entrance, door("foyer", "hall"), door("stair", "hall")]
-        )
-        assert not any(
-            "does not lead into the house" in f.message
-            for f in _circulation(layout, Program(rooms=specs), direct)
-        )
 
     def test_rooms_kept_apart_that_share_a_wall_are_reported(self):
         """The model's 30x40 3BHK put its pooja room against a bathroom. `score` knew and
@@ -730,20 +528,6 @@ class TestEveryDefectTheDrawingsShowed:
         )
         assert not any("bay" in f.rooms for f in _light(program, refine(layout, program)))
 
-    def test_a_second_honest_route_clears_the_room(self):
-        """Every route, not the shortest. One good way in is enough."""
-        from app.ir.plan import Program
-        from app.validator import _through_private_rooms
-
-        layout, specs = self._row(
-            ("foyer", SpaceKind.FOYER), ("bed1", SpaceKind.BEDROOM),
-            ("hall", SpaceKind.HALL), through={"foyer", "hall"},
-        )
-        graph = {
-            "foyer": {"bed1", "hall"}, "bed1": {"foyer", "hall"}, "hall": {"foyer", "bed1"},
-        }
-        assert _through_private_rooms(layout, Program(rooms=specs), None, graph, "foyer") == []
-
     def test_a_car_bay_off_the_road_is_an_error(self, plans):
         """A bay no driveway reaches does not satisfy the parking requirement. Built by
         moving the road, so the test does not depend on a plan getting this wrong."""
@@ -813,6 +597,35 @@ class TestEveryDefectTheDrawingsShowed:
         findings = validate(layout, shrunk, floor).by_check("size")
         assert any(biggest.room_id in f.rooms for f in findings)
 
+
+    def test_an_oversized_foyer_is_one_finding_not_two(self, plans):
+        """The 50x80's 19.6 m² foyer was reported by the circulation engine, as bigger than
+        a transition needs, and again by the size check, as over twice its ceiling: one
+        defect counted twice, by the judge too. The engine's finding stays, because it says
+        why and what to do. Built by lowering the foyer's ceiling until both checks fire."""
+        from app.circulation import evaluate
+        from app.validator import _size
+
+        for layout, program, floor, _ in plans.values():
+            foyer = next((r for r in program.rooms if r.kind is SpaceKind.FOYER), None)
+            if foyer is None:
+                continue
+            tight = program.model_copy(update={"rooms": [
+                r.model_copy(update={"target_area_sq_m": r.min_area_sq_m, "max_target_sq_m": None})
+                if r.id == foyer.id else r
+                for r in program.rooms
+            ]})
+            sized = [f for f in _size(layout, tight, floor) if foyer.id in f.rooms]
+            judged = [f for f in evaluate(layout, tight, floor).findings if f.rule == "circulation.foyer"]
+            if not (sized and judged):
+                continue
+            about = [
+                f for f in validate(layout, tight, floor).findings
+                if foyer.id in f.rooms and (f.check == "size" or f.rule == "circulation.foyer")
+            ]
+            assert [f.rule for f in about] == ["circulation.foyer"]
+            return
+        pytest.fail("no fixture plan has a foyer both checks call oversized")
 
 class TestVastuRanksAfterWarningsAndBeforeThePenalty:
     """Vastu is advisory, so a missed zone must never outrank a warning. But inside the
@@ -1087,3 +900,73 @@ class TestAirRanksAfterWarningsAndBeforeThePenalty:
         key = validator_module.judge(program)
         assert key(zoned) < key(airy)
 
+
+class TestTheJudgeRanksCirculationFirstAtEachGrade:
+    """The order: refusals with circulation first, then major findings of any check, then
+    Vastu, then circulation quality, then minor findings, then air, then the penalty. Faked
+    reports, so no brief has to produce the tie."""
+
+    @staticmethod
+    def _summary(quality):
+        """A real circulation summary, JP Nagar's ground floor, at a chosen quality."""
+        import json
+        from pathlib import Path
+
+        from app.ir.layout import Layout
+        from app.ir.plan import Program
+        from app.ir.refined import RefinedFloor
+
+        data = json.loads(
+            (Path(__file__).parent / "golden" / "circulation_jpnagar.json").read_text()
+        )
+        report = validate(
+            Layout.model_validate(data["layouts"][0]), Program.model_validate(data["program"]),
+            RefinedFloor.model_validate(data["floors"][0]),
+        )
+        return report.circulation.model_copy(update={"quality": quality, "score": quality})
+
+    @staticmethod
+    def _judge(plans, monkeypatch, reports):
+        import app.validator as validator_module
+
+        layout, program, _, _ = plans["40x60"]
+        at = {score: layout.model_copy(update={"score": score}) for score in reports}
+        monkeypatch.setattr(
+            validator_module, "validate", lambda candidate, _p, _f: reports[candidate.score]
+        )
+        return validator_module.judge(program), at
+
+    def test_every_major_finding_weighs_the_same(self, plans, monkeypatch):
+        """Ranked first, a circulation major was traded for a bedroom with no window at all
+        on the 30x40 2BHK. A major is a major; what decides between them comes after."""
+        from app.ir.enums import Grade
+        from app.ir.validation import Finding, Report
+
+        through_the_kitchen = Report(checks_run=list(CHECKS), findings=[
+            Finding(check="circulation", severity=Severity.WARNING, grade=Grade.MAJOR, message="x"),
+        ])
+        no_window = Report(checks_run=list(CHECKS), findings=[
+            Finding(check="light", severity=Severity.WARNING, message="x"),
+        ])
+        key, at = self._judge(plans, monkeypatch, {1.0: through_the_kitchen, 900.0: no_window})
+        assert key(at[1.0])[:-1] == key(at[900.0])[:-1], "only the penalty may tell them apart"
+
+    def test_quality_decides_between_equal_findings_before_the_penalty(self, plans, monkeypatch):
+        from app.ir.validation import Report
+
+        better = Report(checks_run=list(CHECKS), circulation=self._summary(90.0))
+        worse = Report(checks_run=list(CHECKS), circulation=self._summary(70.0))
+        key, at = self._judge(plans, monkeypatch, {900.0: better, 1.0: worse})
+        assert key(at[900.0]) < key(at[1.0])
+
+    def test_no_quality_buys_a_refused_storey(self, plans, monkeypatch):
+        from app.ir.validation import Finding, Report
+
+        refused = Report(
+            checks_run=list(CHECKS), circulation=self._summary(99.0),
+            findings=[Finding(check="circulation", severity=Severity.ERROR, message="x")],
+        )
+        passing = Report(checks_run=list(CHECKS), circulation=self._summary(40.0))
+        key, at = self._judge(plans, monkeypatch, {1.0: refused, 900.0: passing})
+        assert key(at[900.0]) < key(at[1.0])
+        assert key(at[1.0])[0] and not key(at[900.0])[0], "the first element says refused"
