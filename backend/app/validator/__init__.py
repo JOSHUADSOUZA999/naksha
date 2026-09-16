@@ -81,7 +81,9 @@ def _light(program: Program, floor: RefinedFloor) -> list[Finding]:
     """
     from app.rules import load_ruleset
 
-    fraction = load_ruleset("refine_v1").data["windows"]["area_fraction"]
+    windows = load_ruleset("refine_v1").data["windows"]
+    fraction = windows["area_fraction"]
+    habitable = set(windows["habitable_kinds"])
     findings: list[Finding] = []
 
     for room in program.rooms:
@@ -97,10 +99,33 @@ def _light(program: Program, floor: RefinedFloor) -> list[Finding]:
         if area <= 0 or glazed >= area * fraction - 1e-6:
             continue
 
+        if glazed <= 0 and room.kind.value in habitable:
+            # **A room people live in with no window at all is refused.** Glazed short of
+            # the fraction is a drawing to adjust; with none, the room is one the bye-laws
+            # do not allow. As a warning it weighed the same as an en-suite off the
+            # corridor, and the judge chose a windowless bedroom on the 30x40 2BHK.
+            findings.append(
+                Finding(
+                    check="light", severity=Severity.ERROR,
+                    message=f"{room.id} has no window at all, and a room people live in must have one",
+                    rooms=[room.id],
+                    why=(
+                        f"The bye-laws ask a habitable room for openings of at least "
+                        f"{fraction:.0%} of its floor; with none, it cannot be a bedroom or a "
+                        f"living room."
+                    ),
+                    fix=(
+                        f"Place {room.id} against an outside wall at least "
+                        f"{length_text(windows['min_wall_m'])} long, so a window fits."
+                    ),
+                )
+            )
+            continue
         if glazed <= 0:
-            # Not "habitable room" in the no-window case: `needs_exterior_wall` is also
-            # true of a pooja room or a store, which nobody calls habitable. The ratio
-            # message keeps the term because that is where it carries its legal meaning.
+            # Not "habitable room" here: a room that wants light without being one the
+            # bye-laws call habitable, such as a kitchen, has a figure of its own. The
+            # ratio message keeps the term because that is where it carries its legal
+            # meaning.
             message = f"{room.id} has no window at all"
         else:
             message = (
@@ -229,14 +254,21 @@ def judge(program: Program, envelope=None):
     """A sort key that ranks finished candidates by what this stage would say of them.
 
     In order: whether this stage refuses the storey; rooms below a legal minimum, measured
-    inside the walls and then on the tiling; critical circulation, then every other
-    critical finding; major findings, whichever check made them; Vastu zones missed;
-    circulation quality; minor findings; rooms open to the air on one side only; and stage
-    ⑤'s own penalty as the tiebreak.
+    inside the walls and then on the tiling; rooms the circulation leaves without proper
+    access, then every other critical finding; major findings, whichever check made them;
+    Vastu zones missed; circulation quality; minor findings; rooms open to the air on one
+    side only; and stage ⑤'s own penalty as the tiebreak.
 
     **A storey with a critical finding never beats one without.** A critical finding means
     the storey does not work as a house — a bedroom that is the only way into another, a
     front door into nothing — and no quantity of anything ranked below it compensates.
+
+    **Critical circulation is counted in rooms, not findings.** A finding groups every room
+    behind the same host, so counted as findings, one naming seven rooms reached only through
+    a private room weighed less than a bathroom behind a bedroom and a bedroom with no window,
+    and the 30x50 showed the seven. Ranking failed storeys by the access credit instead chose
+    one with a windowless hall and six major findings. Counted in rooms, the 30x50 shows the
+    plan with one bathroom behind a bedroom.
 
     **Circulation leads the refusals, because a storey that cannot be walked is not a
     house** where a car bay off the road is a house with a parking problem. A 30x50 once had
@@ -279,7 +311,7 @@ def judge(program: Program, envelope=None):
             int(bool(critical or layout.unbuildable)),
             len(report.by_check("legality")),
             layout.unbuildable,
-            graded["circulation", Grade.CRITICAL],
+            _without_access(report, graded["circulation", Grade.CRITICAL]),
             graded["other", Grade.CRITICAL],
             graded["circulation", Grade.MAJOR] + graded["other", Grade.MAJOR],
             missed_zones,
@@ -290,6 +322,20 @@ def judge(program: Program, envelope=None):
         )
 
     return key
+
+
+def _without_access(report: Report, critical_findings: int) -> int:
+    """Rooms the circulation leaves without proper access: each room whose best route is
+    critical, or every room on a storey nobody can enter. Never fewer than the critical
+    circulation findings, for a defect that names no room of its own."""
+    summary = report.circulation
+    if summary is None:
+        return critical_findings
+    if summary.critical and not summary.access:
+        rooms = sum(1 for node in summary.graph.nodes if node.walk_in)
+    else:
+        rooms = sum(1 for row in summary.access if row.grade is Grade.CRITICAL)
+    return max(rooms, critical_findings)
 
 
 def _graded(report: Report) -> Counter:

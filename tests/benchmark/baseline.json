@@ -2,7 +2,7 @@
   "_note": "Accepted results of tests/benchmark/cases.json. Rewrite only deliberately, after reading what changed: `.venv/bin/python tests/benchmark/benchmark_plans.py --write`. `seconds` is recorded for information and never compared.",
   "rulesets": {
     "spaces_v1": "spaces_v1@a67e18",
-    "refine_v1": "refine_v1@665846",
+    "refine_v1": "refine_v1@0b9ecf",
     "setbacks_v1": "setbacks_v1@90b243",
     "circulation_v1": "circulation_v1@b90995"
   },
@@ -10,9 +10,9 @@
     {
       "id": "20x30-2bhk",
       "floors": 3,
-      "errors": 11,
-      "warnings": 5,
-      "major": 4,
+      "errors": 12,
+      "warnings": 4,
+      "major": 3,
       "minor": 1,
       "by_check": {
         "access": 1,
@@ -34,7 +34,7 @@
         0.0
       ],
       "geometry": "46df80da5bd720b17f3078571c6bb662ff9a03acb78ddbbc2ec2389c632ffd37",
-      "seconds": 0.66
+      "seconds": 0.63
     },
     {
       "id": "25x40-2bhk",
@@ -59,7 +59,7 @@
         100.0
       ],
       "geometry": "f9d19780ef103188a12c1112a656737bad7a1d8d68ee46b3a7e04b5095a39413",
-      "seconds": 4.37
+      "seconds": 3.57
     },
     {
       "id": "30x30-2bhk",
@@ -84,7 +84,7 @@
         100.0
       ],
       "geometry": "b49d9880cfe9890903ce7835a201daa4077fd7774c2906c2fce7b825f787a30b",
-      "seconds": 2.01
+      "seconds": 1.89
     },
     {
       "id": "30x40-2bhk",
@@ -108,7 +108,7 @@
         73.2
       ],
       "geometry": "4b517e52427c6fb69ba6e9b74888bdb8de3b70b8226ce4446376753dc9a94d20",
-      "seconds": 3.81
+      "seconds": 3.58
     },
     {
       "id": "30x40-3bhk",
@@ -136,7 +136,7 @@
         98.1
       ],
       "geometry": "2ae07762bec888015a3b3b35264964909b891957b83b3d43838e62ffb530d5f3",
-      "seconds": 1.14
+      "seconds": 1.04
     },
     {
       "id": "30x40-3bhk-stilt",
@@ -163,14 +163,14 @@
         98.0
       ],
       "geometry": "aa05e9e156bd220371da2c6d7318ca7912e6a083a6a365ade3ced49e8d757ee3",
-      "seconds": 1.08
+      "seconds": 0.86
     },
     {
       "id": "30x50-3bhk",
       "floors": 1,
-      "errors": 1,
-      "warnings": 3,
-      "major": 2,
+      "errors": 2,
+      "warnings": 2,
+      "major": 1,
       "minor": 1,
       "by_check": {
         "circulation": 3,
@@ -188,7 +188,7 @@
         29.6
       ],
       "geometry": "ce04b05e9429b9cd8c16beb2376b88089a5dd38ebca1c064d4a3116a26db5fc5",
-      "seconds": 4.48
+      "seconds": 4.31
     },
     {
       "id": "40x60-3bhk",
@@ -212,7 +212,7 @@
         73.6
       ],
       "geometry": "0e03973008d483216e2f174fe89c10501d14dfe2944b840218d33d547aeeedb2",
-      "seconds": 2.32
+      "seconds": 2.24
     },
     {
       "id": "50x80-4bhk",
@@ -236,7 +236,7 @@
         76.1
       ],
       "geometry": "1b6eb4d86b17b3299a902d1206fe8c16a13121cb644010c9a1ab9b908ba92dbd",
-      "seconds": 2.77
+      "seconds": 2.43
     },
     {
       "id": "model-30x40-3bhk",
@@ -261,7 +261,7 @@
         100.0
       ],
       "geometry": "734471224f7ef40ed2c60ab1429ce62c9a2e50533cb16c1894d7b87341797c9a",
-      "seconds": 3.18
+      "seconds": 2.51
     },
     {
       "id": "model-30x50-3bhk",
@@ -287,7 +287,7 @@
         100.0
       ],
       "geometry": "633b4281d5ed24b6e2ef573215c8be9e929b52d5aea1026142f4ec98b7e95029",
-      "seconds": 3.66
+      "seconds": 2.58
     },
     {
       "id": "model-40x60-joint-family",
@@ -312,7 +312,7 @@
         100.0
       ],
       "geometry": "8523e99faa52ab63fa10d47cc3d4d9617043725de977b083dbb1ed15499f7d7a",
-      "seconds": 4.53
+      "seconds": 4.48
     },
     {
       "id": "live-whitefield-30x40-3bhk",
@@ -337,7 +337,7 @@
         98.9
       ],
       "geometry": "316135d3eabf74d7d43768a8f3f5cced2c9da932511611e0c5c77cf5ec0fea1b",
-      "seconds": 2.76
+      "seconds": 2.94
     },
     {
       "id": "live-jpnagar-40x60-4bhk",
@@ -362,7 +362,7 @@
         100.0
       ],
       "geometry": "9c71ba093b290293a41961875d5521c9eae91d41999d0523cc5ad5c2d40786b8",
-      "seconds": 6.47
+      "seconds": 6.05
     }
   ]
 }

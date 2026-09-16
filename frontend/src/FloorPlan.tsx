@@ -1,8 +1,18 @@
 import { useMemo, useRef, useState } from "react";
-import { Stage, Layer, Rect, Text, Group, Line, Ellipse, Circle } from "react-konva";
+import { Stage, Layer, Rect, Text, Group, Line, Ellipse, Circle, Arrow } from "react-konva";
 import type Konva from "konva";
-import type { Fixture, Layout, PlacedRoom, RefinedFloor, RoomSpec, Wall } from "./types";
+import { GRADE_STYLE } from "./grades";
+import type {
+  CirculationGraph, Fixture, Grade, Layout, PlacedRoom, RefinedFloor, RoomSpec, Wall,
+} from "./types";
 import { feetAndInches, squareFeet } from "./units";
+
+/** The finding in focus: the rooms it names, and the route it describes. */
+export interface Highlight {
+  rooms: string[];
+  path: string[];
+  grade: Grade;
+}
 
 const FILLS: Record<string, string> = {
   hall: "#eef2f7", dining: "#eef2f7", kitchen: "#fdf1e3",
@@ -22,9 +32,15 @@ interface Props {
   height: number;
   selected: string | null;
   onSelect: (roomId: string | null) => void;
+  highlight?: Highlight | null;
+  /** The circulation graph, whose edges carry where each door is. Absent from plans
+   *  checked before the engine existed; a route is then drawn room centre to room centre. */
+  graph?: CirculationGraph;
 }
 
-export function FloorPlan({ layout, refined, specs, width, height, selected, onSelect }: Props) {
+export function FloorPlan({
+  layout, refined, specs, width, height, selected, onSelect, highlight, graph,
+}: Props) {
   const stageRef = useRef<Konva.Stage>(null);
   const [zoom, setZoom] = useState(1);
 
@@ -61,6 +77,34 @@ export function FloorPlan({ layout, refined, specs, width, height, selected, onS
     x: originX + (xM - layout.x_min_m) * scale,
     y: originY + (layout.y_max_m - yM) * scale,
   });
+
+  /** A route as a line through the doors it uses: from the middle of the first room,
+   *  through each door on the way, to the middle of the last. The doorstep and the street
+   *  are points on the front wall rather than rooms, so they add only their doors. */
+  const route: number[] = [];
+  if (highlight && highlight.path.length > 1) {
+    const push = (p: { x: number; y: number } | null) => {
+      const n = route.length;
+      if (p && !(n >= 2 && route[n - 2] === p.x && route[n - 1] === p.y)) route.push(p.x, p.y);
+    };
+    const centre = (id: string) => {
+      const r = refined?.clear?.[id];
+      if (r) return toScreen((r[0] + r[2]) / 2, (r[1] + r[3]) / 2);
+      const p = layout.rooms.find((room) => room.room_id === id);
+      return p ? toScreen((p.x_min_m + p.x_max_m) / 2, (p.y_min_m + p.y_max_m) / 2) : null;
+    };
+    const path = highlight.path;
+    path.forEach((node, i) => {
+      if (!node.startsWith("@") && (i === 0 || i === path.length - 1)) push(centre(node));
+      const next = path[i + 1];
+      if (next === undefined) return;
+      const door = graph?.edges.find(
+        (e) => (e.a === node && e.b === next) || (e.a === next && e.b === node),
+      );
+      if (door?.at) push(toScreen(door.at[0], door.at[1]));
+      else if (!graph && !next.startsWith("@")) push(centre(next));
+    });
+  }
 
   const onWheel = (e: Konva.KonvaEventObject<WheelEvent>) => {
     e.evt.preventDefault();
@@ -297,6 +341,24 @@ export function FloorPlan({ layout, refined, specs, width, height, selected, onS
             </Group>
           );
         })}
+
+        {/* The finding in focus, last so nothing covers it: the rooms it names outlined in
+            its grade's colour, and its route drawn door to door. */}
+        {highlight?.rooms.map((id) => {
+          const room = layout.rooms.find((r) => r.room_id === id);
+          if (!room) return null;
+          const tl = toScreen(room.x_min_m, room.y_max_m);
+          return (
+            <Rect key={`focus-${id}`} x={tl.x} y={tl.y} width={room.width_m * scale}
+                  height={room.depth_m * scale} stroke={GRADE_STYLE[highlight.grade].ink}
+                  strokeWidth={3} listening={false} />
+          );
+        })}
+        {highlight && route.length >= 4 && (
+          <Arrow points={route} stroke={GRADE_STYLE[highlight.grade].ink}
+                 fill={GRADE_STYLE[highlight.grade].ink} strokeWidth={2.5} dash={[8, 5]}
+                 pointerLength={9} pointerWidth={9} lineJoin="round" listening={false} />
+        )}
       </Layer>
     </Stage>
   );

@@ -105,7 +105,7 @@ uv venv --python 3.12 && source .venv/bin/activate
 uv pip install -e ".[dev]"
 cp .env.example .env          # set one key, or NAKSHA_INTENT_PROVIDER=claude_code
 
-pytest                        # 788 tests, no network, no key, and independent
+pytest                        # 790 tests, no network, no key, and independent
                               # of whatever is in your .env — see conftest
 pytest -m live                # real model; needs credentials
 pytest -m benchmark           # the 14-plan regression set, ~40 s — run after any
@@ -464,14 +464,16 @@ that happens to fail — that test goes vacuous the day the pipeline improves.
   `layout.shafts`. Nothing checked this, and three plans called clean could not be
   climbed.
 - **The judge ranks refusals, then majors, then Vastu, then circulation quality.** In
-  order: refused at all, rooms below a legal minimum, critical circulation, other critical
-  findings, major findings of any check, missed zones, circulation quality, minor
+  order: refused at all, rooms below a legal minimum, rooms the circulation leaves without
+  proper access, other critical findings, major findings of any check, missed zones, circulation quality, minor
   findings, one-sided rooms, penalty. Vastu is advisory, so no zone buys a major finding,
   but inside the penalty it lost to everything: plans met 18 zones in 110, and counting
   them here raised that to 24. Quality ranks after the zones because it almost never
   ties, so anything after it is a tiebreak. **Majors are counted together:** ranked ahead
   of the rest, circulation majors bought one fewer with a windowless bedroom on the 30x40
-  2BHK and a windowless hall on the 50x80.
+  2BHK and a windowless hall on the 50x80. **Critical circulation is counted in rooms:**
+  counted as findings, one naming seven rooms behind a private room weighed less than two
+  about a room each, and the 30x50 was shown with the seven.
 - **The front door leads into the house.** A model's 3BHK was entered foyer → staircase
   → corridor → hall and passed everything. The engine walks a visitor's arrival: a foyer
   into the living room is right, one corridor between them is ordinary, two circulation
@@ -487,6 +489,11 @@ that happens to fail — that test goes vacuous the day the pipeline improves.
   corners. The judge counts one-sided rooms after circulation quality and minor findings;
   ranked before the zones, over fourteen plans, it cost five zones and bought a breeze with
   a windowless bedroom.
+- **A room people live in with no window at all is refused.** `light` refuses a room the
+  bye-laws call habitable (`refine_v1.windows.habitable_kinds`) with no window, and warns
+  when one is glazed short of the fraction or a kitchen has none. As a warning it weighed
+  the same as an en-suite off the corridor, and the judge chose a windowless bedroom on the
+  30x40 2BHK and a windowless hall on the 50x80.
 
 ### `circulation/` — the engine stage ⑦ will judge circulation with
 

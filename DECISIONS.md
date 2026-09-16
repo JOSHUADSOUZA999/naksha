@@ -7,14 +7,27 @@ Append-only. Why the code is shaped the way it is, what broke, and what is still
 
 ## Open questions — these need you, not me
 
-**11. Is a habitable room with no window at all a warning, or illegal?** `light` reports
-it as a warning, on the reasoning that a wall may be too short to hold an opening, so the
-judge weighs a windowless bedroom the same as an en-suite that opens off the corridor.
-The bye-laws ask a habitable room for openings of a tenth of its floor, and a room with
-none meets no part of that. With circulation majors ranked first, the judge chose two
-windowless rooms on the benchmark; graded as illegal, no order could have. Changing it is
-a product decision, because plans that pass today with a warning would be refused: the
-20x30 and the 30x50 each have one.
+**11. ~~Is a habitable room with no window at all a warning, or illegal?~~ Answered
+2026-09-15: refused.** `light` had reported it as a warning, on the reasoning that a wall
+may be too short to hold an opening, so the judge weighed a windowless bedroom the same as
+an en-suite off the corridor. The bye-laws ask a habitable room for openings of a tenth of
+its floor, and a room with none meets no part of that. A room they call habitable — a
+living room, a bedroom, a study, a guest, servant or office room, listed in
+`refine_v1.windows.habitable_kinds` — with no window at all is now critical, with why and
+a fix. Glazed short of the fraction it stays a warning, and so does a kitchen with none,
+which the bye-laws treat separately with a figure naksha does not have.
+
+Measured over the 14 benchmark plans, it exposed a flaw in how failures were ranked. The
+20x30, whose hall has no window in any candidate, counts one more critical finding. The
+30x50 has no candidate that passes, and counting critical findings chose the one whose
+whole house, seven rooms, lay behind a private room, over the one with a bathroom behind a
+bedroom and a windowless bedroom: a finding groups every room behind the same host, so
+seven rooms were one finding and the other plan's were two. Ranking failures by the access
+credit instead chose a plan with a windowless hall and six major findings. Critical
+circulation is now counted in the rooms it leaves without proper access, and the 30x50
+shows the plan it showed before, refused for the bathroom behind a bedroom and the bedroom
+with no window. No passing plan changed. The baseline records 19 critical findings, 22
+major, 31 minor, 4 storeys failing and 41 of 144 zones.
 
 **10. The circulation rules are practice, and need an architect's eye.** Bye-laws say
 nothing about how a house is walked, so every grade and threshold in

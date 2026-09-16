@@ -39,6 +39,8 @@
     "min_width_m": 0.6,
     "max_width_m": 2.4,
     "min_wall_m": 1.5,
+    "habitable_kinds": ["hall", "dining", "bedroom", "master_bedroom", "guest_room", "servant_room", "study", "office"],
+    "_habitable_kinds": "Rooms the bye-laws call habitable: a living room, and rooms for eating, sleeping or study (Karnataka Municipalities Model Building Bye-Laws 2017 cl. 5.1.2.3; NBC 2016 Part 3 for guest, servant and office rooms). One of them with no window at all meets no part of the one-tenth rule, and stage 7 refuses it; glazed short of the fraction it is a warning. Asked only of rooms spaces_v1 requires to meet the outside, so an inner dining room is not a defect.",
     "_area_fraction": "The rule the bye-laws actually state: window area as a fraction of the room's FLOOR area, not a fixed opening. A 19 m² hall and a 3 m² bathroom were getting the same 1.2 m window, which satisfies neither the code nor anybody living there. 1/10th is the figure for habitable rooms.",
     "_height": "Openings are stored as a width along a wall, so a height is needed to get an area at all. 1.2 m is an ordinary window: 0.9 m sill to 2.1 m head, which is also the door head height, and lining them up is what a draughtsman does.",
     "_min_wall": "An exterior wall shorter than this gets no window rather than a token one — a 0.6 m opening in a 1.4 m wall leaves two 400 mm piers, which is not something anyone builds.",

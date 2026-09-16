@@ -81,6 +81,9 @@ export interface RefinedFloor {
   clear: Record<string, [number, number, number, number]>;
 }
 
+/** How much a finding matters. Critical refuses the storey; major and minor are warnings. */
+export type Grade = "critical" | "major" | "minor";
+
 /** Stage ⑦. A finding names the rooms it is about, because a defect the user cannot
  *  locate on the drawing is one they cannot fix. */
 export interface Finding {
@@ -88,6 +91,102 @@ export interface Finding {
   severity: "error" | "warning";
   message: string;
   rooms: string[];
+  /** The fields below are absent from plans checked before findings were graded. */
+  grade?: Grade;
+  rule?: string | null;
+  why?: string | null;
+  fix?: string | null;
+  /** The route involved, room by room. `@entry` is the doorstep outside the front door,
+   *  `@street` the road, `@below` the flight up from the storey beneath. */
+  path?: string[];
+}
+
+/** Mirrors `app.ir.circulation`: how a storey is walked, and the evidence for its score. */
+export interface CirculationNode {
+  id: string;
+  kind: string;
+  role: string;
+  zone: string;
+}
+
+export interface CirculationEdge {
+  a: string;
+  b: string;
+  kind: string;
+  width_m: number | null;
+  /** Where a walk passes through: the midpoint of the opening. */
+  at: [number, number] | null;
+}
+
+export interface CirculationGraph {
+  floor: number;
+  arrival: string | null;
+  nodes: CirculationNode[];
+  edges: CirculationEdge[];
+}
+
+export interface Journey {
+  id: string;
+  journey_class: string;
+  weight: number;
+  origin: string;
+  destination: string;
+  reachable: boolean;
+  path: string[];
+  distance_m: number;
+  doors: number;
+  transitions: number;
+  turns: number;
+  privacy_crossings: number;
+  inappropriate: string[];
+  backtracking: number;
+  forced_pass_through: boolean;
+  external: boolean;
+  score: number;
+}
+
+export interface Corridor {
+  room: string;
+  area_sq_m: number;
+  length_m: number;
+  width_m: number;
+  share: number;
+  rooms_served: number;
+  private_served: number;
+  branches: number;
+  dead_end_m: number;
+  journey_weight: number;
+  alternatives: number;
+  essential: boolean;
+  verdict: "essential" | "efficient" | "inefficient" | "redundant";
+}
+
+/** Each part of the score, 0-100. Null where it does not apply to the storey. */
+export interface Dimensions {
+  connectivity: number;
+  relationships: number;
+  privacy: number;
+  journeys: number;
+  efficiency: number;
+  vertical: number | null;
+  arrival: number | null;
+}
+
+export interface CirculationSummary {
+  ruleset: string;
+  passed: boolean;
+  health: "good" | "fair" | "poor" | "fail";
+  score: number;
+  /** Before critical findings take their share: tells two failed storeys apart. */
+  quality: number;
+  dimensions: Dimensions;
+  circulation_share: number;
+  critical: number;
+  major: number;
+  minor: number;
+  journeys: Journey[];
+  corridors: Corridor[];
+  graph: CirculationGraph;
 }
 
 export interface Report {
@@ -100,6 +199,8 @@ export interface Report {
    *  Measurements rather than findings; absent from plans drawn before they existed. */
   cross_ventilated?: string[];
   single_sided?: string[];
+  /** Absent from plans checked before the circulation engine existed. */
+  circulation?: CirculationSummary | null;
 }
 
 export interface PlanBundle {

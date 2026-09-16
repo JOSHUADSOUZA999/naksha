@@ -12,7 +12,7 @@ Read in this order, then run the commands below:
 
 ```bash
 cd naksha
-.venv/bin/pytest -q                                  # 788 tests, no network, no key
+.venv/bin/pytest -q                                  # 790 tests, no network, no key
 .venv/bin/pytest -m benchmark                        # the 14-plan regression set, ~40 s
 
 # The whole pipeline, to a drawing on disk: ①②③④⑤⑥⑦
@@ -51,7 +51,7 @@ strict vastu` · `20x30 2bhk in Bengaluru` (tight) · `30x40 north facing corner
 
 Where the build actually is.
 
-**Last updated:** 2026-09-15 · 788 tests passing, offline, no key
+**Last updated:** 2026-09-15 · 790 tests passing, offline, no key
 
 > **naksha draws floor plans.** Text in, a dimensioned drawing out: walls with
 > thickness, doors with swings, windows sized to the bye-laws, a ventilator in every
@@ -72,23 +72,23 @@ alone, programme to checked drawing. Circulation is each storey's score out of 1
 
 | plot | storeys | result | circulation | time |
 |---|---|---|---|---|
-| 20x30 2BHK | G+2 | **refused** — 11 critical: minimums are 166% of the footprint, the stair cannot be reached, the top stair misses the one below | 20 · 96 · 0 | 0.6 s |
+| 20x30 2BHK | G+2 | **refused** — 12 critical: minimums are 166% of the footprint, the stair cannot be reached, the hall has no window, the top stair misses the one below | 20 · 96 · 0 | 0.6 s |
 | 25x40 2BHK | G+1 | legal · 1 major, 1 minor — a bathroom, the stair and the hall only through the kitchen | 79 · 100 | 3.4 s |
 | 30x30 2BHK | G+1 | legal · 1 minor — the car bay has no door into the house | 93 · 100 | 1.8 s |
 | 30x40 2BHK | G | legal · 2 major, 1 minor — both bedrooms, a bathroom, the corridor and the hall only through the kitchen · the master's en-suite opens off the corridor | 73 | 3.4 s |
 | 30x40 3BHK | G+1 | **refused** — minimums are 101% of the footprint and there is no front door; `--stilt` is the answer | 0 · 98 | 1.0 s |
 | 30x40 3BHK `--stilt` | stilt+2 | legal · 2 major, 5 minor — dining and kitchen not joined · no bathroom on the top floor | 92 · 88 · 98 | 0.8 s |
-| 30x50 3BHK | G | **refused** — a shared bathroom reachable only through a bedroom · the hall, dining and two bedrooms only through the kitchen · a bedroom with no window | 30 | 4.0 s |
+| 30x50 3BHK | G | **refused** — a shared bathroom reachable only through a bedroom · a bedroom with no window · the hall, dining and two bedrooms only through the kitchen | 30 | 4.2 s |
 | 40x60 3BHK | G | legal · 2 major, 4 minor — both bedrooms, a bathroom, the corridor and the hall only through the kitchen · hall and dining not joined | 74 | 2.1 s |
 | 50x80 4BHK | G | legal · 4 major, 3 minor — a 19.6 m² foyer · hall, dining and kitchen not joined · the master's en-suite off the corridor | 76 | 2.4 s |
 
 A **critical** finding is a plan naksha refuses: a room below its statutory minimum
 measured inside its walls; a room with no route to it, or reachable only through a
 bedroom or bathroom; an en-suite reached through another private room; a stair that misses
-the stair below or whose only way on is a bathroom; no front door; a car bay no driveway
-reaches. A **major** one is legal and wrong: rooms only through the kitchen, a visitor's
-arrival through the dining room, a living and dining room not joined, a bedroom with no
-window, a bedroom floor with no bathroom, a room twice the size it should be, a toilet
+the stair below or whose only way on is a bathroom; a bedroom or living room with no
+window at all; no front door; a car bay no driveway reaches. A **major** one is legal and wrong: rooms only through the kitchen, a visitor's
+arrival through the dining room, a living and dining room not joined, a room glazed short of
+the bye-laws, a bedroom floor with no bathroom, a room twice the size it should be, a toilet
 against the kitchen or pooja room. A **minor** one is worth optimising: a car porch with no
 door into the house, a corridor wider or longer than its doors need.
 
@@ -145,6 +145,12 @@ plots still refused for their car bay:
    majors 30 to 24, storeys failing 5 to 4, zones 38 to 41. The 30x50 is refused for a
    defect ⑦ used to call a warning, and the JP Nagar 4BHK, whose first floor the engine
    fails, is now chosen with one that scores 100.
+12. **A room people live in with no window is refused, and failures are ranked by the
+   rooms they leave without access.** The judge had chosen a windowless bedroom on the
+   30x40 2BHK to save a circulation finding; graded critical, it cannot. Measuring that
+   showed failures were ranked by counting findings, which showed the 30x50 with seven
+   rooms behind a private room instead of one bathroom behind a bedroom. Counted in
+   rooms, no passing plan changed, and the 20x30 and 30x50 each count one more critical.
 
 ## The model path — first end-to-end runs, 2026-09-13
 
@@ -322,17 +328,19 @@ Stage ⑦'s circulation check is the engine in `backend/app/circulation/`, its r
 `rules/circulation_v1.json` (practice, marked `verified: false`). Each report carries graded
 findings with why and fix, and a summary: score and health, seven dimensions, every room's
 access, the journeys and the corridor verdicts. The CLI prints a `[circulation]` line per
-storey and the fix under each critical finding. The viewer shows none of it yet; that is
-Step 4. How the judge's order was measured, and what the chosen plans give up for it, is in
+storey and the fix under each critical finding. The viewer shows the score and health, the
+critical, major and minor counts, and each finding with why it matters and the fix, its
+rooms and route drawn on the plan; an advanced view lists the score's parts, the journeys,
+the corridors and the graph. It type-checks and builds, and has not yet been looked at in a
+browser. How the judge's order was measured, and what the chosen plans give up for it, is in
 DECISIONS.md.
 
 ---
 
 ## Next
 
-**Agreed next, in order — the circulation plan.** Step 4: the viewer's circulation panel,
-with score and health, each finding's why and fix, and its route drawn on the plan. That
-closes Phase 1. Phase 2, measured on the same 14 plans: door-aware adjacency in ⑤, ranking
+**Agreed next, in order — the circulation plan.** Phase 1 is built; its viewer panel still
+needs a look in a browser. Phase 2, measured on the same 14 plans: door-aware adjacency in ⑤, ranking
 by proper access, the staircase minimum size, and a landing-first upper-floor generator.
 Then repair and fallback, and the docs. The road strip that takes the whole frontage stays
 in the imperfections below.

@@ -169,12 +169,49 @@ class TestTheOtherChecks:
             _, _, _, report = plans[name]
             assert report.ok, [f.message for f in report.findings if f.severity is Severity.ERROR]
 
-    def test_a_window_finding_is_a_warning_not_an_error(self, plans):
-        """A bedroom with no window is worth seeing and is not a reason to refuse the
-        plan — the wall may simply be too short to hold an opening."""
-        for _, _, _, report in plans.values():
+    def test_short_of_glazing_is_a_warning_and_no_window_in_a_room_people_live_in_is_refused(self, plans):
+        """A bedroom glazed below the fraction is a drawing to adjust: worth seeing, not a
+        reason to refuse the plan. A bedroom or living room with no window at all is a room
+        the bye-laws do not allow; as a warning, the judge once chose one."""
+        from app.rules import load_ruleset
+
+        habitable = set(load_ruleset("refine_v1").data["windows"]["habitable_kinds"])
+        for _, program, _, report in plans.values():
+            kinds = {room.id: room.kind.value for room in program.rooms}
             for finding in report.by_check("light"):
-                assert finding.severity is Severity.WARNING
+                refused = "no window at all" in finding.message and kinds[finding.rooms[0]] in habitable
+                expected = Severity.ERROR if refused else Severity.WARNING
+                assert finding.severity is expected, finding.message
+
+    def test_a_blind_bedroom_is_refused_and_a_blind_kitchen_is_not(self, plans):
+        """A kitchen wants light without being a room the bye-laws call habitable; they
+        treat it separately, with a figure naksha does not have, so it stays a warning.
+        Built by stripping windows, so no brief has to draw either."""
+        from app.rules import load_ruleset
+
+        layout, program, floor, _ = plans["40x60"]
+
+        def blind(room_id):
+            stripped = floor.model_copy(update={"openings": [
+                o for o in floor.openings
+                if not (o.kind is OpeningKind.WINDOW and room_id in o.connects)
+            ]})
+            return [f for f in validate(layout, program, stripped).by_check("light") if room_id in f.rooms]
+
+        bedroom = next(
+            r for r in program.rooms
+            if r.kind in (SpaceKind.BEDROOM, SpaceKind.MASTER_BEDROOM) and floor.window_area_sq_m(r.id) > 0
+        )
+        refused = blind(bedroom.id)
+        assert [f.severity for f in refused] == [Severity.ERROR]
+        assert refused[0].why and refused[0].fix
+        habitable = set(load_ruleset("refine_v1").data["windows"]["habitable_kinds"])
+        lit_not_lived_in = next(
+            (r for r in program.rooms if r.needs_exterior_wall and r.kind.value not in habitable),
+            None,
+        )
+        assert lit_not_lived_in, "the fixture needs a room that wants light but is not habitable"
+        assert [f.severity for f in blind(lit_not_lived_in.id)] == [Severity.WARNING]
 
     def test_a_report_cannot_carry_findings_from_a_check_that_did_not_run(self):
         """Referential integrity, per the `ir/` rule — a check that silently stopped
@@ -957,6 +994,29 @@ class TestTheJudgeRanksCirculationFirstAtEachGrade:
         better = Report(checks_run=list(CHECKS), circulation=self._summary(90.0))
         worse = Report(checks_run=list(CHECKS), circulation=self._summary(70.0))
         key, at = self._judge(plans, monkeypatch, {900.0: better, 1.0: worse})
+        assert key(at[900.0]) < key(at[1.0])
+
+    def test_critical_circulation_is_counted_in_rooms_not_findings(self, plans, monkeypatch):
+        """The 30x50: one finding naming seven rooms reached only through a private room
+        weighed less than a bathroom behind a bedroom and a bedroom with no window. Both
+        storeys fail; the one that leaves fewer rooms without proper access is shown."""
+        from app.ir.circulation import Access
+        from app.ir.enums import Grade
+        from app.ir.validation import Finding, Report
+
+        def failing(rooms, checks):
+            summary = self._summary(60.0).model_copy(update={"access": [
+                Access(room=room, status="no_independent_access", grade=Grade.CRITICAL)
+                for room in rooms
+            ]})
+            return Report(
+                checks_run=list(CHECKS), circulation=summary,
+                findings=[Finding(check=check, severity=Severity.ERROR, message="x") for check in checks],
+            )
+
+        seven_rooms = failing([f"room{n}" for n in range(7)], ["circulation"])
+        a_bathroom_and_a_window = failing(["bath2"], ["circulation", "light"])
+        key, at = self._judge(plans, monkeypatch, {1.0: seven_rooms, 900.0: a_bathroom_and_a_window})
         assert key(at[900.0]) < key(at[1.0])
 
     def test_no_quality_buys_a_refused_storey(self, plans, monkeypatch):
