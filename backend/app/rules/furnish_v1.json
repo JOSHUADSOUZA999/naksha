@@ -1,0 +1,126 @@
+{
+  "_status": "Practice, not law. The bye-laws set a room's area and width; they do not say a bedroom must hold a bed. Every figure here is a planning convention and is marked unverified for that reason, not because a clause is waiting to be read.",
+  "version": "furnish_v1",
+  "_why": "A room can pass every legal minimum and still not be usable. The JP Nagar 40x60 drew a 6'3\" x 15'6\" kitchen, a 7'3\" x 15'6\" dining room and an 8'1\" x 15'6\" hall: each above its area, width and aspect limits, and none of them holds its furniture the way a person would place it. Minimums are legal floors; this is the size a room needs to be lived in.",
+  "_how": "Each room kind lists one or more arrangements. An arrangement is what must fit ACROSS the room and ALONG it, wall to wall, inside the plaster. An entry is either a fixture from refine_v1.fixtures with the side of it that lies in that direction, so the furniture drawn is the furniture fitted, or a clearance in metres with what it is for. A room is usable when its clear rectangle holds ANY one arrangement, turned either way. Short of every arrangement, stage 5 prices the shortfall and stage 7 reports it; nothing is refused, because a legal room is not an illegal one.",
+  "_scope": "Rooms whose use is fixed by furniture. Corridors, foyers and stairs are judged by circulation; a car bay by its statutory 3 x 6 m; a store or balcony has nothing that must fit.",
+  "grading": {
+    "major_shortfall_m": 0.3,
+    "tolerance_m": 0.05,
+    "source": "Practice. Within 50 mm a room is furnished: these clearances are conventions, not tolerances anyone builds to, and a dining room 1 cm short of one is not a finding. A foot is the difference between a bed with a way round it and a bed pushed into a corner, or a kitchen with a working aisle and one you edge along. Short by less, the room works with a tighter clearance: minor. Short by more, the furniture it exists for does not go in: major.",
+    "verified": false
+  },
+  "rooms": {
+    "master_bedroom": {
+      "holds": "a double bed with a way round it and a wardrobe",
+      "arrangements": [
+        {
+          "name": "wardrobe facing the foot of the bed",
+          "across": [{"m": 0.6, "for": "bedside"}, {"fixture": "bed", "side": "width_m"}, {"m": 0.6, "for": "bedside"}],
+          "along": [{"fixture": "bed", "side": "depth_m"}, {"m": 0.75, "for": "passage at the foot, wardrobe doors open"}, {"fixture": "wardrobe", "side": "depth_m"}]
+        },
+        {
+          "name": "bed against a side wall, wardrobe facing its open side",
+          "across": [{"fixture": "bed", "side": "width_m"}, {"m": 0.75, "for": "bedside, standing at the open wardrobe"}, {"fixture": "wardrobe", "side": "depth_m"}],
+          "along": [{"fixture": "bed", "side": "depth_m"}, {"m": 0.6, "for": "passage at the foot"}]
+        }
+      ],
+      "source": "Practice. 600 mm to get out of bed on either side, 750 mm to walk past the foot and open a wardrobe. The second arrangement is how a 10 x 10 ft room is actually furnished: one side of the bed against the wall, which is tight and livable. The same furniture as any bedroom: a master bedroom's extra size is its target area, not a different minimum use.",
+      "verified": false
+    },
+    "bedroom": {
+      "holds": "a double bed with a way round it and a wardrobe",
+      "arrangements": [
+        {
+          "name": "wardrobe facing the foot of the bed",
+          "across": [{"m": 0.6, "for": "bedside"}, {"fixture": "bed", "side": "width_m"}, {"m": 0.6, "for": "bedside"}],
+          "along": [{"fixture": "bed", "side": "depth_m"}, {"m": 0.75, "for": "passage at the foot, wardrobe doors open"}, {"fixture": "wardrobe", "side": "depth_m"}]
+        },
+        {
+          "name": "bed against a side wall, wardrobe facing its open side",
+          "across": [{"fixture": "bed", "side": "width_m"}, {"m": 0.75, "for": "bedside, standing at the open wardrobe"}, {"fixture": "wardrobe", "side": "depth_m"}],
+          "along": [{"fixture": "bed", "side": "depth_m"}, {"m": 0.6, "for": "passage at the foot"}]
+        }
+      ],
+      "source": "Practice. A double bed, not a single: in an Indian house the second bedroom is as often a couple's or a parent's as a child's, and a room sized for a single bed cannot be changed later.",
+      "verified": false
+    },
+    "guest_room": {
+      "holds": "a double bed with a way round it and a wardrobe",
+      "arrangements": [
+        {
+          "name": "wardrobe facing the foot of the bed",
+          "across": [{"m": 0.6, "for": "bedside"}, {"fixture": "bed", "side": "width_m"}, {"m": 0.6, "for": "bedside"}],
+          "along": [{"fixture": "bed", "side": "depth_m"}, {"m": 0.75, "for": "passage at the foot, wardrobe doors open"}, {"fixture": "wardrobe", "side": "depth_m"}]
+        },
+        {
+          "name": "bed against a side wall, wardrobe facing its open side",
+          "across": [{"fixture": "bed", "side": "width_m"}, {"m": 0.75, "for": "bedside, standing at the open wardrobe"}, {"fixture": "wardrobe", "side": "depth_m"}],
+          "along": [{"fixture": "bed", "side": "depth_m"}, {"m": 0.6, "for": "passage at the foot"}]
+        }
+      ],
+      "source": "Practice. The same furniture as a bedroom.",
+      "verified": false
+    },
+    "hall": {
+      "holds": "a sofa, a coffee table and a TV wall with a way past",
+      "arrangements": [
+        {
+          "name": "sofa facing the TV wall",
+          "across": [{"m": 0.85, "for": "sofa depth"}, {"m": 1.75, "for": "coffee table and legroom"}, {"m": 0.4, "for": "TV unit"}],
+          "along": [{"m": 0.9, "for": "passage past the sofa"}, {"m": 2.1, "for": "three-seat sofa"}, {"m": 0.6, "for": "side table or armchair"}]
+        }
+      ],
+      "source": "Practice. A three-seat sofa is 2.1 x 0.85 m; seated viewing across a coffee table needs about 1.75 m to the TV unit; the way through a living room runs beside the sofa, not between it and the TV.",
+      "verified": false
+    },
+    "dining": {
+      "holds": "a table for six with the chairs pulled out",
+      "arrangements": [
+        {
+          "name": "table for six",
+          "across": [{"m": 0.75, "for": "chair pulled out"}, {"m": 0.9, "for": "table width"}, {"m": 0.75, "for": "chair pulled out"}],
+          "along": [{"m": 0.6, "for": "end clearance"}, {"m": 1.8, "for": "table for six"}, {"m": 0.6, "for": "end clearance"}]
+        }
+      ],
+      "source": "Practice. A six-seat table is 1.8 x 0.9 m, and a chair needs 750 mm behind the table edge to be pulled out and sat in. Six rather than four because the household this product serves eats together, joint families included.",
+      "verified": false
+    },
+    "kitchen": {
+      "holds": "a counter with a working aisle and a fridge",
+      "arrangements": [
+        {
+          "name": "parallel or L-shaped kitchen",
+          "across": [{"fixture": "counter", "side": "depth_m"}, {"m": 1.0, "for": "working aisle"}, {"m": 0.6, "for": "second counter or fridge"}],
+          "along": [{"fixture": "counter", "side": "width_m"}, {"m": 0.75, "for": "fridge"}]
+        }
+      ],
+      "source": "Practice. 600 mm modular counters, a 1.0 m aisle between them — two people pass, an oven door opens — and room for a fridge. A single-wall galley narrower than this is a corridor with a counter in it, and stretching the work triangle along a 4.7 m strip is what the JP Nagar kitchen did.",
+      "verified": false
+    },
+    "bathroom": {
+      "holds": "a WC, a basin and a shower, each with room to use it",
+      "arrangements": [
+        {
+          "name": "fixtures along one wall",
+          "across": [{"fixture": "shower", "side": "depth_m"}, {"m": 0.6, "for": "standing in front of the fixtures"}],
+          "along": [{"fixture": "shower", "side": "width_m"}, {"m": 0.2, "for": "beside the WC"}, {"fixture": "wc", "side": "width_m"}, {"m": 0.2, "for": "beside the WC"}, {"fixture": "basin", "side": "width_m"}]
+        }
+      ],
+      "source": "Practice. The three fixtures ⑥ draws in a bathroom, in a row, with 200 mm either side of the WC and 600 mm to stand in front of them — the 5' x 7' bathroom Indian builders call standard.",
+      "verified": false
+    },
+    "pooja": {
+      "holds": "a mandir shelf and room to sit before it",
+      "arrangements": [
+        {
+          "name": "shelf on the back wall",
+          "across": [{"m": 0.45, "for": "mandir shelf"}, {"m": 0.75, "for": "sitting or kneeling"}],
+          "along": [{"m": 1.2, "for": "two people side by side"}]
+        }
+      ],
+      "source": "Practice. A 450 mm shelf and room for two people to sit in front of it.",
+      "verified": false
+    }
+  }
+}

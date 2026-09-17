@@ -128,11 +128,11 @@
       "wardrobe"
     ],
     "bedroom": [
-      "single_bed",
+      "bed",
       "wardrobe"
     ],
     "guest_room": [
-      "single_bed",
+      "bed",
       "wardrobe"
     ],
     "servant_room": [

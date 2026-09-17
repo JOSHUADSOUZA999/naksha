@@ -437,6 +437,42 @@ class TestFixturesMakeARoomReadAsItsKind:
         assert drawing.count("<circle") >= 4, "the hob needs its burners"
 
 
+    def test_a_bed_in_the_wrong_corner_does_not_cost_the_wardrobe(self):
+        """Greedy placement put the bed in the first free corner and left no wall for the
+        wardrobe; 40x60's 2.59 x 3.63 m bedroom holds both and was drawn with one. Found by
+        searching rooms and door positions until greedy and the search disagreed."""
+        from app.refine import _arrange, _wall_spots
+        from app.rules import load_ruleset
+
+        sizes = load_ruleset("refine_v1").data["fixtures"]
+        clear = (0.0, 0.0, 3.55, 2.53)
+        doors = [(-0.3, 1.63, 1.5, 3.43), (-0.6, -0.9, 1.2, 0.9)]
+
+        greedy, taken = [], []
+        for name in ("bed", "wardrobe"):
+            spots = _wall_spots(clear, sizes[name]["width_m"], sizes[name]["depth_m"], doors + taken)
+            if spots:
+                taken.append(spots[0][0])
+                greedy.append(name)
+        assert greedy == ["bed"], "the counterexample no longer defeats greedy placement"
+
+        placed = _arrange(["bed", "wardrobe"], sizes, clear, doors)
+        assert [name for name, _ in placed] == ["bed", "wardrobe"]
+        (_, (bed, _)), (_, (wardrobe, _)) = placed
+        apart = (bed[2] <= wardrobe[0] or wardrobe[2] <= bed[0]
+                 or bed[3] <= wardrobe[1] or wardrobe[3] <= bed[1])
+        assert apart, "the bed and the wardrobe overlap"
+
+    def test_an_earlier_fixture_is_never_dropped_to_fit_a_later_one(self):
+        """Order is priority: a room with a wall for one thing gets the bed, not the wardrobe."""
+        from app.refine import _arrange
+        from app.rules import load_ruleset
+
+        sizes = load_ruleset("refine_v1").data["fixtures"]
+        placed = _arrange(["bed", "wardrobe"], sizes, (0.0, 0.0, 1.6, 2.1), [])
+        assert [name for name, _ in placed] == ["bed"]
+
+
 class TestWallsChangeWhatALegalRoomIs:
     """Stage ⑤ measures to wall centrelines; the bye-laws mean clear internal size.
 

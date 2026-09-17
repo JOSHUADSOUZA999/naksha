@@ -1301,10 +1301,10 @@ class TestAJudgeChoosesTheFinishedPlan:
         key = judge(program, envelope)
         for layout in solve(program, envelope, seed=7, keep=4):
             (refused, illegal, unbuildable, without_access, critical_other,
-             major, zones, quality, minor, one_sided, penalty) = key(layout)
+             unmet_brief, major, zones, quality, minor, one_sided, penalty) = key(layout)
             # The refusal flag leads, and it is set exactly when something below it is.
             assert refused == int(bool(illegal or unbuildable or without_access or critical_other))
-            assert min(without_access, major, zones, minor, one_sided) >= 0
+            assert min(without_access, unmet_brief, major, zones, minor, one_sided) >= 0
             assert -100 <= quality <= 0 and penalty == layout.score
 
 

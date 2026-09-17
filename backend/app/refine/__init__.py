@@ -17,11 +17,13 @@ room needs to read as that kind of room. Those are the rest of ⑥.
 
 from __future__ import annotations
 
+import math
+
 from app.ir.enums import Facing, FixtureKind, OpeningKind, Relation, SpaceKind, WallKind
 from app.ir.layout import TOLERANCE_M, Layout, PlacedRoom
 from app.ir.plan import Program
 from app.ir.refined import Fixture, Opening, RefinedFloor, Wall
-from app.ir.units import area_text, length_text
+from app.ir.units import area_text, feet_and_inches, length_text
 from app.rules import load_ruleset
 
 REFINE_RULES = "refine_v1"
@@ -50,6 +52,7 @@ def refine(layout: Layout, program: Program, envelope=None) -> RefinedFloor:
         walls, program, rules["windows"], openings, clear, rules["ventilation"]
     )
     fixtures = _fixtures(layout, program, walls, openings, rules)
+    fixtures += _stair_flights(layout, program, walls, openings, rules)
     return RefinedFloor(
         floor=layout.floor, walls=walls, openings=openings,
         fixtures=fixtures, clear=clear,
@@ -175,7 +178,8 @@ def _doors(
             else rules["internal_width_m"]
         )
         placed = _fit(
-            wall, width, clearance, openings, floor_width=rules["service_width_m"]
+            wall, width, clearance, openings, floor_width=rules["service_width_m"],
+            at_an_end=SpaceKind.STAIRCASE in (kinds.get(edge.a), kinds.get(edge.b)),
         )
         if placed is not None:
             offset, fitted = placed
@@ -468,8 +472,14 @@ def _fit(
     taken: list[Opening],
     *,
     floor_width: float | None = None,
+    at_an_end: bool = False,
 ) -> tuple[float, float] | None:
     """Centre the opening and return `(offset, width)`, or None if it cannot go here.
+
+    **A door into a staircase goes at an end of the wall, not its middle.** Centred on a
+    straight stair's long side it opens onto the eleventh step, and no flight can be drawn
+    clear of it: 17 of 22 benchmark stairs had none. At an end it opens where the flight
+    starts or the landing is. `at_an_end` tries both ends, then the centre.
 
     Centring rather than optimising. A door's exact position along a wall is a thing
     the *user* adjusts — CLAUDE.md's v1 editor is "adjustment, not authoring" — and
@@ -489,12 +499,16 @@ def _fit(
     width = min(width, usable)
 
     centre = span / 2
-    for other in taken:
-        if other.wall_id != wall.id:
-            continue
-        if abs(other.offset_m - centre) < (other.width_m + width) / 2:
-            return None                 # already occupied; one opening per wall is enough
-    return centre, width
+    spots = (
+        [clearance + width / 2, span - clearance - width / 2, centre] if at_an_end else [centre]
+    )
+    for spot in spots:
+        if not any(
+            other.wall_id == wall.id and abs(other.offset_m - spot) < (other.width_m + width) / 2
+            for other in taken
+        ):
+            return spot, width
+    return None                         # already occupied; one opening per wall is enough
 
 
 def _fixtures(
@@ -527,26 +541,7 @@ def _fixtures(
         blocked = _door_swings(placed, walls, openings)
         taken: list[tuple[float, float, float, float]] = []
 
-        counter: tuple[tuple[float, float, float, float], "Facing"] | None = None
-        for name in schedule:
-            size = sizes[name]
-            if name in _ON_THE_COUNTER and counter is not None:
-                # A sink on one wall and the counter on another is a kitchen nobody
-                # cooks in. These two sit *in* the run, so they are positioned along it
-                # rather than sent looking for a wall of their own.
-                spot = _on_counter(counter, size["width_m"], name)
-            else:
-                spot = _against_a_wall(
-                    clear, size["width_m"], size["depth_m"], blocked + taken
-                )
-            if spot is None:
-                continue
-            rect, faces = spot
-            if name == "counter":
-                counter = (rect, faces)
-            # The counter is not an obstacle to what stands on it.
-            if name not in _ON_THE_COUNTER:
-                taken.append(rect)
+        for name, (rect, faces) in _arrange(schedule, sizes, clear, blocked):
             out.append(
                 Fixture(
                     kind=FixtureKind(name), room_id=placed.room_id,
@@ -555,6 +550,155 @@ def _fixtures(
                 )
             )
     return out
+
+
+def _stair_flights(
+    layout: Layout, program: Program, walls: list[Wall], openings: list[Opening], rules: dict
+) -> list[Fixture]:
+    """Draw each staircase as its flights and landing, clear of every door's swing.
+
+    A stair was a labelled rectangle, and a labelled rectangle cannot say whether a flight
+    fits in it — the JP Nagar plan's 12'3" x 4'8" "staircase" held none. The flights are
+    drawn from the same arithmetic stage ⑤ enforces (`program.stair_sizes`), at the
+    comfortable figures where the room allows and the legal ones where it does not.
+
+    A door may not open onto the steps, so the flights go where no leaf swings: every
+    template that fits, with its landing at either end and its first flight on either
+    side, and the first arrangement clear of the doors wins. A stair with no such
+    arrangement is drawn without flights rather than with a door across them, and ⑦'s
+    circulation still sees the room.
+    """
+    from app.ir.enums import Facing
+    from app.program import STAIR_RULES
+
+    stair_rules = load_ruleset(STAIR_RULES).data
+    kinds = {room.id: room.kind for room in program.rooms}
+    out: list[Fixture] = []
+    for placed in layout.rooms:
+        if kinds.get(placed.room_id) is not SpaceKind.STAIRCASE:
+            continue
+        x0, y0, x1, y1 = _clear_rect(placed, layout, rules["walls"])
+        along_x = (x1 - x0) >= (y1 - y0)
+        long_side, short_side = (x1 - x0, y1 - y0) if along_x else (y1 - y0, x1 - x0)
+
+        def to_rect(a0: float, a1: float, b0: float, b1: float) -> tuple[float, float, float, float]:
+            # a runs along the stair's length, b across it.
+            return (x0 + a0, y0 + b0, x0 + a1, y0 + b1) if along_x else (x0 + b0, y0 + a0, x0 + b1, y0 + a1)
+
+        def climb(forward: bool) -> Facing:
+            if along_x:
+                return Facing.EAST if forward else Facing.WEST
+            return Facing.NORTH if forward else Facing.SOUTH
+
+        drawn = None
+        for figures in ("practice", "legal"):
+            f = stair_rules[figures]
+            width, tread = f["flight_width_m"], f["min_tread_m"]
+            blocked = _onto_a_landing(
+                placed, walls, openings, width, kinds, stair_rules["circulation_threshold_m"]
+            )
+            risers = math.ceil(round(f["floor_to_floor_m"] / f["max_riser_m"], 6))
+            for template in stair_rules["templates"]:
+                if template == "dog_leg":
+                    run = (math.ceil(risers / 2) - 1) * tread
+                    need_long, need_short = run + width, 2 * width + f["well_m"]
+                else:
+                    flights = math.ceil(risers / f["max_risers_per_flight"])
+                    run = (risers - flights) * tread
+                    need_long, need_short = run + (flights - 1) * width, width
+                if need_long > long_side + TOLERANCE_M or need_short > short_side + TOLERANCE_M:
+                    continue
+                for landing_far in (True, False):
+                    for flip in (False, True):
+                        # The landing against one end wall; the flights run back from it.
+                        land_a = (long_side - width, long_side) if landing_far else (0.0, width)
+                        b_lo = short_side - need_short if flip else 0.0
+                        pieces = []
+                        if template == "dog_leg":
+                            flight_a = (long_side - need_long, long_side - width) if landing_far else (width, need_long)
+                            first = (b_lo, b_lo + width)
+                            second = (b_lo + width + f["well_m"], b_lo + need_short)
+                            pieces = [
+                                (FixtureKind.FLIGHT, to_rect(*flight_a, *first), climb(landing_far)),
+                                (FixtureKind.LANDING, to_rect(*land_a, b_lo, b_lo + need_short), climb(landing_far)),
+                                (FixtureKind.FLIGHT, to_rect(*flight_a, *second), climb(not landing_far)),
+                            ]
+                            if any(_hits(rect, zone) for _, rect, _ in pieces for zone in blocked):
+                                continue
+                            drawn = pieces
+                            break
+                        else:
+                            # A straight run need not touch an end wall: the floor left at
+                            # its foot is where you step on, so it slides along the room,
+                            # 50 mm at a time, until it clears the doors.
+                            flights = math.ceil(risers / f["max_risers_per_flight"])
+                            per = run / flights
+                            slack = max(0.0, long_side - need_long)
+                            steps = int(slack / 0.05) + 1
+                            for k in range(steps):
+                                lo = slack - k * 0.05 if landing_far else k * 0.05
+                                pieces, cursor = [], lo
+                                for n in range(flights):
+                                    pieces.append((FixtureKind.FLIGHT, to_rect(cursor, cursor + per, b_lo, b_lo + width), climb(landing_far)))
+                                    cursor += per
+                                    if n < flights - 1:
+                                        pieces.append((FixtureKind.LANDING, to_rect(cursor, cursor + width, b_lo, b_lo + width), climb(landing_far)))
+                                        cursor += width
+                                if not any(_hits(rect, zone) for _, rect, _ in pieces for zone in blocked):
+                                    drawn = pieces
+                                    break
+                            if drawn:
+                                break
+                    if drawn:
+                        break
+                if drawn:
+                    break
+            if drawn:
+                break
+        for kind, rect, faces in drawn or []:
+            out.append(Fixture(
+                kind=kind, room_id=placed.room_id,
+                x_min_m=rect[0], y_min_m=rect[1], x_max_m=rect[2], y_max_m=rect[3], faces=faces,
+            ))
+    return out
+
+
+def _onto_a_landing(
+    placed: PlacedRoom,
+    walls: list[Wall],
+    openings: list[Opening],
+    depth: float,
+    kinds: dict,
+    threshold: float,
+) -> list[tuple[float, float, float, float]]:
+    """The floor a door into a staircase must open onto: the doorway's width, a flight
+    deep. Not the swing square other rooms keep clear — a door opens onto a landing, not
+    onto the steps, and that is the whole rule; the square also blocked the foot of the
+    flight the door exists to reach.
+
+    **A corridor, hall or foyer is the landing.** From one of those only a tread's depth
+    of floor is kept inside the stair, since the law lets circulation carry the landing
+    and a stair room sized to hold its own cost more than it bought (stairs_v1)."""
+    circulation = {SpaceKind.CORRIDOR, SpaceKind.HALL, SpaceKind.FOYER}
+    by_id = {wall.id: wall for wall in walls}
+    zones = []
+    for opening in openings:
+        if opening.kind not in (OpeningKind.DOOR, OpeningKind.ENTRANCE):
+            continue
+        if placed.room_id not in opening.connects:
+            continue
+        wall = by_id.get(opening.wall_id)
+        if wall is None:
+            continue
+        hx, hy = wall.point_at(opening.offset_m)
+        half = opening.width_m / 2
+        other = [room for room in opening.connects if room != placed.room_id]
+        reach = threshold if other and kinds.get(other[0]) in circulation else depth
+        if wall.is_vertical:
+            zones.append((hx - reach, hy - half, hx + reach, hy + half))
+        else:
+            zones.append((hx - half, hy - reach, hx + half, hy + reach))
+    return zones
 
 
 def _clear_rect(
@@ -613,13 +757,66 @@ def _door_swings(
     return zones
 
 
-def _against_a_wall(
+def _arrange(
+    schedule: list[str],
+    sizes: dict,
+    clear: tuple[float, float, float, float],
+    blocked: list[tuple[float, float, float, float]],
+) -> list[tuple[str, tuple[tuple[float, float, float, float], "Facing"]]]:
+    """The arrangement of a room's schedule that places the most fixtures.
+
+    Greedy placement took the first free corner for each fixture in turn, and a bed in
+    the wrong corner left no wall for the wardrobe: a 2.59 x 3.63 m bedroom that holds
+    both, bed against a side wall, was drawn without one. This tries every spot for each
+    fixture — eight at most, and a schedule is three long — and keeps the arrangement that
+    places the most. Ties go to the earliest spots in the fixed order, so a room greedy
+    already furnished fully is furnished exactly as before, and the same plan furnishes
+    the same way twice.
+
+    Order is still priority: a fixture is dropped only when no arrangement of everything
+    before it leaves it room, and an earlier fixture is never dropped to fit a later one.
+    """
+    best: list = []
+    best_key: tuple = ()
+
+    def walk(index: int, taken: list, counter, chosen: list, key: tuple) -> None:
+        nonlocal best, best_key
+        if index == len(schedule):
+            # Earlier fixtures placed outrank later ones: compare the placed/dropped
+            # pattern in schedule order, then the spot indices for determinism.
+            pattern = tuple(0 if c is None else 1 for c in chosen)
+            score = (pattern, tuple(-k for k in key))
+            if not best or score > best_key:
+                best, best_key = list(chosen), score
+            return
+        name = schedule[index]
+        size = sizes[name]
+        if name in _ON_THE_COUNTER:
+            spots = [] if counter is None else [s for s in [_on_counter(counter, size["width_m"], name)] if s]
+        else:
+            spots = _wall_spots(clear, size["width_m"], size["depth_m"], blocked + taken)
+        for n, spot in enumerate(spots):
+            rect, _ = spot
+            walk(
+                index + 1,
+                taken if name in _ON_THE_COUNTER else taken + [rect],
+                spot if name == "counter" else counter,
+                chosen + [(name, spot)],
+                key + (n,),
+            )
+        walk(index + 1, taken, counter, chosen + [None], key + (len(spots),))
+
+    walk(0, [], None, [], ())
+    return [c for c in best if c is not None]
+
+
+def _wall_spots(
     clear: tuple[float, float, float, float],
     width: float,
     depth: float,
     blocked: list[tuple[float, float, float, float]],
-) -> tuple[tuple[float, float, float, float], "Facing"] | None:
-    """Back the fixture onto whichever wall it fits against, trying corners first.
+) -> list[tuple[tuple[float, float, float, float], "Facing"]]:
+    """Every place the fixture backs onto a wall clear of what is blocked, corners first.
 
     Corners first because that is where furniture goes: a bed in the middle of a wall
     and a bed in the corner both fit, and only one of them leaves a usable room. The
@@ -630,7 +827,7 @@ def _against_a_wall(
 
     x_min, y_min, x_max, y_max = clear
     if x_max - x_min <= 0 or y_max - y_min <= 0:
-        return None
+        return []
 
     # (side the fixture backs onto, the way it then faces, its footprint there)
     plans = [
@@ -643,6 +840,7 @@ def _against_a_wall(
         (Facing.WEST, (x_max - depth, y_min, x_max, y_min + width)),
         (Facing.WEST, (x_max - depth, y_max - width, x_max, y_max)),
     ]
+    spots = []
     for faces, rect in plans:
         if rect[0] < x_min - 1e-9 or rect[1] < y_min - 1e-9:
             continue
@@ -650,8 +848,8 @@ def _against_a_wall(
             continue
         if any(_hits(rect, other) for other in blocked):
             continue
-        return rect, faces
-    return None
+        spots.append((rect, faces))
+    return spots
 
 
 def _hits(a: tuple[float, ...], b: tuple[float, ...]) -> bool:
@@ -729,6 +927,21 @@ def breaches(floor: RefinedFloor, program: Program) -> list[str]:
                 f"{length_text(spec.min_width_m)} minimum width"
             )
         length = max(max(0.0, x_max - x_min), max(0.0, y_max - y_min))
+        if spec.min_sizes_m:
+            fits = [
+                (short, long) for short, long in spec.min_sizes_m
+                if width >= short - TOLERANCE_M and length >= long - TOLERANCE_M
+            ]
+            if not fits:
+                shapes = " or ".join(
+                    f"{feet_and_inches(short)} x {feet_and_inches(long)}"
+                    for short, long in spec.min_sizes_m
+                )
+                found.append(
+                    f"{room_id} is {feet_and_inches(width)} x {feet_and_inches(length)} "
+                    f"inside its walls, and a {spec.kind.value.replace('_', ' ')} needs at "
+                    f"least {shapes}"
+                )
         if spec.min_length_m and length < spec.min_length_m - TOLERANCE_M:
             found.append(
                 f"{room_id} is {length_text(length)} long inside its walls, below the "
@@ -887,6 +1100,7 @@ def _connect(
                 placed = _fit(
                     wall, width, clearance, openings + added,
                     floor_width=rules["service_width_m"],
+                    at_an_end=SpaceKind.STAIRCASE in (kinds.get(a), kinds.get(b)),
                 )
                 if placed is None:
                     continue

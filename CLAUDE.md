@@ -71,7 +71,8 @@ naksha/
                  prompts/    versioned, hashed into provenance
                  providers/  base.py (the seam) · anthropic_api
                              openai_api · claude_code
-    rules/       clarify_v1 · setbacks_v1 · spaces_v1 · refine_v1 · circulation_v1.json
+    rules/       clarify_v1 · setbacks_v1 · spaces_v1 · refine_v1 · circulation_v1
+                 · furnish_v1 · stairs_v1.json
                                                              ← VERSIONED DATA
     envelope/    geometry.py (pure) · __init__.py (lookup + build)
     program/     __init__.py  ③ expansion · stacking · stilt
@@ -88,7 +89,8 @@ naksha/
                  test_intent · test_providers · test_config · test_cli
                  test_clarify · test_envelope · test_schema_enforcement
                  test_program · test_feasibility · test_solver
-                 test_refine · test_validator · test_llm_program · test_circulation · golden/
+                 test_refine · test_validator · test_llm_program · test_circulation
+                 test_furnish · test_stairs · test_brief_requirements · golden/
                  benchmark/  the 14-plan regression set: cases, runner, baseline
 ```
 
@@ -105,7 +107,7 @@ uv venv --python 3.12 && source .venv/bin/activate
 uv pip install -e ".[dev]"
 cp .env.example .env          # set one key, or NAKSHA_INTENT_PROVIDER=claude_code
 
-pytest                        # 790 tests, no network, no key, and independent
+pytest                        # 848 tests, no network, no key, and independent
                               # of whatever is in your .env — see conftest
 pytest -m live                # real model; needs credentials
 pytest -m benchmark           # the 14-plan regression set, ~40 s — run after any
@@ -364,6 +366,24 @@ CP-SAT fail decision 2's twenty-second test.
   once the strips are spent. Strips first: taking both in turn cost floors the strips
   had served.
 
+- **A room is sized for its furniture, as a pull, never a constraint.** `furnish_v1` says
+  what must fit across and along each kind of room; `RoomSpec.usable_sizes_m` carries it.
+  Stage B prices each cm a room's sides fall short (`FIT_PULL`) and `score` charges per
+  metre, capped at STRUCTURAL so it never counts as unbuildable. Target areas are blind to
+  shape and handed back 7'6" x 19'10" bedrooms; the judge and the score alone moved
+  nothing, because every finished candidate was already a strip. The space comes out of
+  corridors — see `DECISIONS.md`, question 7.
+
+- **A stair's shape is a constraint computed from a step.** `stairs_v1` holds rise, tread,
+  flight width and storey height; `program.stair_sizes` turns them into dog-leg and straight
+  rectangles on `RoomSpec.min_sizes_m`, and at least one must fit — in Stage B, `score` and
+  `refine.breaches`. An upper stair is held to the type below (`_same_flight_as_below`), and
+  `shaft_first_tree` cuts the stair below's rectangle out first. Never pin a shaft in an
+  arbitrary tree (DECISIONS question 9).
+- **"Near" is a 10 m proper walk, and a tree shape.** `Relation.NEAR` never adds a door.
+  `score._programme_walk` estimates the walk through shared-wall midpoints and must keep
+  matching ⑦'s routes; `near_spine_tree` is the group that can meet it.
+
 `max_aspect` is per-kind data, not a constant. A corridor is *supposed* to be
 elongated; flagging one as "a corridor, not a corridor" was the rule mistaking the
 shape for the defect.
@@ -489,6 +509,14 @@ that happens to fail — that test goes vacuous the day the pipeline improves.
   corners. The judge counts one-sided rooms after circulation quality and minor findings;
   ranked before the zones, over fourteen plans, it cost five zones and bought a breeze with
   a windowless bedroom.
+- **A legal room that cannot hold its furniture is reported, never refused.** `furnish`
+  grades a foot or more short of the nearest arrangement major, less minor, within 5 cm
+  nothing. Fixtures come from `refine_v1`, so the bed a room is sized for is the one drawn.
+- **What the brief asked for ranks before every other major.** `_brief` walks each `NEAR`
+  edge through the doors; an unmet one is major, and the judge counts it right after the
+  refusals.
+- **A door must open onto a landing.** ⑥ draws a stair's flights clear of its doors and puts
+  a door into a stair at an end of its wall; `_stairs` reports a stair it could not draw.
 - **A room people live in with no window at all is refused.** `light` refuses a room the
   bye-laws call habitable (`refine_v1.windows.habitable_kinds`) with no window, and warns
   when one is glazed short of the fraction or a kitchen has none. As a warning it weighed

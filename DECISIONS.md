@@ -941,6 +941,146 @@ and counted twice by the judge. ⑦ now keeps the engine's finding alone, which 
 50x80 from five majors to four without changing any plan. The baseline records 17
 critical findings, 24 major and 31 minor, 4 storeys failing and 41 of 144 zones.
 
+### Legal is not usable: rooms sized for their furniture
+
+The JP Nagar 40x60 drew a 6'3" x 15'6" kitchen, a 7'3" x 15'6" dining room and an 8'1"
+wide hall, and every one passed. They cleared area, width and aspect; nothing asked whether
+a counter and an aisle, a table and its chairs, or a sofa and a TV wall go in. Architect-
+phase 1: **furniture shapes the room, it is not drawn into whatever the room became.**
+
+`furnish_v1` lists, per room kind, arrangements of what must fit across and along the
+room — fixtures looked up in `refine_v1`, so the bed a room is sized for is the bed it is
+drawn with, and named clearances. A room is furnished when its clear rectangle holds any
+one. Practice, not law, so **never a constraint**: ⑦'s `furnish` check reports it (major a
+foot or more short, minor under, nothing within 5 cm), `score` prices it at 60 points a
+metre capped at STRUCTURAL, and Stage B pulls each room's short and long sides towards the
+smallest furnishable size at `FIT_PULL` cm² per cm. Ordinary bedrooms are now sized for,
+and drawn with, a double bed.
+
+Measured over the 14 benchmark plans. "Before" is today's plans, unchanged, checked by the
+new rule; every row counts its findings.
+
+| run | errors | major | minor | zones | two-sided air | baths vented | furnished | shortfall |
+|---|---|---|---|---|---|---|---|---|
+| before | 19 | 37 | 65 | 41/144 | 29/78 | 30/31 | 65/114 | 17.1 m |
+| ⑦ reports it, the judge counts it | 19 | 36 | 65 | 40 | 30 | 30 | 67 | 16.7 |
+| + `score` at 60/m | 20 | 38 | 62 | 42 | 32 | 29 | 68 | 16.5 |
+| + Stage B pull 1000 | 20 | 37 | 54 | 49 | 35 | 30 | 86 | 13.0 |
+| **+ Stage B pull 3000** | **20** | **35** | **54** | **49** | **34** | **30** | **86** | **12.8** |
+| pull 3000, no `score` term | 19 | 36 | 59 | 47 | 33 | 31 | 81 | 13.8 |
+
+**The judge and the score cannot fix it; only Stage B can.** Every candidate the search
+finishes is already a strip when a slicing tree cuts a row the full depth of the plot, and
+the judge only chooses among them. Target areas are indifferent to shape — a sum of area
+deviations is the same for a 2.2 x 4.1 m kitchen and a 1.9 x 4.7 m one — so the pull is
+what changes the geometry. 100 and 300 did little; 1000 to 5000 all reached 86 furnished,
+and 3000 had the fewest majors.
+
+**The space comes out of corridors, and a ceiling cost did not stop it.** Exact tiling
+fixes the total, so a wider kitchen is a narrower something: on the 50x80 the corridor grew
+to 31.2 m², 2.2x its ceiling, and upstairs at JP Nagar to 10'3" wide. An extra cost per cm²
+above a room's ceiling was tried at 1, 3 and 10 — convex, unlike the 1/target weighting
+question 7 records — and only moved noise around (majors 37 to 40, zones 40 to 47, a storey
+failing at 3). It was removed. This is question 7 again: surplus has to land somewhere
+until a plan may occupy less than its envelope.
+
+What the chosen plans give up, accepted in the new baseline: the 30x40 3BHK, refused
+before and after, counts one more critical (its car bay is now also short of 6 m) and a
+bathroom loses its ventilator; the 50x80 counts one more major (the corridor) and meets 1
+Vastu zone of 11 where it met 3; JP Nagar's dining room loses its window (a dining room
+may be inner, so no finding); the stilt plan and the model's 30x50 each have one fewer
+room with air from two sides. Against that, 21 more rooms hold their furniture, 8 more
+zones are met, and 11 fewer minor findings.
+
+**⑥ does not place furniture by arrangement.** Double beds leave 7 of 41 bedrooms missing
+a bed or wardrobe on the drawing, single beds left 5. Two of the seven are honest — a
+7'3" bedroom a double bed does not fit, and ⑦ says so — but 40x60's `bed2` is 2.59 x
+3.63 m, holds the bed-against-the-wall arrangement, and ⑥'s greedy placer drops the
+wardrobe anyway. Placing fixtures by the arrangement that fits is the follow-up.
+
+**A stair under open sky was only weighted, and furniture outvoted it.** The stacking
+test — a 40x60 whose first floor is a 3.3 m strip — came back with the ground-floor stair
+outside the strip: 90 points for "no floor above", against several strip bedrooms' worth
+of furnishing cost. A stair that misses the one *below* was already ranked ahead of the
+penalty (`_refused`); the same defect seen from underneath was not. `off_the_shaft` now
+counts both. No benchmark plan changed.
+
+**Found, not fixed: with the judge, that fixture's stair still misses — and did before
+this phase.** ⑦ judges a ground floor without knowing its stair has no floor above, so
+the 12 finished candidates it chooses among can all carry the defect, and the stack
+search's next three ground floors do too. No benchmark plan shows it. It belongs with
+phase 2, where the stair is placed first and the rooms fit around it.
+
+### The stair is a shape a step dictates, one stair through the building
+
+Phase 2. A staircase was sized like any room — 5 m², 1.0 m wide — and the JP Nagar plan
+drew a 12'3" x 4'8" strip: a 3.0 m storey needs 16 risers at 190 mm, and a 1.42 m deep
+room holds no flight of them. Measured on the benchmark with the stair check but not the
+constraint, **3 of 22 stairs could not be built**, in plans reported legal.
+
+`stairs_v1` stores rise, tread, flight width, storey height and risers per flight, and
+`program.stair_sizes` computes each template's clear rectangle: dog-leg 2.0 x 2.75 m or
+straight with a mid-landing 1.0 x 4.5 m at the legal figures. That is `RoomSpec.min_sizes_m`
+— a constraint in Stage B (a boolean per template, at least one true), ILLEGAL in `score`,
+a legality finding from `refine.breaches`. The staircase's `max_aspect` rose from 3.5 to 5.0,
+which had forbidden every straight flight.
+
+**One stair through the building.** The first run failed the stilt plan: a straight flight
+below, a dog-leg above, both legal, neither over the other. Two changes, both needed:
+`_same_flight_as_below` holds an upper stair to the templates the stair below holds, and
+`slicing.shaft_first_tree` cuts the stair below's own rectangle out first and tiles the
+floor around it — a group beside the others, so no other candidate changed. Pinning a shaft
+in arbitrary trees broke plans twice (question 9); a tree whose cuts are the shaft needs
+no pin. Always comparing three ground floors by the whole stack was tried: identical plans,
+10 s slower, removed.
+
+**Drawn as a stair.** ⑥ draws flights and landings from the same arithmetic, where no
+door opens onto the steps. A door into a stair now goes at an end of its wall, not the
+middle (17 of 22 stairs had a door mid-flight); inside the stair a door keeps a flight's
+depth clear, or a tread's when a corridor, hall or foyer carries the landing. An arrival
+landing inside every stair room drew 16 of 22 against 9 and cost 6 majors, 8 zones and 5 m
+of furnishing shortfall — removed. ⑦ reports a stair with no drawable flight (major).
+
+| run | errors | major | minor | zones | two-sided air | stairs buildable | drawn |
+|---|---|---|---|---|---|---|---|
+| after phase 1, stairs checked | 23 | 40 | 44 | 44 | 37 | 19/22 | — |
+| constraint, aspect 5 | 22 | 35 | 53 | 38 | 37 | 22/22 | — |
+| + same type above | 22 | 36 | 51 | 35 | 37 | 22/22 | — |
+| + stair-first trees | 21 | 39 | 51 | 42 | 36 | 22/22 | 5 |
+| + doors at wall ends, landing keep-out | 21 | 39 | 54 | 42 | 36 | 22/22 | 13 |
+| **+ ⑦ reports a door onto the steps** | **21** | **44** | **55** | **36** | **36** | **22/22** | **17** |
+
+The last row's five extra majors are the new finding itself; the judge then traded six
+Vastu zones for stairs a person can step onto, which is the order it ranks in.
+
+### A brief's "near the entrance" is a constraint
+
+Phase 5. The model read "my parents are elderly and need a bedroom near the entrance",
+put the bedroom downstairs, and wrote the reason in `why` — which nothing reads. Now:
+
+- `Relation.NEAR`, taught in `program_v2`. The live model wrote `bed1 near foyer, hard`
+  on the first run.
+- **Near is a walk, not a room count.** `circulation_v1.near.max_walk_m` is 10 m, measured:
+  foyer to living room walks 4–8 m on the 40x60s, a bedroom at the back 15–18 m. ⑦ walks it
+  through the doors with the circulation engine's routes and accepts a proper walk only —
+  through the hall is ordinary, through a pooja room or a dining room is not.
+- **The solver's estimate had to match that walk, three times.** Centre to centre passed
+  plans ⑦ refused; along programme edges only it found nothing; through shared-wall
+  midpoints over walk-through rooms it matched ⑦ to 0.1 m on the candidates that mattered,
+  once a private room could be entered only by a door the programme asked for.
+- **Near is a tree shape.** On the 40x60 3BHK no candidate had any bedroom within a proper
+  10 m walk. `near_spine_tree` runs the corridor back from the road with the hall first in
+  one row and the requested rooms first in the other; its group runs only for a programme
+  with such a request. It took that bedroom from 15.5 m to 10.2 m — still 20 cm over, and
+  at a cost of 3 zones and 3 furnished rooms. The limit was not moved to pass it.
+- **The judge ranks an unmet request before every other major.** Counted as one major
+  among many, it chose three circulation majors and the parents at the back over four and
+  the parents at the door.
+
+JP Nagar through the live model: the parents' bedroom a 7.6 m walk from the foyer, foyer →
+corridor → bedroom, no brief finding; ground floor 0 critical, 4 major; first floor clean.
+No benchmark plan has a `near` edge, so none changed.
+
 ---
 
 ## Corrections to things I got wrong

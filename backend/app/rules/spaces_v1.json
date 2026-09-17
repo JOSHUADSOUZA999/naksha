@@ -150,8 +150,8 @@
       "through_route": true,
       "source": "Karnataka Municipalities Model Building Bye-Laws 2017, notification UDD 14 TTP 2017 (P-4) dated 28-10-2017, cl. 5.2.3.2 Table 5.2 — residential dwellings",
       "verified": true,
-      "max_aspect": 3.5,
-      "verified_note": "min area 5 m² remains practice, not code"
+      "max_aspect": 5.0,
+      "verified_note": "min area 5 m² remains practice, not code; max_aspect 5.0 is practice: a straight flight with its mid-landing is 1.0 x 4.5 m clear, and 3.5 forbade every straight stair (stairs_v1)"
     },
     "pooja": {
       "min_area_sq_m": 1.5,

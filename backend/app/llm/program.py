@@ -34,7 +34,7 @@ from app.llm.providers import (
 from app.llm.trace import trace_span
 from app.program import apply_site_choices, expand, spec_for
 
-PROMPT_VERSION = "program_v1"
+PROMPT_VERSION = "program_v2"
 
 
 def build_program(

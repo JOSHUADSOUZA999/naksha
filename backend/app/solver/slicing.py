@@ -350,6 +350,150 @@ def road_columns_tree(
     return tree
 
 
+def near_spine_tree(
+    rooms: list[RoomSpec],
+    rng: random.Random,
+    weights: dict[str, float],
+    road: Facing,
+    near: set[str],
+) -> Node:
+    """A corridor running back from the road, with the rooms a brief wants near the
+    entrance first on it.
+
+    **Near the entrance is a tree shape, like the car bay on the road.** A brief's "my
+    parents need a bedroom near the entrance" became a `NEAR` edge and a 10 m walk, and
+    no candidate on a 40x60 met it: the corridor ran across the house and the bedroom
+    that happened to be first on it was never the parents'. Here the corridor runs away
+    from the road, the hall takes the road end of one row and the rooms the brief named
+    take the road end of the other, so the walk is front door, hall, corridor, bedroom,
+    in a few steps. A house tree for `road_first_tree`, in its own group.
+    """
+    spine = [room for room in rooms if room.kind is SpaceKind.CORRIDOR]
+    rest = [room for room in rooms if room.kind is not SpaceKind.CORRIDOR]
+    if not spine or len(rest) < 2 or road is None:
+        return random_tree(rooms, rng, weights)
+    front_a = [room for room in rest if room.kind is SpaceKind.HALL]
+    front_b = [room for room in rest if room.id in near]
+    others = [room for room in rest if room not in front_a and room not in front_b]
+    rng.shuffle(others)
+    split = max(0, min(len(others), len(others) // 2 + rng.randint(-1, 1)))
+    row_a = front_a + others[:split]
+    row_b = front_b + others[split:]
+    if not row_a or not row_b:
+        return random_tree(rooms, rng, weights)
+    # The corridor runs away from the road: across an east or west road it runs east-west,
+    # so the rows sit north and south of it and each row is ordered along x.
+    east_west = road in (Facing.EAST, Facing.WEST)
+    # `place` puts a cut's left child west (or south): the road end is the row's last leaf
+    # on an east or north road, its first on a west or south one.
+    road_end_last = road in (Facing.EAST, Facing.NORTH)
+
+    def row(group: list[RoomSpec]) -> Node:
+        ordered = list(reversed(group)) if road_end_last else group
+        node: Node = Leaf(ordered[0], weights[ordered[0].id])
+        for room in ordered[1:]:
+            node = Cut(vertical=east_west, left=node, right=Leaf(room, weights[room.id]))
+        return node
+
+    sides = [row(row_a), row(row_b)]
+    rng.shuffle(sides)
+    corridor: Node = Leaf(spine[0], weights[spine[0].id])
+    for extra in spine[1:]:
+        corridor = Cut(vertical=east_west, left=corridor, right=Leaf(extra, weights[extra.id]))
+    return Cut(
+        vertical=not east_west,
+        left=sides[0],
+        right=Cut(vertical=not east_west, left=corridor, right=sides[1]),
+    )
+
+
+def shaft_first_tree(
+    rooms: list[RoomSpec],
+    rng: random.Random,
+    weights: dict[str, float],
+    bounds: tuple[float, float, float, float],
+    stair: RoomSpec,
+    below: tuple[float, float, float, float],
+    *,
+    min_region_m: float = 1.0,
+) -> Node | None:
+    """A tree that cuts the stair below's own rectangle out first and tiles around it.
+
+    **A stair is placed, and the rooms organise around it** — that is how an architect
+    draws an upper floor, and it is not what random trees do. The 30x40 stilt plan put a
+    straight flight along the ground floor's north wall, and no tree above it had a
+    rectangle there: the first floor chose a dog-leg elsewhere and the house could not be
+    climbed. Pinning the shaft as a constraint on arbitrary trees broke other plans twice
+    (DECISIONS question 9); a tree whose cuts *are* the shaft's edges needs no pin, only
+    Stage B's existing pull to land them.
+
+    The floor divides into up to four regions around the shaft — a column either side of
+    it and a band above and below it in its own column, or rows either side and columns
+    beside it in its own row, chosen at random. A region too thin to be a room is left to
+    its neighbour. Every other room goes to a region, the largest shortfall of area first,
+    and each region is an ordinary random tree. None when a region would be left empty.
+    """
+    x0, y0, x1, y1 = bounds
+    sx0, sy0, sx1, sy1 = below
+    others = [room for room in rooms if room.id != stair.id]
+    if not others:
+        return Leaf(stair, weights[stair.id])
+
+    def usable(a: float, b: float) -> bool:
+        return b - a >= min_region_m
+
+    columns_first = rng.random() < 0.5
+    if columns_first:
+        before = (x0, y0, sx0, y1) if usable(x0, sx0) else None
+        after = (sx1, y0, x1, y1) if usable(sx1, x1) else None
+        low = (sx0, y0, sx1, sy0) if usable(y0, sy0) else None
+        high = (sx0, sy1, sx1, y1) if usable(sy1, y1) else None
+    else:
+        before = (x0, y0, x1, sy0) if usable(y0, sy0) else None
+        after = (x0, sy1, x1, y1) if usable(sy1, y1) else None
+        low = (x0, sy0, sx0, sy1) if usable(x0, sx0) else None
+        high = (sx1, sy0, x1, sy1) if usable(sx1, x1) else None
+    regions = {name: r for name, r in
+               (("before", before), ("after", after), ("low", low), ("high", high)) if r}
+    if not regions or len(others) < len(regions):
+        return None
+
+    def area(r) -> float:
+        return (r[2] - r[0]) * (r[3] - r[1])
+
+    ordered = others[:]
+    rng.shuffle(ordered)
+    members: dict[str, list[RoomSpec]] = {name: [] for name in regions}
+    want = {name: area(r) for name, r in regions.items()}
+    total_weight = sum(weights[room.id] for room in others)
+    total_area = sum(want.values())
+    # Seed each region with one room, largest region first, so none is left empty.
+    for name in sorted(regions, key=lambda n: -want[n]):
+        members[name].append(ordered.pop())
+    for room in ordered:
+        def deficit(name: str) -> float:
+            share = want[name] / total_area * total_weight
+            return share - sum(weights[r.id] for r in members[name])
+        members[max(members, key=deficit)].append(room)
+
+    def sub(name: str) -> Node:
+        return random_tree(members[name], rng, weights)
+
+    # `place` gives a vertical cut's right child the east part and a horizontal cut's
+    # right child the north part.
+    middle: Node = Leaf(stair, weights[stair.id])
+    if "low" in regions:
+        middle = Cut(vertical=not columns_first, left=sub("low"), right=middle)
+    if "high" in regions:
+        middle = Cut(vertical=not columns_first, left=middle, right=sub("high"))
+    tree = middle
+    if "before" in regions:
+        tree = Cut(vertical=columns_first, left=sub("before"), right=tree)
+    if "after" in regions:
+        tree = Cut(vertical=columns_first, left=tree, right=sub("after"))
+    return tree
+
+
 def place(node: Node, x_min: float, y_min: float, x_max: float, y_max: float) -> list[PlacedRoom]:
     """Divide the rectangle down the tree, proportional to target areas.
 

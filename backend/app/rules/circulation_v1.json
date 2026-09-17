@@ -5,67 +5,205 @@
   "verified": false,
   "_grades": "critical: the house cannot be used the way it must be — a bedroom used as a corridor, a room nobody can reach. Reported as an error; no candidate with one ever beats a candidate without. major: a significant inefficiency or zoning problem, reported as a warning. minor: worth optimising, also a warning, ranked last.",
   "_frames": "Areas are m² inside the walls, lengths m. Shares are fractions of the storey's floor area, leaving out car bays, stilts and anything in the setback.",
-
   "kinds": {
     "_note": "What each room kind is for, in circulation terms. `role` decides what walking THROUGH it costs; `zone` is its place on the privacy gradient. Corridors and stairs take their zone from what opens off them — a corridor serving bedrooms is private in a way one serving the kitchen is not. A bathroom that belongs to a bedroom is private; one the house shares takes `shared_zone`.",
-    "foyer": {"role": "arrival", "zone": "public"},
-    "hall": {"role": "social", "zone": "public"},
-    "veranda": {"role": "open", "zone": "public"},
-    "dining": {"role": "social", "zone": "semi_public"},
-    "office": {"role": "work", "zone": "semi_public"},
-    "stilt": {"role": "open", "zone": "semi_public"},
-    "corridor": {"role": "circulation", "zone": "derived"},
-    "staircase": {"role": "circulation", "zone": "derived"},
-    "pooja": {"role": "sacred", "zone": "semi_private"},
-    "study": {"role": "work", "zone": "semi_private"},
-    "balcony": {"role": "open", "zone": "semi_private"},
-    "kitchen": {"role": "service", "zone": "service"},
-    "utility": {"role": "service", "zone": "service"},
-    "store": {"role": "service", "zone": "service"},
-    "servant_room": {"role": "private", "zone": "service"},
-    "bedroom": {"role": "private", "zone": "private"},
-    "master_bedroom": {"role": "private", "zone": "private"},
-    "guest_room": {"role": "private", "zone": "private"},
-    "bathroom": {"role": "sanitary", "zone": "private", "shared_zone": "semi_private"},
-    "wc": {"role": "sanitary", "zone": "semi_private", "shared_zone": "semi_private"},
-    "car_parking": {"role": "vehicle", "zone": "external"}
+    "foyer": {
+      "role": "arrival",
+      "zone": "public"
+    },
+    "hall": {
+      "role": "social",
+      "zone": "public"
+    },
+    "veranda": {
+      "role": "open",
+      "zone": "public"
+    },
+    "dining": {
+      "role": "social",
+      "zone": "semi_public"
+    },
+    "office": {
+      "role": "work",
+      "zone": "semi_public"
+    },
+    "stilt": {
+      "role": "open",
+      "zone": "semi_public"
+    },
+    "corridor": {
+      "role": "circulation",
+      "zone": "derived"
+    },
+    "staircase": {
+      "role": "circulation",
+      "zone": "derived"
+    },
+    "pooja": {
+      "role": "sacred",
+      "zone": "semi_private"
+    },
+    "study": {
+      "role": "work",
+      "zone": "semi_private"
+    },
+    "balcony": {
+      "role": "open",
+      "zone": "semi_private"
+    },
+    "kitchen": {
+      "role": "service",
+      "zone": "service"
+    },
+    "utility": {
+      "role": "service",
+      "zone": "service"
+    },
+    "store": {
+      "role": "service",
+      "zone": "service"
+    },
+    "servant_room": {
+      "role": "private",
+      "zone": "service"
+    },
+    "bedroom": {
+      "role": "private",
+      "zone": "private"
+    },
+    "master_bedroom": {
+      "role": "private",
+      "zone": "private"
+    },
+    "guest_room": {
+      "role": "private",
+      "zone": "private"
+    },
+    "bathroom": {
+      "role": "sanitary",
+      "zone": "private",
+      "shared_zone": "semi_private"
+    },
+    "wc": {
+      "role": "sanitary",
+      "zone": "semi_private",
+      "shared_zone": "semi_private"
+    },
+    "car_parking": {
+      "role": "vehicle",
+      "zone": "external"
+    }
   },
-
   "roles": {
     "_note": "Names the journeys and relationships use, resolved against room kinds on each storey. `fallback` stands in when no room of the first kinds exists; `shared_only` leaves out a bathroom stage 3 gave to a bedroom; `ground_only` limits a role to the storey with the front door. `owned_fallback` reaches for a bathroom a bedroom owns when the storey has no other, so a guest who must use the master's en-suite is seen walking through the master bedroom.",
-    "living": {"kinds": ["hall"], "fallback": ["dining"]},
-    "dining": {"kinds": ["dining"]},
-    "kitchen": {"kinds": ["kitchen"]},
-    "utility": {"kinds": ["utility", "store"]},
-    "pooja": {"kinds": ["pooja"]},
-    "staircase": {"kinds": ["staircase"]},
-    "parking": {"kinds": ["car_parking"]},
-    "foyer": {"kinds": ["foyer"]},
-    "bedroom": {"kinds": ["bedroom", "master_bedroom", "guest_room"]},
-    "guest_wc": {"kinds": ["wc", "bathroom"], "shared_only": true, "owned_fallback": true, "ground_only": true},
-    "common_bath": {"kinds": ["bathroom", "wc"], "shared_only": true}
+    "living": {
+      "kinds": [
+        "hall"
+      ],
+      "fallback": [
+        "dining"
+      ]
+    },
+    "dining": {
+      "kinds": [
+        "dining"
+      ]
+    },
+    "kitchen": {
+      "kinds": [
+        "kitchen"
+      ]
+    },
+    "utility": {
+      "kinds": [
+        "utility",
+        "store"
+      ]
+    },
+    "pooja": {
+      "kinds": [
+        "pooja"
+      ]
+    },
+    "staircase": {
+      "kinds": [
+        "staircase"
+      ]
+    },
+    "parking": {
+      "kinds": [
+        "car_parking"
+      ]
+    },
+    "foyer": {
+      "kinds": [
+        "foyer"
+      ]
+    },
+    "bedroom": {
+      "kinds": [
+        "bedroom",
+        "master_bedroom",
+        "guest_room"
+      ]
+    },
+    "guest_wc": {
+      "kinds": [
+        "wc",
+        "bathroom"
+      ],
+      "shared_only": true,
+      "owned_fallback": true,
+      "ground_only": true
+    },
+    "common_bath": {
+      "kinds": [
+        "bathroom",
+        "wc"
+      ],
+      "shared_only": true
+    }
   },
-
   "pass_through": {
     "_note": "What it costs to walk THROUGH a room to reach another: the host's role (rows) against the destination's role (keys; '*' is any other). none: the room is circulation. critical: the room is being used as a corridor — a bedroom or bathroom on the way to somewhere else, which no quantity of other virtues makes acceptable. A bedroom is always a proper way into its own en-suite; see `en_suite`.",
-    "arrival": {"*": "none"},
-    "circulation": {"*": "none"},
-    "open": {"*": "none"},
-    "social": {"*": "none", "private": "minor"},
-    "service": {"*": "major", "service": "none"},
-    "sacred": {"*": "major"},
-    "work": {"*": "major"},
-    "vehicle": {"*": "major"},
-    "private": {"*": "critical"},
-    "sanitary": {"*": "critical"}
+    "arrival": {
+      "*": "none"
+    },
+    "circulation": {
+      "*": "none"
+    },
+    "open": {
+      "*": "none"
+    },
+    "social": {
+      "*": "none",
+      "private": "minor"
+    },
+    "service": {
+      "*": "major",
+      "service": "none"
+    },
+    "sacred": {
+      "*": "major"
+    },
+    "work": {
+      "*": "major"
+    },
+    "vehicle": {
+      "*": "major"
+    },
+    "private": {
+      "*": "critical"
+    },
+    "sanitary": {
+      "*": "critical"
+    }
   },
-
   "en_suite": {
     "_note": "A bathroom stage 3 connects to a bedroom belongs to that bedroom, so it is judged from there and needs no door onto the corridor. A door from its own bedroom is right. Reachable from that bedroom only by way of circulation, it is a shared bathroom and the suite has none. Reachable only through a third private room, it is a failure.",
     "via_circulation": "major",
     "via_private": "critical"
   },
-
   "stair_arrival": {
     "_note": "What a stair lets a person walk on to on the storey it arrives at, by the role of that room. A landing, lobby or corridor is right; a living room can be; a bedroom is generally wrong. The stair room includes its landing, so a shared bathroom opening off it is ordinary: `sanitary` is a stair whose only way on is a bathroom. Where the stair has a proper landing and also opens straight into a bedroom or an en-suite, that door is `extra_private`.",
     "arrival": "none",
@@ -80,120 +218,444 @@
     "sanitary": "critical",
     "extra_private": "minor"
   },
-
   "arrival_sequence": {
     "_note": "A visitor's walk from the front door to the living room. A foyer is the transition it should be, not a detour, and one corridor is ordinary. A dining room, kitchen, pooja room or study on the way reverses the public hierarchy: the house is entered through its middle.",
-    "free_roles": ["arrival"],
-    "tolerated": {"circulation": 1},
-    "reversing_roles": ["social", "service", "sacred", "work", "vehicle"],
+    "free_roles": [
+      "arrival"
+    ],
+    "tolerated": {
+      "circulation": 1
+    },
+    "reversing_roles": [
+      "social",
+      "service",
+      "sacred",
+      "work",
+      "vehicle"
+    ],
     "reversed": "major",
     "roundabout": "minor"
   },
-
   "exposure": {
     "_note": "A private room opening straight off the doorstep or a room visitors are received in. `outside` as a host is the doorstep: the front door itself opening into the room. A bedroom off the living room is possible and should be deliberate; off the foyer or the front door, or a private bathroom off either, it is not; a front door into a bathroom never is. The first rule that matches a door decides its grade. A room whose access is already reported is left to that finding.",
     "rules": [
-      {"host_roles": ["outside"], "target_roles": ["sanitary"], "grade": "critical"},
-      {"host_roles": ["outside", "arrival"], "target_roles": ["private"], "grade": "major"},
-      {"host_roles": ["arrival", "social"], "target_roles": ["sanitary"], "target_zones": ["private"], "grade": "major"},
-      {"host_roles": ["social"], "target_roles": ["private"], "grade": "minor"}
+      {
+        "host_roles": [
+          "outside"
+        ],
+        "target_roles": [
+          "sanitary"
+        ],
+        "grade": "critical"
+      },
+      {
+        "host_roles": [
+          "outside",
+          "arrival"
+        ],
+        "target_roles": [
+          "private"
+        ],
+        "grade": "major"
+      },
+      {
+        "host_roles": [
+          "arrival",
+          "social"
+        ],
+        "target_roles": [
+          "sanitary"
+        ],
+        "target_zones": [
+          "private"
+        ],
+        "grade": "major"
+      },
+      {
+        "host_roles": [
+          "social"
+        ],
+        "target_roles": [
+          "private"
+        ],
+        "grade": "minor"
+      }
     ]
   },
-
   "parking": {
     "_note": "How a person gets from a parked car into the house. Walking out of the vehicle gate and in at the front door is how a car porch works; in the plans measured when this was written that walk was 2.7-6.7 m along the front of the house, so a short one is minor. A long walk outside, or a way in through rooms nobody should cross, is major. `outside_walk_m` runs from the gate to the front door, square to the walls.",
     "outside_walk_m": 8.0,
     "short_walk": "minor",
     "long_walk": "major",
     "through_rooms": "major",
-    "door_roles": ["arrival", "circulation", "social", "open"]
+    "door_roles": [
+      "arrival",
+      "circulation",
+      "social",
+      "open"
+    ]
   },
-
   "relationships": {
     "_note": "Which rooms should sit together, how strongly, and how. `a` may list alternatives — a pooja room is well placed off the living OR the dining room. `want: direct` means a door between them; `near` means at most one room in between. `grades` and `scores` are indexed by the number of rooms in between (0, 1, 2 or more) for relationships at or above `strong_weight`; weaker ones grade one step lower. The front door's own sequence is `arrival_sequence`, not a pair here.",
     "strong_weight": 0.8,
-    "grades": {"direct": ["none", "major", "major"], "near": ["none", "none", "major"]},
-    "scores": {"direct": [100, 45, 15], "near": [100, 80, 35]},
+    "grades": {
+      "direct": [
+        "none",
+        "major",
+        "major"
+      ],
+      "near": [
+        "none",
+        "none",
+        "major"
+      ]
+    },
+    "scores": {
+      "direct": [
+        100,
+        45,
+        15
+      ],
+      "near": [
+        100,
+        80,
+        35
+      ]
+    },
     "pairs": [
-      {"a": ["living"], "b": "dining", "weight": 1.0, "want": "direct"},
-      {"a": ["dining"], "b": "kitchen", "weight": 1.0, "want": "direct"},
-      {"a": ["kitchen"], "b": "utility", "weight": 1.0, "want": "direct"},
-      {"a": ["living"], "b": "guest_wc", "weight": 0.8, "want": "near"},
-      {"a": ["living"], "b": "staircase", "weight": 0.8, "want": "near"},
-      {"a": ["living", "dining"], "b": "pooja", "weight": 0.6, "want": "direct"}
+      {
+        "a": [
+          "living"
+        ],
+        "b": "dining",
+        "weight": 1.0,
+        "want": "direct"
+      },
+      {
+        "a": [
+          "dining"
+        ],
+        "b": "kitchen",
+        "weight": 1.0,
+        "want": "direct"
+      },
+      {
+        "a": [
+          "kitchen"
+        ],
+        "b": "utility",
+        "weight": 1.0,
+        "want": "direct"
+      },
+      {
+        "a": [
+          "living"
+        ],
+        "b": "guest_wc",
+        "weight": 0.8,
+        "want": "near"
+      },
+      {
+        "a": [
+          "living"
+        ],
+        "b": "staircase",
+        "weight": 0.8,
+        "want": "near"
+      },
+      {
+        "a": [
+          "living",
+          "dining"
+        ],
+        "b": "pooja",
+        "weight": 0.6,
+        "want": "direct"
+      }
     ]
   },
-
   "journeys": {
     "_note": "The walks a house is used for. `from` and `to` are roles resolved on each storey, plus: `entry`, the doorstep outside the front door; `arrival_room`, the room the front door opens into; `bedroom_arrival`, the stair on an upper storey and the living room on the ground; `each:<role>`, every room of that role; `its:en_suite`, the origin bedroom's own bathroom. A journey whose ends are not on a storey is not walked there. `allow` is how many rooms in between are ordinary. The class decides which zones a walker should not have to pass through. `checks` names further rules the route is judged by; `dimension` puts the journey's score into the arrival or vertical part of the circulation score.",
     "list": [
-      {"id": "entry_to_living", "class": "visitor", "from": "entry", "to": "living", "weight": 1.0, "allow": 1, "checks": ["arrival_sequence"], "dimension": "arrival"},
-      {"id": "entry_to_dining", "class": "visitor", "from": "entry", "to": "dining", "weight": 0.8, "allow": 2},
-      {"id": "entry_to_guest_wc", "class": "visitor", "from": "entry", "to": "guest_wc", "weight": 0.8, "allow": 2},
-      {"id": "entry_to_pooja", "class": "visitor", "from": "entry", "to": "pooja", "weight": 0.5, "allow": 2},
-      {"id": "parking_to_house", "class": "resident", "from": "each:parking", "to": "arrival_room", "weight": 0.8, "allow": 0, "checks": ["parking"], "dimension": "arrival"},
-      {"id": "entry_to_kitchen", "class": "resident", "from": "entry", "to": "kitchen", "weight": 0.8, "allow": 3},
-      {"id": "living_to_dining", "class": "resident", "from": "living", "to": "dining", "weight": 1.0, "allow": 0},
-      {"id": "dining_to_kitchen", "class": "resident", "from": "dining", "to": "kitchen", "weight": 1.0, "allow": 0},
-      {"id": "living_to_stair", "class": "resident", "from": "living", "to": "staircase", "weight": 0.8, "allow": 1, "dimension": "vertical"},
-      {"id": "stair_to_bedroom", "class": "private", "from": "bedroom_arrival", "to": "each:bedroom", "weight": 1.0, "allow": 1, "dimension": "vertical"},
-      {"id": "bedroom_to_en_suite", "class": "private", "from": "each:bedroom", "to": "its:en_suite", "weight": 1.0, "allow": 0},
-      {"id": "bedroom_to_common_bath", "class": "private", "from": "each:bedroom_without_en_suite", "to": "common_bath", "weight": 0.6, "allow": 1},
-      {"id": "parking_to_kitchen", "class": "service", "from": "each:parking", "to": "kitchen", "weight": 0.5, "allow": 3},
-      {"id": "kitchen_to_utility", "class": "service", "from": "kitchen", "to": "utility", "weight": 0.8, "allow": 0}
+      {
+        "id": "entry_to_living",
+        "class": "visitor",
+        "from": "entry",
+        "to": "living",
+        "weight": 1.0,
+        "allow": 1,
+        "checks": [
+          "arrival_sequence"
+        ],
+        "dimension": "arrival"
+      },
+      {
+        "id": "entry_to_dining",
+        "class": "visitor",
+        "from": "entry",
+        "to": "dining",
+        "weight": 0.8,
+        "allow": 2
+      },
+      {
+        "id": "entry_to_guest_wc",
+        "class": "visitor",
+        "from": "entry",
+        "to": "guest_wc",
+        "weight": 0.8,
+        "allow": 2
+      },
+      {
+        "id": "entry_to_pooja",
+        "class": "visitor",
+        "from": "entry",
+        "to": "pooja",
+        "weight": 0.5,
+        "allow": 2
+      },
+      {
+        "id": "parking_to_house",
+        "class": "resident",
+        "from": "each:parking",
+        "to": "arrival_room",
+        "weight": 0.8,
+        "allow": 0,
+        "checks": [
+          "parking"
+        ],
+        "dimension": "arrival"
+      },
+      {
+        "id": "entry_to_kitchen",
+        "class": "resident",
+        "from": "entry",
+        "to": "kitchen",
+        "weight": 0.8,
+        "allow": 3
+      },
+      {
+        "id": "living_to_dining",
+        "class": "resident",
+        "from": "living",
+        "to": "dining",
+        "weight": 1.0,
+        "allow": 0
+      },
+      {
+        "id": "dining_to_kitchen",
+        "class": "resident",
+        "from": "dining",
+        "to": "kitchen",
+        "weight": 1.0,
+        "allow": 0
+      },
+      {
+        "id": "living_to_stair",
+        "class": "resident",
+        "from": "living",
+        "to": "staircase",
+        "weight": 0.8,
+        "allow": 1,
+        "dimension": "vertical"
+      },
+      {
+        "id": "stair_to_bedroom",
+        "class": "private",
+        "from": "bedroom_arrival",
+        "to": "each:bedroom",
+        "weight": 1.0,
+        "allow": 1,
+        "dimension": "vertical"
+      },
+      {
+        "id": "bedroom_to_en_suite",
+        "class": "private",
+        "from": "each:bedroom",
+        "to": "its:en_suite",
+        "weight": 1.0,
+        "allow": 0
+      },
+      {
+        "id": "bedroom_to_common_bath",
+        "class": "private",
+        "from": "each:bedroom_without_en_suite",
+        "to": "common_bath",
+        "weight": 0.6,
+        "allow": 1
+      },
+      {
+        "id": "parking_to_kitchen",
+        "class": "service",
+        "from": "each:parking",
+        "to": "kitchen",
+        "weight": 0.5,
+        "allow": 3
+      },
+      {
+        "id": "kitchen_to_utility",
+        "class": "service",
+        "from": "kitchen",
+        "to": "utility",
+        "weight": 0.8,
+        "allow": 0
+      }
     ],
     "chains": [
-      {"id": "front_door_to_kitchen", "legs": ["entry_to_living", "living_to_dining", "dining_to_kitchen"], "grade": "minor"}
+      {
+        "id": "front_door_to_kitchen",
+        "legs": [
+          "entry_to_living",
+          "living_to_dining",
+          "dining_to_kitchen"
+        ],
+        "grade": "minor"
+      }
     ],
     "classes": {
-      "visitor": {"avoid_zones": ["private", "service"], "grade": "major"},
-      "resident": {"avoid_zones": [], "grade": "none"},
-      "private": {"avoid_zones": [], "grade": "none"},
-      "service": {"avoid_zones": ["private"], "grade": "major"}
+      "visitor": {
+        "avoid_zones": [
+          "private",
+          "service"
+        ],
+        "grade": "major"
+      },
+      "resident": {
+        "avoid_zones": [],
+        "grade": "none"
+      },
+      "private": {
+        "avoid_zones": [],
+        "grade": "none"
+      },
+      "service": {
+        "avoid_zones": [
+          "private"
+        ],
+        "grade": "major"
+      }
     },
     "scoring": {
       "extra_transition": 15,
       "turn_over_budget": 5,
       "backtrack": 15,
       "privacy_crossing": 10,
-      "crossing": {"minor": 10, "major": 30, "critical": 100},
+      "crossing": {
+        "minor": 10,
+        "major": 30,
+        "critical": 100
+      },
       "external": 25,
       "distance_budget_m": 15.0,
       "per_metre_over": 2,
       "aligned_doors_m": 0.6
     }
   },
-
   "vertical": {
     "_note": "How a storey is reached from the one below: its stair must stand over the stair beneath by `landing_share` of the smaller rectangle, or there is no way up.",
     "landing_share": 0.75
   },
-
   "efficiency": {
     "_note": "Circulation is infrastructure, judged by the work it does and not by existing. The storey's share of corridors and foyers is banded. A corridor is essential when some room would lose its proper access without it, inefficient when it spends far more area, width or dead end than the rooms it serves need, and redundant when no room needs it and no journey uses it. Removing a corridor and stranding rooms is not a fault: a landing serving four bedrooms is supposed to. A foyer is judged by what it opens into as well as its size.",
-    "horizontal_kinds": ["corridor", "foyer"],
-    "vertical_kinds": ["staircase"],
-    "excluded_kinds": ["car_parking", "stilt"],
-    "share": {"minor": 0.22, "major": 0.28},
-    "corridor": {"area_per_room_sq_m": 3.0, "useful_width_m": 1.8, "dead_end_m": 2.0},
-    "foyer": {"reference_sq_m": 7.0, "oversize_minor": 1.3, "oversize_major": 1.5, "passage_aspect": 2.5},
-    "grades": {"share_major": "major", "share_minor": "minor", "redundant": "major", "inefficient": "minor", "foyer_major": "major", "foyer_minor": "minor"},
-    "scores": {"at_minor": 100, "at_major": 60, "per_point_over_major": 4}
+    "horizontal_kinds": [
+      "corridor",
+      "foyer"
+    ],
+    "vertical_kinds": [
+      "staircase"
+    ],
+    "excluded_kinds": [
+      "car_parking",
+      "stilt"
+    ],
+    "share": {
+      "minor": 0.22,
+      "major": 0.28
+    },
+    "corridor": {
+      "area_per_room_sq_m": 3.0,
+      "useful_width_m": 1.8,
+      "dead_end_m": 2.0
+    },
+    "foyer": {
+      "reference_sq_m": 7.0,
+      "oversize_minor": 1.3,
+      "oversize_major": 1.5,
+      "passage_aspect": 2.5
+    },
+    "grades": {
+      "share_major": "major",
+      "share_minor": "minor",
+      "redundant": "major",
+      "inefficient": "minor",
+      "foyer_major": "major",
+      "foyer_minor": "minor"
+    },
+    "scores": {
+      "at_minor": 100,
+      "at_major": 60,
+      "per_point_over_major": 4
+    }
   },
-
   "scoring": {
     "_note": "Seven dimensions, each 0-100, weighted. Connectivity is the access credit of every room, weighted by `importance`; relationships and journeys are measured from the routes. Privacy starts at 100, efficiency at its circulation-share band, vertical and arrival at their journeys' scores, and each of those four loses `deductions` for every finding `deduct` assigns it. A dimension that does not apply to a storey — arrival upstairs, vertical circulation in a house with no stair — drops out and the rest are reweighted. Any critical finding multiplies the result by `critical_validity` and the storey FAILS whatever the number; the number is kept so two failures can still be told apart. Good also needs no more than `good_major_limit` major findings: a significant problem is not good circulation, whatever the number.",
-    "weights": {"connectivity": 25, "relationships": 20, "privacy": 15, "journeys": 15, "efficiency": 10, "vertical": 10, "arrival": 5},
-    "importance": {"private": 1.0, "sanitary": 1.0, "social": 1.0, "service": 0.8, "sacred": 0.6, "work": 0.6, "circulation": 0.5, "arrival": 0.5, "open": 0.3, "vehicle": 0.0},
-    "access_credit": {"none": 1.0, "minor": 0.8, "major": 0.4, "critical": 0.0},
-    "deductions": {"minor": 5, "major": 15, "critical": 40},
+    "weights": {
+      "connectivity": 25,
+      "relationships": 20,
+      "privacy": 15,
+      "journeys": 15,
+      "efficiency": 10,
+      "vertical": 10,
+      "arrival": 5
+    },
+    "importance": {
+      "private": 1.0,
+      "sanitary": 1.0,
+      "social": 1.0,
+      "service": 0.8,
+      "sacred": 0.6,
+      "work": 0.6,
+      "circulation": 0.5,
+      "arrival": 0.5,
+      "open": 0.3,
+      "vehicle": 0.0
+    },
+    "access_credit": {
+      "none": 1.0,
+      "minor": 0.8,
+      "major": 0.4,
+      "critical": 0.0
+    },
+    "deductions": {
+      "minor": 5,
+      "major": 15,
+      "critical": 40
+    },
     "deduct": {
-      "privacy": ["circulation.exposure", "circulation.zone_crossing"],
-      "efficiency": ["circulation.corridor", "circulation.foyer"],
-      "vertical": ["circulation.stair_arrival"],
-      "arrival": ["circulation.arrival_sequence", "circulation.parking"]
+      "privacy": [
+        "circulation.exposure",
+        "circulation.zone_crossing"
+      ],
+      "efficiency": [
+        "circulation.corridor",
+        "circulation.foyer"
+      ],
+      "vertical": [
+        "circulation.stair_arrival"
+      ],
+      "arrival": [
+        "circulation.arrival_sequence",
+        "circulation.parking"
+      ]
     },
     "critical_validity": 0.4,
-    "health": {"good": 80, "fair": 60, "good_major_limit": 0}
+    "health": {
+      "good": 80,
+      "fair": 60,
+      "good_major_limit": 0
+    }
+  },
+  "near": {
+    "max_walk_m": 10.0,
+    "_note": "What a brief's 'near' means: a walk of at most this, room centre to room centre through the door midpoints, the way `routes` measures every journey. Measured on the 40x60 benchmark plans: foyer to living room walks 4-8 m and a bedroom at the back 15-18 m, so ten metres is the walk to the living room and a few steps more. Before doors exist, stage 5 reads the same limit as the grid distance between room centres, which a walk can only exceed."
   }
 }

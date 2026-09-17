@@ -67,6 +67,22 @@ class RoomSpec(BaseModel):
         "from solving into a corridor.",
         ge=1.0,
     )
+    min_sizes_m: list[tuple[float, float]] = Field(
+        default_factory=list,
+        description="Clear rectangles, as (short side, long side), at least one of which "
+        "this room must hold to be built at all — a staircase holds a flight of steps as a "
+        "dog-leg or a straight run, and area and width alone passed a 1.4 m deep stair no "
+        "flight fits in. A constraint, like the minimums. Empty for a room whose law is "
+        "area, width and length only. From `stairs_v1`.",
+    )
+    usable_sizes_m: list[tuple[float, float]] = Field(
+        default_factory=list,
+        description="Clear rectangles, as (short side, long side), any one of which holds "
+        "the furniture this room exists for — a bed with a way round it, a counter with a "
+        "working aisle. Practice, not law, and so never a constraint: a room short of "
+        "every one is legal, and priced and reported rather than refused. Empty for a "
+        "room whose use no furniture fixes. From `furnish_v1`.",
+    )
     sector: Sector | None = Field(
         default=None,
         description="Preferred Vastu zone. Null means no preference — which is a "
@@ -126,7 +142,39 @@ class RoomSpec(BaseModel):
                 f"{self.id}: growth ceiling {self.max_target_sq_m} m² is below the "
                 f"target {self.target_area_sq_m} m²"
             )
+        for short, long in self.min_sizes_m + self.usable_sizes_m:
+            if not 0 < short <= long:
+                raise ValueError(
+                    f"{self.id}: usable size {short} x {long} m is not (short side, long side)"
+                )
         return self
+
+    def furnishing_shortfall_m(self, width_m: float, depth_m: float) -> float:
+        """How far a clear rectangle is from holding this room's furniture, in metres.
+
+        The shortfall of the *nearest* arrangement, measured on its worse side, because
+        that is the number a person can act on — "a foot too narrow for the bed" — where
+        a sum of both sides describes no wall anyone could move.
+        """
+        return shortfall_m(self.usable_sizes_m, width_m, depth_m)
+
+    def minimum_shape_shortfall_m(self, width_m: float, depth_m: float) -> float:
+        """How far a clear rectangle is from the nearest shape this room must hold. 0 when
+        it holds one or the room has no such rule. See `min_sizes_m`."""
+        return shortfall_m(self.min_sizes_m, width_m, depth_m)
+
+
+def shortfall_m(sizes: list[tuple[float, float]], width_m: float, depth_m: float) -> float:
+    """How far a clear rectangle is from holding the nearest of `sizes`, on its worse side.
+
+    Sorting both rectangles is exact, not an approximation: a rectangle fits inside
+    another, turned either way, exactly when its shorter side and its longer side each
+    do. 0 when it fits one, or when there is nothing to fit.
+    """
+    if not sizes:
+        return 0.0
+    short, long = sorted((width_m, depth_m))
+    return min(max(0.0, want_short - short, want_long - long) for want_short, want_long in sizes)
 
 
 class AdjacencySpec(BaseModel):

@@ -1,0 +1,126 @@
+"""What the brief asks for is a constraint, not a sentence.
+
+"My parents are elderly and need a bedroom on the ground floor near the entrance" reached
+stage ③ as a floor number and a clause in `why`, and JP Nagar drew the parents' bedroom at
+the back of the house. Stage ③ now writes a `NEAR` edge; ⑤ estimates the walk and grows
+trees that can meet it; ⑦ walks it through the doors; the judge ranks an unmet request
+ahead of every other major finding.
+"""
+
+from __future__ import annotations
+
+import random
+
+from app.ir.enums import Facing, Relation, SpaceKind
+from app.ir.layout import Layout, PlacedRoom
+from app.ir.plan import AdjacencySpec, Program
+from app.llm.client import load_prompt
+from app.program import spec_for
+from app.rules import load_ruleset
+from app.solver import slicing
+from app.solver.score import _programme_walk, score
+
+
+def _row(*rooms):
+    """Rooms side by side along x, 3 m each and 4 m deep."""
+    placed = [
+        PlacedRoom(room_id=rid, x_min_m=3.0 * i, y_min_m=0, x_max_m=3.0 * (i + 1), y_max_m=4)
+        for i, (rid, _) in enumerate(rooms)
+    ]
+    layout = Layout(rooms=placed, x_min_m=0, y_min_m=0, x_max_m=3.0 * len(rooms), y_max_m=4)
+    return layout, [spec_for(kind, rid) for rid, kind in rooms]
+
+
+class TestTheModelIsToldHowToSayIt:
+    def test_the_prompt_teaches_near(self):
+        prompt = load_prompt("program_v2")
+        assert "near" in prompt.text and "foyer" in prompt.text
+
+    def test_the_limit_is_data(self):
+        assert load_ruleset("circulation_v1").data["near"]["max_walk_m"] == 10.0
+
+
+class TestTheSolverEstimatesTheWalk:
+    def test_a_room_off_the_corridor_beside_the_foyer_is_near(self):
+        layout, specs = _row(("foyer", SpaceKind.FOYER), ("corridor", SpaceKind.CORRIDOR),
+                             ("bed", SpaceKind.BEDROOM))
+        program = Program(rooms=specs, adjacencies=[
+            AdjacencySpec(a="corridor", b="bed", relation=Relation.CONNECTED),
+            AdjacencySpec(a="bed", b="foyer", relation=Relation.NEAR, hard=True),
+        ])
+        assert _programme_walk(layout, program, "foyer", "bed") <= 10.0
+        assert not any("not near" in r for r in score(layout, program)[2])
+
+    def test_a_room_at_the_end_of_a_long_row_is_not(self):
+        layout, specs = _row(("foyer", SpaceKind.FOYER), ("c1", SpaceKind.CORRIDOR),
+                             ("c2", SpaceKind.CORRIDOR), ("c3", SpaceKind.CORRIDOR),
+                             ("c4", SpaceKind.CORRIDOR), ("bed", SpaceKind.BEDROOM))
+        program = Program(rooms=specs, adjacencies=[
+            AdjacencySpec(a="c4", b="bed", relation=Relation.CONNECTED),
+            AdjacencySpec(a="bed", b="foyer", relation=Relation.NEAR, hard=True),
+        ])
+        assert _programme_walk(layout, program, "foyer", "bed") > 10.0
+        assert any("bed is not near foyer" in r for r in score(layout, program)[2])
+
+    def test_a_bedroom_entered_off_the_dining_room_is_no_short_way(self):
+        """The circulation engine grades that major; the estimate must not count it."""
+        layout, specs = _row(("foyer", SpaceKind.FOYER), ("dining", SpaceKind.DINING),
+                             ("bed", SpaceKind.BEDROOM))
+        program = Program(rooms=specs, adjacencies=[
+            AdjacencySpec(a="bed", b="foyer", relation=Relation.NEAR, hard=True),
+        ])
+        assert _programme_walk(layout, program, "foyer", "bed") == float("inf")
+
+    def test_a_shared_wall_without_a_door_is_not_near(self):
+        """A bedroom against the foyer with no door the programme asked for is as far as
+        its real door makes it — which is how ⑦ walks it."""
+        layout, specs = _row(("foyer", SpaceKind.FOYER), ("bed", SpaceKind.BEDROOM))
+        program = Program(rooms=specs, adjacencies=[
+            AdjacencySpec(a="bed", b="foyer", relation=Relation.NEAR, hard=True),
+        ])
+        assert _programme_walk(layout, program, "foyer", "bed") == float("inf")
+
+
+class TestTheTreeCanMeetIt:
+    def test_the_near_room_takes_the_road_end_of_its_row(self):
+        rooms = [spec_for(SpaceKind.HALL, "hall"), spec_for(SpaceKind.CORRIDOR, "corridor"),
+                 spec_for(SpaceKind.BEDROOM, "parents"), spec_for(SpaceKind.BEDROOM, "bed2"),
+                 spec_for(SpaceKind.KITCHEN, "kitchen")]
+        weights = {r.id: r.target_area_sq_m for r in rooms}
+        for seed in range(10):
+            tree = slicing.near_spine_tree(rooms, random.Random(seed), weights, Facing.EAST, {"parents"})
+            placed = {p.room_id: p for p in slicing.place(tree, 0, 0, 12, 10)}
+            same_row = [p for p in placed.values() if p.room_id != "parents"
+                        and abs(p.y_min_m - placed["parents"].y_min_m) < 1e-6
+                        and p.room_id != "corridor"]
+            assert all(placed["parents"].x_max_m >= p.x_max_m - 1e-6 for p in same_row)
+            assert placed["hall"].x_max_m == max(p.x_max_m for p in placed.values()
+                                                 if abs(p.y_min_m - placed["hall"].y_min_m) < 1e-6)
+
+
+class TestStageSevenWalksIt:
+    def test_an_unmet_request_is_a_major_finding(self):
+
+        from app.validator import _brief
+
+        layout, specs = _row(("foyer", SpaceKind.FOYER), ("c1", SpaceKind.CORRIDOR),
+                             ("c2", SpaceKind.CORRIDOR), ("c3", SpaceKind.CORRIDOR),
+                             ("c4", SpaceKind.CORRIDOR), ("bed", SpaceKind.BEDROOM))
+        program = Program(rooms=specs, adjacencies=[
+            AdjacencySpec(a="bed", b="foyer", relation=Relation.NEAR, hard=True),
+        ])
+        from app.refine import refine
+
+        floor = refine(layout, program)
+        [finding] = _brief(layout, program, floor)
+        assert finding.grade.value == "major" and set(finding.rooms) == {"bed", "foyer"}
+
+    def test_the_judge_ranks_it_before_other_majors(self):
+        import inspect
+
+        from app.validator import judge
+
+        source = inspect.getsource(judge)
+        assert source.index('len(report.by_check("brief"))') < source.index(
+            'graded["circulation", Grade.MAJOR] + graded["other", Grade.MAJOR]'
+        )

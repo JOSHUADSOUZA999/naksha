@@ -12,7 +12,7 @@ Read in this order, then run the commands below:
 
 ```bash
 cd naksha
-.venv/bin/pytest -q                                  # 790 tests, no network, no key
+.venv/bin/pytest -q                                  # 848 tests, no network, no key
 .venv/bin/pytest -m benchmark                        # the 14-plan regression set, ~40 s
 
 # The whole pipeline, to a drawing on disk: ①②③④⑤⑥⑦
@@ -51,7 +51,7 @@ strict vastu` · `20x30 2bhk in Bengaluru` (tight) · `30x40 north facing corner
 
 Where the build actually is.
 
-**Last updated:** 2026-09-15 · 790 tests passing, offline, no key
+**Last updated:** 2026-09-17 · 848 tests passing, offline, no key
 
 > **naksha draws floor plans.** Text in, a dimensioned drawing out: walls with
 > thickness, doors with swings, windows sized to the bye-laws, a ventilator in every
@@ -62,6 +62,25 @@ Where the build actually is.
 > 166% and 101% of the footprint; the third is the 30x50, whose shared bathroom opens only
 > off a bedroom in every candidate. None is clean now: the circulation engine grades how a
 > house is walked, and it has something to say about every plan.
+
+## Architect phases (2026-09-17, uncommitted)
+
+The per-plot table below predates these. Done: **1** furniture shapes rooms, **2** the stair
+as a fixed element, **5** brief requirements as constraints; plus the viewer's grade badge
+and ⑥ placing furniture by search rather than greedily (bedrooms missing a bed or wardrobe
+7 → 3 of 41). Not started: **3** planning grid, **4** zoning, **6** wet stacking, **7**
+parking strategy, **8** open plan, **9** site, **10** architectural scoring. Every weight
+tried and every trade: `DECISIONS.md`, "Legal is not usable", "The stair is a shape a step
+dictates", "A brief's near the entrance is a constraint".
+
+Benchmark now: 21 errors, 44 major, 55 minor, 4 storeys failing, 36/144 zones, 36/78
+two-sided air, 104/136 rooms furnished, every stair buildable (was 19/22), 17/22 drawn with
+flights. Against phase 1's baseline that is +1 error (the refused 20x30), +9 majors (5 are
+doors onto steps, a new finding) and −13 zones.
+
+Known next: the kitchen, dining and hall still come out as full-depth strips when two car
+bays take the road frontage (phase 7); five stairs still have a door onto the steps; a
+near-entrance request on a single-storey 40x60 3BHK misses by 20 cm.
 
 ## What it produces, per plot
 

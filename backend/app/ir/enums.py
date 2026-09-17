@@ -166,6 +166,10 @@ class Relation(StrEnum):
     ADJACENT = "adjacent"
     CONNECTED = "connected"
     SEPARATED = "separated"
+    # A short walk apart (`circulation_v1.near`). What a brief means by "near the
+    # entrance" — a parent's bedroom a few steps from the front door, not necessarily
+    # sharing its wall, and never a door nobody asked for.
+    NEAR = "near"
 
 
 class WallKind(StrEnum):
@@ -217,6 +221,10 @@ class FixtureKind(StrEnum):
     BED = "bed"
     SINGLE_BED = "single_bed"
     WARDROBE = "wardrobe"
+    # A stair's flights and the landing between them. `faces` on a flight is the way you
+    # climb it, which is what a plan's arrow shows.
+    FLIGHT = "flight"
+    LANDING = "landing"
 
 
 class Severity(StrEnum):

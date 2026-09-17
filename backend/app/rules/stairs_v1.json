@@ -1,0 +1,36 @@
+{
+  "_status": "The flight width is the Karnataka bye-law figure spaces_v1 already reads first-hand. Riser, tread, risers per flight and landing depth are the NBC 2016 Part 8 residential figures as commonly quoted, NOT read against the document; floor-to-floor height is practice. A stair that fits these is buildable; one that does not cannot hold its flights, however much area it has.",
+  "version": "stairs_v1",
+  "_why": "A staircase was sized like any room — 5 m² and 1.0 m wide — and the JP Nagar plan drew a 12'3\" x 4'8\" strip. A 3.0 m storey needs 16 risers at 190 mm; a 1.42 m deep room holds no flight of them in either direction. The stair is the one element whose shape is set by a person's step, so its shape is a constraint, not a preference.",
+  "_how": "Each template's clear rectangle is computed from the figures below, never typed in: the number of risers is the storey height over the riser, rounded up; a flight holds one tread fewer than its risers, the last step landing on the landing or the floor. DOG_LEG: two flights side by side, half the risers each, and a landing across both at the far end. STRAIGHT: one line of treads, with a mid-landing whenever the risers exceed a flight's maximum. A staircase is legal when its clear rectangle holds any template at the LEGAL figures, and comfortable when it holds one at the PRACTICE figures.",
+  "legal": {
+    "floor_to_floor_m": 3.0,
+    "max_riser_m": 0.19,
+    "min_tread_m": 0.25,
+    "flight_width_m": 1.0,
+    "well_m": 0.0,
+    "max_risers_per_flight": 15,
+    "landing_depth_is_flight_width": true,
+    "source": "Flight width: Karnataka Municipalities Model Building Bye-Laws 2017 cl. 5.2.3.2 Table 5.2, residential (as in spaces_v1). Riser 190 mm, tread 250 mm, 15 risers a flight, landing no shallower than the flight is wide: NBC 2016 Part 8, residential, as commonly quoted and not read first-hand. Floor-to-floor 3.0 m: a 2.75 m habitable room height plus slab and finish, practice.",
+    "verified": false,
+    "arrival_landing": false
+  },
+  "practice": {
+    "floor_to_floor_m": 3.0,
+    "max_riser_m": 0.175,
+    "min_tread_m": 0.25,
+    "flight_width_m": 1.05,
+    "well_m": 0.1,
+    "max_risers_per_flight": 12,
+    "landing_depth_is_flight_width": true,
+    "source": "Practice. A 175 mm rise is what an elderly parent climbs without a rest; 1.05 m passes a person carrying something; a 100 mm well lets the handrail turn. Twelve risers a flight before a landing.",
+    "verified": false,
+    "arrival_landing": false
+  },
+  "templates": [
+    "dog_leg",
+    "straight"
+  ],
+  "_arrival": "No arrival landing inside the stair room. Pulling every stair to one (2.2 x 4.1 m at the comfortable figures) drew 16 of 22 benchmark stairs against 9, and cost 6 major findings, 8 Vastu zones and 5 m of furnishing shortfall. The law lets the corridor carry it: a door from a corridor, hall or foyer needs only a tread's depth of floor inside the stair; from any other room, a flight's depth.",
+  "circulation_threshold_m": 0.25
+}

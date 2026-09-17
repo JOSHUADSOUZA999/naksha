@@ -40,8 +40,8 @@ def wall_allowance() -> tuple[float, float]:
     return walls["exterior_thickness_m"] / 2, walls["interior_thickness_m"] / 2
 
 
-def clear_dims(placed, layout: Layout) -> tuple[float, float]:
-    """`(area, shortest side)` of the floor inside the plaster.
+def clear_sides(placed, layout: Layout) -> tuple[float, float]:
+    """`(width, depth)` of the floor inside the plaster.
 
     Each side is inset by half of whatever wall is on it, and which wall that is
     follows from position: a side on the plan's boundary is exterior, anything else is
@@ -60,7 +60,13 @@ def clear_dims(placed, layout: Layout) -> tuple[float, float]:
     depth = (placed.y_max_m - placed.y_min_m) - (
         inset(placed.y_min_m, layout.y_min_m) + inset(placed.y_max_m, layout.y_max_m)
     )
-    return max(0.0, width) * max(0.0, depth), max(0.0, min(width, depth))
+    return max(0.0, width), max(0.0, depth)
+
+
+def clear_dims(placed, layout: Layout) -> tuple[float, float]:
+    """`(area, shortest side)` of the floor inside the plaster. See `clear_sides`."""
+    width, depth = clear_sides(placed, layout)
+    return width * depth, min(width, depth)
 
 ILLEGAL = 100.0
 # Just under ILLEGAL, and deliberately not a round fraction of it. A car bay the
@@ -111,6 +117,18 @@ def _door_span() -> float:
     return doors["service_width_m"] + 2 * doors["clearance_m"]
 STRUCTURAL = 40.0
 PREFERENCE = 5.0
+
+# Points per metre a room falls short of the furniture it exists for, capped at
+# STRUCTURAL. Per metre rather than a flat charge so the hill-climb can see a swap that
+# makes a strip kitchen less of a strip; capped so no quantity of it reaches ILLEGAL,
+# because a legal room that is hard to furnish is not an unbuildable one.
+FURNISH_PER_M = 60.0
+FURNISH_CAP = STRUCTURAL
+
+
+@functools.lru_cache(maxsize=1)
+def _furnish_tolerance() -> float:
+    return load_ruleset("furnish_v1").data["grading"]["tolerance_m"]
 
 
 def score(layout: Layout, program: Program) -> tuple[int, float, list[str]]:
@@ -164,6 +182,13 @@ def score(layout: Layout, program: Program) -> tuple[int, float, list[str]]:
                 f"{spec.id} is {length_text(clear_side)} clear across, below the "
                 f"{length_text(spec.min_width_m)} minimum width",
             )
+        shape_short_m = spec.minimum_shape_shortfall_m(*clear_sides(placed, layout))
+        if shape_short_m > EPSILON:
+            fail(
+                ILLEGAL,
+                f"{spec.id} is below the smallest shape a "
+                f"{spec.kind.value.replace('_', ' ')} must hold, by {length_text(shape_short_m)}",
+            )
         clear_length = clear_area / clear_side if clear_side > 0 else 0.0
         if spec.min_length_m and clear_length < spec.min_length_m - EPSILON:
             fail(
@@ -200,6 +225,15 @@ def score(layout: Layout, program: Program) -> tuple[int, float, list[str]]:
                 STRUCTURAL,
                 f"{spec.id} is {placed.aspect:.1f}:1 — a corridor, not a "
                 f"{spec.kind.value.replace('_', ' ')}",
+            )
+        # **Legal is not usable.** A 1.9 x 4.7 m kitchen clears every minimum and holds
+        # no working aisle. Stage ⑦ reports it; pricing it here is what lets the search
+        # avoid it, since ⑦ only ever chooses among plans the search already made.
+        short_m = spec.furnishing_shortfall_m(*clear_sides(placed, layout))
+        if short_m > _furnish_tolerance():
+            fail(
+                min(FURNISH_CAP, FURNISH_PER_M * short_m),
+                f"{spec.id} is {length_text(short_m)} short of the furniture it is for",
             )
         if spec.needs_exterior_wall and not _on_the_boundary(placed, layout):
             fail(
@@ -299,6 +333,13 @@ def score(layout: Layout, program: Program) -> tuple[int, float, list[str]]:
         weight = STRUCTURAL if edge.hard else PREFERENCE
         if edge.relation is Relation.SEPARATED and touching:
             fail(weight, f"{edge.a} shares a wall with {edge.b}, which it must not")
+        elif edge.relation is Relation.NEAR:
+            # Doors do not exist yet, so the walk is read along the programme's own door
+            # edges, centre to centre — the route ⑦ will walk through the doors ⑥ puts
+            # on those edges. The straight grid distance was too kind: it passed a
+            # bedroom whose only way from the foyer ran the length of the corridor.
+            if _programme_walk(layout, program, edge.b, edge.a) > _near_limit():
+                fail(weight, f"{edge.a} is not near {edge.b}")
         elif edge.relation is not Relation.SEPARATED and not touching:
             fail(weight, f"{edge.a} does not reach {edge.b}")
 
@@ -410,6 +451,87 @@ def off_the_road(layout: Layout, program: Program) -> int:
     )
 
 
+@functools.lru_cache(maxsize=1)
+def _near_limit() -> float:
+    return load_ruleset("circulation_v1").data["near"]["max_walk_m"]
+
+
+def _centre_distance(a, b) -> float:
+    """Grid distance between two rooms' centres."""
+    ax, ay = (a.x_min_m + a.x_max_m) / 2, (a.y_min_m + a.y_max_m) / 2
+    bx, by = (b.x_min_m + b.x_max_m) / 2, (b.y_min_m + b.y_max_m) / 2
+    return abs(ax - bx) + abs(ay - by)
+
+
+def _programme_walk(layout: Layout, program: Program, start: str, end: str) -> float:
+    """The shortest proper walk from `start` to `end` the tiling allows, before doors.
+
+    Doors go where stage ⑥ will put them: on a `CONNECTED` edge, or between two rooms a
+    person may walk through. Each step runs to the middle of the wall the two rooms share
+    — ⑥ centres its doors — so a corridor is crossed door to door, not through its middle,
+    which made every bedroom off a long corridor read as far. Only walk-through rooms are
+    passed on the way. Infinite when the tiling leaves no such walk.
+    """
+    import heapq
+
+    placed = {room.room_id: room for room in layout.rooms}
+    specs = {room.id: room for room in program.rooms}
+    connected = {
+        frozenset((edge.a, edge.b)) for edge in program.adjacencies
+        if edge.relation is Relation.CONNECTED
+    }
+    if start not in placed or end not in placed:
+        return float("inf")
+
+    def through(room_id: str) -> bool:
+        spec = specs.get(room_id)
+        return spec is not None and spec.is_through_route
+
+    def door(a, b) -> tuple[float, float] | None:
+        """The middle of the wall two rooms share, or None if they do not share one."""
+        if not a.touches(b):
+            return None
+        if abs(a.x_max_m - b.x_min_m) <= TOLERANCE_M or abs(b.x_max_m - a.x_min_m) <= TOLERANCE_M:
+            x = a.x_max_m if abs(a.x_max_m - b.x_min_m) <= TOLERANCE_M else a.x_min_m
+            lo, hi = max(a.y_min_m, b.y_min_m), min(a.y_max_m, b.y_max_m)
+            return x, (lo + hi) / 2
+        y = a.y_max_m if abs(a.y_max_m - b.y_min_m) <= TOLERANCE_M else a.y_min_m
+        lo, hi = max(a.x_min_m, b.x_min_m), min(a.x_max_m, b.x_max_m)
+        return (lo + hi) / 2, y
+
+    def centre(room) -> tuple[float, float]:
+        return (room.x_min_m + room.x_max_m) / 2, (room.y_min_m + room.y_max_m) / 2
+
+    origin = centre(placed[start])
+    best: dict[str, float] = {}
+    queue = [(0.0, start, origin)]
+    while queue:
+        walked, here, at = heapq.heappop(queue)
+        if here == end:
+            ex, ey = centre(placed[end])
+            return walked + abs(at[0] - ex) + abs(at[1] - ey)
+        if walked > best.get(here, float("inf")):
+            continue
+        best[here] = walked
+        if here != start and not through(here):
+            continue  # arrived somewhere private; nobody walks on from here
+        for there, room in placed.items():
+            if there == here:
+                continue
+            # Into the destination only by a door the programme asked for, when it is a
+            # room nobody walks through: a bedroom entered off the dining room is a walk
+            # the circulation engine grades major, not a short one.
+            if frozenset((here, there)) not in connected and not (through(here) and through(there)):
+                continue
+            spot = door(placed[here], room)
+            if spot is None:
+                continue
+            step = walked + abs(at[0] - spot[0]) + abs(at[1] - spot[1])
+            if step < best.get(there, float("inf")):
+                heapq.heappush(queue, (step, there, spot))
+    return float("inf")
+
+
 def off_the_shaft(layout: Layout, program: Program) -> int:
     """How many shafts on this storey miss the one below.
 
@@ -418,10 +540,19 @@ def off_the_shaft(layout: Layout, program: Program) -> int:
     weighted term it lost: the 30x40 stilt plan and a 30x50 from the model both shipped
     a first floor whose stair missed the one beneath by metres.
     """
-    if not layout.shafts:
-        return 0
     kinds = {room.id: room.kind for room in program.rooms}
     missed = 0
+    # And from underneath: a stair with no floor above it is no way up either. It was a
+    # weighted term only, and once `score` priced furniture, several strip bedrooms
+    # outvoted it and a ground floor put its stair under open sky.
+    if layout.shaft_zone is not None:
+        missed += sum(
+            1 for placed in layout.rooms
+            if kinds.get(placed.room_id) is SpaceKind.STAIRCASE
+            and not _inside(placed, layout.shaft_zone)
+        )
+    if not layout.shafts:
+        return missed
     for kind, below in layout.shafts.items():
         here = [placed for placed in layout.rooms if kinds.get(placed.room_id) is kind]
         if here and not any(_overlap(placed, below) >= ALIGNMENT for placed in here):

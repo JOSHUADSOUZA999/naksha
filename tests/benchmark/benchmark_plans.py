@@ -68,6 +68,10 @@ class CaseResult:
     baths: int = 0
     circulation_failed: int = 0
     circulation_scores: list[float] = field(default_factory=list)
+    furnished: int = 0
+    furnishable: int = 0
+    unfurnished_major: int = 0
+    furnish_short_m: float = 0.0
     geometry: str = ""
     seconds: float = 0.0
 
@@ -158,12 +162,22 @@ def measure(case: dict, seed: int) -> tuple[CaseResult, object]:
             if spec.sector is not None:
                 result.zones_wanted += 1
                 result.zones_met += layout.sector_of(placed) is spec.sector
+            if spec.usable_sizes_m and placed.room_id in floor.clear:
+                x0, y0, x1, y1 = floor.clear[placed.room_id]
+                short_m = spec.furnishing_shortfall_m(x1 - x0, y1 - y0)
+                result.furnishable += 1
+                result.furnished += short_m <= load_ruleset("furnish_v1").data["grading"]["tolerance_m"]
+                result.furnish_short_m += short_m
             if spec.kind in _BATHS:
                 result.baths += 1
                 result.baths_vented += bool(floor.air_sides(placed.room_id))
         result.two_sided_air += len(report.cross_ventilated)
         result.air_rooms += len(report.cross_ventilated) + len(report.single_sided)
         result.no_air += sum(1 for room in report.single_sided if not floor.air_sides(room))
+    result.unfurnished_major = sum(
+        1 for report in bundle.reports for f in report.by_check("furnish") if f.grade.value == "major"
+    )
+    result.furnish_short_m = round(result.furnish_short_m, 2)
     result.by_check = dict(sorted(result.by_check.items()))
     result.geometry = geometry_hash(bundle)
     result.seconds = round(seconds, 2)
@@ -178,8 +192,8 @@ def run_all() -> list[CaseResult]:
 # Counts where more is worse, and counts where fewer is worse.
 # Minor findings are recorded, not guarded: they are optimisation, and the judge ranks
 # them after Vastu and circulation quality.
-_LOWER_IS_BETTER = ("errors", "major", "circulation_failed", "no_air")
-_HIGHER_IS_BETTER = ("zones_met", "two_sided_air", "baths_vented")
+_LOWER_IS_BETTER = ("errors", "major", "circulation_failed", "no_air", "unfurnished_major")
+_HIGHER_IS_BETTER = ("zones_met", "two_sided_air", "baths_vented", "furnished")
 
 
 def regressions(result: CaseResult, baseline: dict) -> list[str]:
@@ -207,7 +221,7 @@ def write_baseline(results: list[CaseResult]) -> None:
             "`seconds` is recorded for information and never compared."
         ),
         "rulesets": {
-            name: load_ruleset(name).stamp for name in ("spaces_v1", "refine_v1", "setbacks_v1", "circulation_v1")
+            name: load_ruleset(name).stamp for name in ("spaces_v1", "refine_v1", "setbacks_v1", "circulation_v1", "furnish_v1", "stairs_v1")
         },
         "cases": [asdict(r) for r in results],
     }
@@ -217,7 +231,7 @@ def write_baseline(results: list[CaseResult]) -> None:
 def _table(results: list[CaseResult], baseline: dict | None) -> str:
     lines = [
         f"{'case':28} {'err':>3} {'maj':>3} {'min':>3} {'circulation':>15} {'zones':>7} "
-        f"{'air':>5} {'baths':>5} {'time':>6}  change"
+        f"{'air':>5} {'baths':>5} {'furnish':>7} {'short':>5} {'time':>6}  change"
     ]
     for r in results:
         base = (baseline or {}).get(r.id)
@@ -234,14 +248,16 @@ def _table(results: list[CaseResult], baseline: dict | None) -> str:
         lines.append(
             f"{r.id:28} {r.errors:>3} {r.major:>3} {r.minor:>3} {circulation:>15} "
             f"{r.zones_met:>3}/{r.zones_wanted:<3} {r.two_sided_air:>2}/{r.air_rooms:<2} "
-            f"{r.baths_vented:>2}/{r.baths:<2} {r.seconds:>5.1f}s  {note}"
+            f"{r.baths_vented:>2}/{r.baths:<2} {r.furnished:>3}/{r.furnishable:<3} {r.furnish_short_m:>5.1f} "
+            f"{r.seconds:>5.1f}s  {note}"
         )
     total = lambda name: sum(getattr(r, name) for r in results)  # noqa: E731
     lines.append(
         f"{'TOTAL':28} {total('errors'):>3} {total('major'):>3} {total('minor'):>3} "
         f"{str(total('circulation_failed')) + ' storeys fail':>15} "
         f"{total('zones_met'):>3}/{total('zones_wanted'):<3} {total('two_sided_air'):>2}/{total('air_rooms'):<2} "
-        f"{total('baths_vented'):>2}/{total('baths'):<2} {sum(r.seconds for r in results):>5.1f}s"
+        f"{total('baths_vented'):>2}/{total('baths'):<2} {total('furnished'):>3}/{total('furnishable'):<3} "
+        f"{total('furnish_short_m'):>5.1f} {sum(r.seconds for r in results):>5.1f}s"
     )
     return "\n".join(lines)
 

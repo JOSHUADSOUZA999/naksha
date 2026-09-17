@@ -21,6 +21,8 @@ from app.ir.units import area_text
 from app.rules import load_ruleset
 
 SPACE_RULES = "spaces_v1"
+FURNISH_RULES = "furnish_v1"
+STAIR_RULES = "stairs_v1"
 
 # How full the ground floor may be left before rooms are sent upstairs, as a fraction
 # of the buildable footprint measured at legal minimums.
@@ -302,8 +304,76 @@ def _spec(kind: SpaceKind, room_id: str, rules: dict[str, Any], *, floor: int) -
         needs_road_access=rule["road_access"],
         needs_door=rule["walk_in"],
         is_through_route=rule["through_route"],
+        min_sizes_m=stair_sizes("legal") if kind is SpaceKind.STAIRCASE else [],
+        usable_sizes_m=(
+            stair_sizes("practice") if kind is SpaceKind.STAIRCASE else usable_sizes(kind)
+        ),
         floor=floor,
     )
+
+
+def stair_sizes(figures: str) -> list[tuple[float, float]]:
+    """The clear rectangles, (short, long), a staircase's flights fit in: one per template.
+
+    Computed from rise, tread, flight width and storey height rather than stored, so a
+    different storey height reshapes every stair and nobody retypes a rectangle. `figures`
+    is `legal` for the constraint and `practice` for the comfortable size.
+    """
+    rules = load_ruleset(STAIR_RULES).data
+    f = rules[figures]
+    risers = math.ceil(round(f["floor_to_floor_m"] / f["max_riser_m"], 6))
+    width, tread = f["flight_width_m"], f["min_tread_m"]
+    landing = width if f["landing_depth_is_flight_width"] else f["landing_depth_m"]
+    sizes = []
+    for template in rules["templates"]:
+        if template == "dog_leg":
+            # Two flights side by side; the longer carries the odd riser. Each holds one
+            # tread fewer than its risers, the last step landing on the landing.
+            longer = math.ceil(risers / 2)
+            if longer > f["max_risers_per_flight"]:
+                continue
+            across = 2 * width + f["well_m"]
+            along = (longer - 1) * tread + landing
+        elif template == "straight":
+            flights = math.ceil(risers / f["max_risers_per_flight"])
+            across = width
+            along = (risers - flights) * tread + (flights - 1) * landing
+        else:
+            raise ValueError(f"{STAIR_RULES}: unknown stair template {template!r}")
+        if f.get("arrival_landing"):
+            along += landing
+        sizes.append(tuple(sorted((round(across, 3), round(along, 3)))))
+    return sizes
+
+
+def usable_sizes(kind: SpaceKind) -> list[tuple[float, float]]:
+    """The clear rectangles, (short, long), any one of which furnishes a room of this kind.
+
+    Summed from `furnish_v1`, whose fixtures are looked up in `refine_v1` — the sizes ⑥
+    draws with — so the bed a room is sized for is the bed it is drawn with, and a
+    catalogue change reaches both. Rounded to the millimetre: 0.6 + 1.5 + 0.6 is not
+    2.7 in floating point, and a room 2.7 m clear must not read as short of it.
+    """
+    rooms = load_ruleset(FURNISH_RULES).data["rooms"]
+    rule = rooms.get(kind.value)
+    if rule is None:
+        return []
+    fixtures = load_ruleset("refine_v1").data["fixtures"]
+
+    def run(entries: list[dict[str, Any]]) -> float:
+        total = 0.0
+        for entry in entries:
+            if "fixture" in entry:
+                total += fixtures[entry["fixture"]][entry["side"]]
+            else:
+                total += entry["m"]
+        return round(total, 3)
+
+    sizes = []
+    for arrangement in rule["arrangements"]:
+        across, along = run(arrangement["across"]), run(arrangement["along"])
+        sizes.append((min(across, along), max(across, along)))
+    return sizes
 
 
 def _wire(

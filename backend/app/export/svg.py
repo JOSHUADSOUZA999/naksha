@@ -332,6 +332,38 @@ def _fixtures(refined: RefinedFloor, px) -> list[str]:
                 out.append(f'<path d="M{xx:.1f} {y1:.1f} V{y2:.1f}"/>')
         elif kind == "wardrobe":
             out.append(f'<path d="M{x1:.1f} {y1:.1f} L{x2:.1f} {y2:.1f}"/>')
+        elif kind == "flight":
+            # Treads across the direction of climb, and an arrow up the middle — the mark
+            # a plan uses so a stair reads as one and says which way is up.
+            out.extend(_treads(fixture, x1, y1, x2, y2, px))
 
     out.append("</g>")
     return out
+
+
+def _treads(fixture, x1: float, y1: float, x2: float, y2: float, px) -> list[str]:
+    """Tread lines every 250 mm across a flight, and an arrow the way it climbs."""
+    tread_px = abs(px(0.25, 0)[0] - px(0, 0)[0])
+    lines = []
+    if fixture.faces in (Facing.EAST, Facing.WEST):
+        x = x1 + tread_px
+        while x < x2 - 1:
+            lines.append(f'<path d="M{x:.1f} {y1:.1f} V{y2:.1f}"/>')
+            x += tread_px
+        cy = (y1 + y2) / 2
+        tail, head = (x1 + 3, x2 - 3) if fixture.faces is Facing.EAST else (x2 - 3, x1 + 3)
+        wing = 5 if fixture.faces is Facing.WEST else -5
+        lines.append(f'<path d="M{tail:.1f} {cy:.1f} H{head:.1f} M{head + wing:.1f} {cy - 4:.1f} '
+                     f'L{head:.1f} {cy:.1f} L{head + wing:.1f} {cy + 4:.1f}" stroke="#555"/>')
+    else:
+        y = y1 + tread_px
+        while y < y2 - 1:
+            lines.append(f'<path d="M{x1:.1f} {y:.1f} H{x2:.1f}"/>')
+            y += tread_px
+        cx = (x1 + x2) / 2
+        # SVG y runs down the page: climbing north is up the page.
+        tail, head = (y2 - 3, y1 + 3) if fixture.faces is Facing.NORTH else (y1 + 3, y2 - 3)
+        wing = 5 if fixture.faces is Facing.NORTH else -5
+        lines.append(f'<path d="M{cx:.1f} {tail:.1f} V{head:.1f} M{cx - 4:.1f} {head + wing:.1f} '
+                     f'L{cx:.1f} {head:.1f} L{cx + 4:.1f} {head + wing:.1f}" stroke="#555"/>')
+    return lines

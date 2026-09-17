@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import random
 
-from app.ir.enums import SpaceKind
+from app.ir.enums import Relation, SpaceKind
 from app.ir.envelope import Envelope
 from app.ir.layout import Layout
 from app.ir.plan import Program
@@ -83,6 +83,15 @@ SPINE_FIRST_CANDIDATES = 300
 # other group, so none of them changes. Over eleven plans, with the judge counting zones,
 # it raised zones met from 24 to 28 of 110 at no cost in warnings or time.
 ZONE_SPINE_CANDIDATES = 300
+
+# Stair-first trees for a storey standing on a stair: the stair below's rectangle cut out
+# first, the rooms tiled around it. A group after all the others, so none of them changes.
+SHAFT_FIRST_CANDIDATES = 300
+
+# Trees that put the rooms a brief wants near the entrance first on a corridor running
+# back from the road. Only for a programme with such a request, and after every other
+# group, so no programme without one changes.
+NEAR_FIRST_CANDIDATES = 300
 
 # Tuned candidates to collect before choosing. Was 3, and 3 is too few now that the
 # shortlist interleaves two groups: the first three successes came from whichever
@@ -204,7 +213,19 @@ def shortlist_for(
         if wants_spine_first and any(room.sector is not None for room in rooms)
         else 0
     )
-    total = candidates + road_count + spine_count + zone_count
+    below = (shafts or {}).get(SpaceKind.STAIRCASE)
+    stair_here = next((room for room in rooms if room.kind is SpaceKind.STAIRCASE), None)
+    shaft_count = SHAFT_FIRST_CANDIDATES if below is not None and stair_here is not None else 0
+    shaft_first_indices: set[int] = set()
+    here = {room.id for room in rooms}
+    near_ids = {
+        edge.a for edge in program.adjacencies
+        if edge.relation is Relation.NEAR and edge.a in here and edge.b in here
+        and any(room.id == edge.b and room.kind is SpaceKind.FOYER for room in rooms)
+    }
+    near_count = NEAR_FIRST_CANDIDATES if near_ids and wants_road_first else 0
+    near_first_indices: set[int] = set()
+    total = candidates + road_count + spine_count + zone_count + shaft_count + near_count
 
     for index in range(total):
         # The random pool is generated first and from the same stream as before, so
@@ -224,7 +245,7 @@ def shortlist_for(
                 else slicing.spine_first_tree(rooms, rng, weights)
             )
             spine_first_indices.add(index)
-        else:
+        elif index < candidates + road_count + spine_count + zone_count:
             tree = (
                 slicing.road_first_tree(
                     rooms, rng, weights, road, house_tree=slicing.zone_spine_tree
@@ -233,6 +254,20 @@ def shortlist_for(
                 else slicing.zone_spine_tree(rooms, rng, weights)
             )
             zone_spine_indices.add(index)
+        elif index < candidates + road_count + spine_count + zone_count + shaft_count:
+            tree = slicing.shaft_first_tree(
+                rooms, rng, weights, bounds, stair_here,
+                (below.x_min_m, below.y_min_m, below.x_max_m, below.y_max_m),
+            )
+            if tree is None:
+                continue
+            shaft_first_indices.add(index)
+        else:
+            tree = slicing.road_first_tree(
+                rooms, rng, weights, road,
+                house_tree=lambda body, r, w: slicing.near_spine_tree(body, r, w, road, near_ids),
+            )
+            near_first_indices.add(index)
         placed = slicing.place(tree, *bounds)
         try:
             layout = Layout(
@@ -294,11 +329,16 @@ def shortlist_for(
     # before tuning, for the usual reason that what Stage B fixes is exactly what they
     # look bad on, so ranking alone never showed them to CP-SAT and every plan on a
     # tight plot came back with a bedroom serving as a corridor.
-    grouped = road_first_indices | spine_first_indices | zone_spine_indices
+    grouped = (
+        road_first_indices | spine_first_indices | zone_spine_indices | shaft_first_indices
+        | near_first_indices
+    )
     random_pool = [row for row in scored if row[1] not in grouped]
     road_first = [row for row in scored if row[1] in road_first_indices]
     spine_first = [row for row in scored if row[1] in spine_first_indices]
     zone_spine = [row for row in scored if row[1] in zone_spine_indices]
+    shaft_first = [row for row in scored if row[1] in shaft_first_indices]
+    near_first = [row for row in scored if row[1] in near_first_indices]
     reachable = [row for row in random_pool if not unreachable(row)]
     walkable = [row for row in random_pool if not unwalkable(row)]
     shortlist = _interleave(
@@ -308,6 +348,8 @@ def shortlist_for(
         road_first[:TUNE_SHORTLIST],
         spine_first[:TUNE_SHORTLIST],
         zone_spine[:TUNE_SHORTLIST],
+        shaft_first[:TUNE_SHORTLIST],
+        near_first[:TUNE_SHORTLIST],
     )
     return shortlist
 
@@ -399,6 +441,33 @@ def _interleave(*groups: list) -> list:
                 seen.add(row[1])
                 merged.append(row)
     return merged
+
+
+def _same_flight_as_below(rooms: list, shafts: dict | None) -> list:
+    """Hold a storey's staircase to the stair types the staircase below it holds.
+
+    A building has one stair. The 30x40 stilt plan put a straight flight on the ground
+    floor and a dog-leg above it, both legal, neither over the other: no way up. The
+    shaft pull and the overlap test could see the misalignment and not its cause, which
+    is that nothing said the two storeys were climbing the same stair.
+
+    Measured on the stair below's own rectangle less a full exterior wall each way — a
+    lower bound on its clear size — so a type it holds is never ruled out. If it holds
+    none, that storey is already refused and the rule is left as it was.
+    """
+    below = (shafts or {}).get(SpaceKind.STAIRCASE)
+    if below is None:
+        return rooms
+    allow = 2 * _score.wall_allowance()[0]
+    short, long = sorted((below.x_max_m - below.x_min_m - allow, below.y_max_m - below.y_min_m - allow))
+    out = []
+    for room in rooms:
+        if room.kind is SpaceKind.STAIRCASE and room.min_sizes_m:
+            held = [(a, b) for a, b in room.min_sizes_m if short >= a - 1e-6 and long >= b - 1e-6]
+            if held:
+                room = room.model_copy(update={"min_sizes_m": held})
+        out.append(room)
+    return out
 
 
 def _refused(layout: Layout, program: Program) -> int:
@@ -496,6 +565,7 @@ def solve(
     rooms = program.on_floor(floor)
     if not rooms:
         return []
+    rooms = _same_flight_as_below(rooms, shafts)
 
     # The house, not the envelope. Everything below tiles *this* rectangle — the
     # allocation budget included, or the rooms would be sized for a footprint the

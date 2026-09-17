@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { FloorPlan, type Highlight } from "./FloorPlan";
 import { GRADE_STYLE, bySeverity, gradeOf } from "./grades";
 import type {
-  CirculationGraph, CirculationSummary, Corridor, Dimensions, Journey, PlanBundle, RoomSpec,
+  CirculationGraph, CirculationSummary, Corridor, Dimensions, Finding, Journey, PlanBundle, RoomSpec,
 } from "./types";
 import { feetAndInches, squareFeet } from "./units";
 
@@ -128,7 +128,7 @@ export default function App() {
           ))}
         </div>
 
-        {circulation && <CirculationScore summary={circulation} />}
+        {circulation && <CirculationScore summary={circulation} findings={findings} />}
 
         {findings.length > 0 && (
           <section style={{ marginBottom: 20 }}>
@@ -258,7 +258,10 @@ export default function App() {
   );
 }
 
-function CirculationScore({ summary }: { summary: CirculationSummary }) {
+/** The counts are of every finding on the storey, not the circulation engine's alone: they
+ *  sit above the whole list, and a badge saying 3 major over four major findings reads as
+ *  a bug in the plan rather than a scope in the counter. */
+function CirculationScore({ summary, findings }: { summary: CirculationSummary; findings: Finding[] }) {
   const health = HEALTH[summary.health];
   return (
     <section style={{ marginBottom: 20 }}>
@@ -278,7 +281,7 @@ function CirculationScore({ summary }: { summary: CirculationSummary }) {
       </p>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6 }}>
         {(["critical", "major", "minor"] as const).map((grade) => {
-          const count = summary[grade];
+          const count = findings.filter((f) => gradeOf(f) === grade).length;
           const style = GRADE_STYLE[grade];
           return (
             <div key={grade} style={{ border: "1px solid #e8e8e8", borderRadius: 5, padding: "6px 8px" }}>

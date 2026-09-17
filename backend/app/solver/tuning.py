@@ -42,6 +42,14 @@ _PER_M = 100
 # stair against a wall the shaft is not on: 8.6 to 17.7 m² on the 25x40.
 SHAFT_PULL = 2000
 
+# cm² of target-area deviation one cm of furnishing shortfall is worth. Target areas
+# alone are indifferent to shape: a sum of area deviations is the same for a 2.2 x 4.1 m
+# kitchen and a 1.9 x 4.7 m one, so Stage B handed back strips — a bedroom 7'6" x 19'10"
+# on the 40x60. This prices each cm a room's short or long side falls below the nearest
+# furnishable size, so width is taken from rooms that can spare it. A pull, never a
+# constraint: furnishing is practice, and the law is already the constraints.
+FIT_PULL = 3000
+
 
 @functools.lru_cache(maxsize=1)
 def _exterior_half() -> float:
@@ -68,6 +76,9 @@ def gross_minimum_cm2(spec) -> int:
     if spec.min_length_m:
         # A statutory length forces a longer room than the squarest one of that area.
         gross = max(gross, (spec.min_width_m + allow) * (spec.min_length_m + allow))
+    if spec.min_sizes_m:
+        # So does a shape it must hold — the smallest of its alternatives.
+        gross = max(gross, min((a + allow) * (b + allow) for a, b in spec.min_sizes_m))
     return round(gross * _PER_M * _PER_M)
 
 
@@ -161,7 +172,26 @@ def tune(
             gap = model.NewIntVar(0, 100_000, f"pull_{spec.id}_{n}")
             model.AddAbsEquality(gap, edge - aim)
             pulls.append(gap)
-    model.Minimize(sum(deviations) + SHAFT_PULL * sum(pulls))
+    # **Furniture, as a preference.** Against the smallest furnishable size on each side —
+    # a lower bound over the arrangements, which keeps the model linear; `score` and ⑦
+    # judge the exact fit afterwards. Gross, like the minimums, so the pull asks for the
+    # clear size plus the walls around it.
+    fits = []
+    allow = 2 * _exterior_half()
+    for spec, _, _, _, width, depth in leaves:
+        if not spec.usable_sizes_m:
+            continue
+        want_short = round((min(s for s, _ in spec.usable_sizes_m) + allow) * _PER_M)
+        want_long = round((min(l for _, l in spec.usable_sizes_m) + allow) * _PER_M)
+        shorter = model.NewIntVar(0, 10_000, f"short_{spec.id}")
+        longer = model.NewIntVar(0, 10_000, f"long_{spec.id}")
+        model.AddMinEquality(shorter, [width, depth])
+        model.AddMaxEquality(longer, [width, depth])
+        for side, want in ((shorter, want_short), (longer, want_long)):
+            gap = model.NewIntVar(0, 10_000, f"fit_{spec.id}_{want}")
+            model.Add(gap >= want - side)
+            fits.append(gap)
+    model.Minimize(sum(deviations) + SHAFT_PULL * sum(pulls) + FIT_PULL * sum(fits))
 
     solver = cp_model.CpSolver()
     # Determinism matters more here than the last few percent of quality: a plan you
@@ -251,6 +281,22 @@ def _build(model, node: Node, x0, x1, y0, y1, leaves: list) -> None:
             longer = model.NewIntVar(floor_cm, 10_000, f"l_{spec.id}")
             model.AddMaxEquality(longer, [width, depth])
             model.Add(longer >= round((spec.min_length_m + allow) * _PER_M))
+
+        # A shape the room must hold, as one of several: a staircase's flights fit as a
+        # dog-leg or a straight run. A constraint, not a pull — a stair that holds neither
+        # cannot be climbed — so a boolean per alternative and at least one true.
+        if spec.min_sizes_m:
+            shorter = model.NewIntVar(floor_cm, 10_000, f"min_short_{spec.id}")
+            longer_side = model.NewIntVar(floor_cm, 10_000, f"min_long_{spec.id}")
+            model.AddMinEquality(shorter, [width, depth])
+            model.AddMaxEquality(longer_side, [width, depth])
+            options = []
+            for n, (a, b) in enumerate(spec.min_sizes_m):
+                chosen = model.NewBoolVar(f"shape_{spec.id}_{n}")
+                model.Add(shorter >= round((a + allow) * _PER_M)).OnlyEnforceIf(chosen)
+                model.Add(longer_side >= round((b + allow) * _PER_M)).OnlyEnforceIf(chosen)
+                options.append(chosen)
+            model.AddBoolOr(options)
 
         area = model.NewIntVar(0, 100_000_000, f"a_{spec.id}")
         model.AddMultiplicationEquality(area, [width, depth])

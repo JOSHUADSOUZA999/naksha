@@ -25,11 +25,13 @@ from app.ir.enums import Facing, Grade, OpeningKind, Relation, Severity, SpaceKi
 from app.ir.layout import TOLERANCE_M, Layout
 from app.ir.plan import Program
 from app.ir.refined import RefinedFloor
-from app.ir.units import area_text, length_text
+from app.ir.units import area_text, feet_and_inches, length_text
+from app.rules import load_ruleset
 from app.ir.validation import Finding, Report
 
 CHECKS = [
-    "circulation", "access", "sanitation", "size", "light", "ventilation", "legality",
+    "circulation", "access", "sanitation", "size", "furnish", "stair", "brief", "light",
+    "ventilation", "legality",
 ]
 
 # Where a person sleeps, and where they wash: a storey with the first and none of the
@@ -56,6 +58,9 @@ def validate(layout: Layout, program: Program, floor: RefinedFloor) -> Report:
     # finding, with the why and the fix, not the size check's as well.
     foyers = {room for f in circulation.findings if f.rule == "circulation.foyer" for room in f.rooms}
     findings += [f for f in _size(layout, program, floor) if not set(f.rooms) & foyers]
+    findings += _furnish(layout, program, floor)
+    findings += _stairs(layout, program, floor)
+    findings += _brief(layout, program, floor)
     findings += _light(program, floor)
     findings += _ventilation(program, floor)
     findings += _legality(program, floor)
@@ -275,7 +280,13 @@ def judge(program: Program, envelope=None):
     two candidates with one error each, a car bay off the road and a foyer with no street
     wall, and the lower penalty chose the house nobody could walk into.
 
-    **Among major findings, a major is a major.** Ranked ahead of the others, circulation
+    **What the brief asked for comes before every other major.** "My parents need a
+    bedroom near the entrance" is the one thing the owner said; ranked as one major among
+    many, the judge chose a 40x60 with three circulation majors and the parents at the
+    back over one with four circulation majors and the parents by the door. A storey that
+    ignores its brief is still a house, so it ranks after refusals, not with them.
+
+    **Among the other major findings, a major is a major.** Ranked ahead of the others, circulation
     majors bought one fewer each with a bedroom that had no window at all on the 30x40
     2BHK and a hall with none on the 50x80; counted together, the 14 benchmark plans kept
     both windows, met two more Vastu zones, and failed and found exactly as much.
@@ -313,6 +324,7 @@ def judge(program: Program, envelope=None):
             layout.unbuildable,
             _without_access(report, graded["circulation", Grade.CRITICAL]),
             graded["other", Grade.CRITICAL],
+            len(report.by_check("brief")),
             graded["circulation", Grade.MAJOR] + graded["other", Grade.MAJOR],
             missed_zones,
             -quality,
@@ -558,4 +570,151 @@ def _size(layout: Layout, program: Program, floor: RefinedFloor) -> list[Finding
                     rooms=[placed.room_id],
                 )
             )
+    return findings
+
+
+def _furnish(layout: Layout, program: Program, floor: RefinedFloor) -> list[Finding]:
+    """A legal room that cannot hold what it is for.
+
+    Every room here passed its area, width and aspect limits, and the JP Nagar 40x60 still
+    drew a 6'3" x 15'6" kitchen, a 7'3" x 15'6" dining room and an 8'1" wide hall. The
+    bye-laws do not say a bedroom must hold a bed, so this is never refused: a foot or
+    more short of the nearest arrangement is major — the furniture does not go in — and
+    less is minor, a clearance squeezed. Measured inside the plaster, like the minimums.
+    """
+    rules = load_ruleset("furnish_v1").data
+    major_m = rules["grading"]["major_shortfall_m"]
+    tolerance_m = rules["grading"]["tolerance_m"]
+    findings: list[Finding] = []
+    for spec in program.rooms:
+        rect = floor.clear.get(spec.id)
+        if rect is None or not spec.usable_sizes_m:
+            continue
+        width, depth = rect[2] - rect[0], rect[3] - rect[1]
+        short_m = spec.furnishing_shortfall_m(width, depth)
+        if short_m <= tolerance_m:
+            continue
+        need = min(
+            spec.usable_sizes_m,
+            key=lambda size: max(0.0, size[0] - min(width, depth), size[1] - max(width, depth)),
+        )
+        holds = (
+            rules["rooms"][spec.kind.value]["holds"] if spec.kind.value in rules["rooms"]
+            # A stair's comfortable size is its flights at an easy rise, from stairs_v1.
+            else "a stair at a 175 mm rise an elderly parent climbs without resting"
+        )
+        major = short_m > major_m
+        findings.append(
+            Finding(
+                check="furnish",
+                severity=Severity.WARNING,
+                grade=Grade.MAJOR if major else Grade.MINOR,
+                rule="furnish.fit",
+                message=(
+                    f"{spec.id} is {feet_and_inches(min(width, depth))} x "
+                    f"{feet_and_inches(max(width, depth))} inside its walls; "
+                    f"{holds} needs {feet_and_inches(need[0])} x {feet_and_inches(need[1])}"
+                ),
+                rooms=[spec.id],
+                why=(
+                    f"Legal, and {length_text(short_m)} short of the furniture it exists for"
+                    + (" — it does not go in." if major else " — it goes in with too little room to use it.")
+                ),
+                fix=(
+                    f"Widen the {spec.kind.value.replace('_', ' ')} at the expense of a room with "
+                    "space to spare, or exchange it with a better-proportioned room."
+                ),
+            )
+        )
+    return findings
+
+
+def _stairs(layout: Layout, program: Program, floor: RefinedFloor) -> list[Finding]:
+    """A staircase whose flights cannot be drawn clear of its doors.
+
+    Stage ⑥ draws a stair's flights wherever no door opens onto the steps; a stair it
+    could not draw is one every arrangement of which puts a doorway on a tread — you
+    step out of a door onto the eleventh step. Major rather than critical: the stair
+    exists and is legal in size, and moving a door fixes it. A stair below its legal
+    shape is legality's finding, not this one.
+    """
+    from app.refine import breaches
+
+    illegal = {message.split()[0] for message in breaches(floor, program)}
+    drawn = {f.room_id for f in floor.fixtures if f.kind.value == "flight"}
+    findings = []
+    for spec in program.rooms:
+        if spec.kind is not SpaceKind.STAIRCASE or spec.id not in floor.clear:
+            continue
+        if spec.id in drawn or spec.id in illegal:
+            continue
+        findings.append(
+            Finding(
+                check="stair",
+                severity=Severity.WARNING,
+                grade=Grade.MAJOR,
+                rule="stair.door_onto_steps",
+                message=f"a door into {spec.id} opens onto its steps: no flight fits clear of it",
+                rooms=[spec.id],
+                why="A door must open onto a landing. Stepping through a doorway onto a tread is how people fall.",
+                fix="Move the door to the foot of the flight or to the landing, or turn the stair.",
+            )
+        )
+    return findings
+
+
+def _brief(layout: Layout, program: Program, floor: RefinedFloor) -> list[Finding]:
+    """What the brief asked for that the drawing does not give.
+
+    A brief's "my parents are elderly and need a bedroom near the entrance" reached stage
+    ③ as a floor assignment and a sentence in `why`, and nothing downstream acted on the
+    sentence: JP Nagar drew the parents' bedroom at the back of the house. Stage ③ now
+    writes it as a `NEAR` edge, and this walks it through the doors, the way the
+    circulation engine walks every journey: near is `circulation_v1.near.max_walk_m`.
+
+    Major: a house that ignores the one thing its owner asked for is not a small miss.
+    """
+    from app.circulation.graph import build
+    from app.circulation.routes import best_route
+    from app.circulation.semantics import data as circulation_rules
+
+    placed = {room.room_id for room in layout.rooms}
+    near = [
+        edge for edge in program.adjacencies
+        if edge.relation is Relation.NEAR and edge.a in placed and edge.b in placed
+    ]
+    if not near:
+        return []
+    limit = circulation_rules()["near"]["max_walk_m"]
+    graph = build(layout, program, floor)
+    findings = []
+    for edge in near:
+        route = best_route(graph, edge.b, edge.a)
+        # A proper walk only: through a pooja room or another bedroom is a short way
+        # nobody should take. Through the hall is how a house is walked (minor).
+        proper = route is not None and route.worst in (None, Grade.MINOR)
+        if proper and route.distance_m <= limit:
+            continue
+        if route is None:
+            walk = "no way between them"
+        elif not proper:
+            walk = f"the only short way crosses {', '.join(route.hosts)}"
+        else:
+            walk = f"a {route.distance_m:.1f} m walk"
+        findings.append(
+            Finding(
+                check="brief",
+                severity=Severity.WARNING,
+                grade=Grade.MAJOR,
+                rule="brief.near",
+                message=(
+                    f"{edge.a} is not near {edge.b}, which the brief asked for: {walk}, "
+                    f"against {limit:.0f} m"
+                ),
+                rooms=sorted([edge.a, edge.b]),
+                why="The brief asked for these rooms a few steps apart — for a parent who "
+                    "should not cross the house, or a room a visitor should reach at once.",
+                fix=f"Open {edge.a} off the space {edge.b} opens onto, or move it beside {edge.b}.",
+            )
+        )
     return findings

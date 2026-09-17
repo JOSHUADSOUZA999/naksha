@@ -233,6 +233,7 @@ export function FloorPlan({
               {f.kind === "wardrobe" && (
                 <Line points={[tl.x, tl.y, br.x, br.y]} stroke="#8a8a8a" strokeWidth={1} />
               )}
+              {f.kind === "flight" && <Treads f={f} tl={tl} br={br} scale={scale} />}
               <Rect x={tl.x} y={tl.y} width={w} height={h} stroke="#8a8a8a" strokeWidth={1} />
             </Group>
           );
@@ -361,5 +362,36 @@ export function FloorPlan({
         )}
       </Layer>
     </Stage>
+  );
+}
+
+/** A stair flight: a tread line every 250 mm across the way it climbs, and an arrow up the
+ *  middle — the mark that makes a rectangle read as a stair and says which way is up.
+ *  Mirrors `_treads` in export/svg.py. */
+function Treads({ f, tl, br, scale }: {
+  f: Fixture; tl: { x: number; y: number }; br: { x: number; y: number }; scale: number;
+}) {
+  const tread = 0.25 * scale;
+  const lines: number[][] = [];
+  const horizontal = f.faces === "east" || f.faces === "west";
+  if (horizontal) {
+    for (let x = tl.x + tread; x < br.x - 1; x += tread) lines.push([x, tl.y, x, br.y]);
+  } else {
+    for (let y = tl.y + tread; y < br.y - 1; y += tread) lines.push([tl.x, y, br.x, y]);
+  }
+  const cx = (tl.x + br.x) / 2;
+  const cy = (tl.y + br.y) / 2;
+  // Screen y runs down, so climbing north is up the page.
+  const arrow = horizontal
+    ? (f.faces === "east" ? [tl.x + 3, cy, br.x - 3, cy] : [br.x - 3, cy, tl.x + 3, cy])
+    : (f.faces === "north" ? [cx, br.y - 3, cx, tl.y + 3] : [cx, tl.y + 3, cx, br.y - 3]);
+  return (
+    <>
+      {lines.map((points, i) => (
+        <Line key={i} points={points} stroke="#8a8a8a" strokeWidth={1} />
+      ))}
+      <Arrow points={arrow} stroke="#555" fill="#555" strokeWidth={1}
+             pointerLength={5} pointerWidth={5} />
+    </>
   );
 }
