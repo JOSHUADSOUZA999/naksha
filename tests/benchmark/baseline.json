@@ -4,7 +4,7 @@
     "spaces_v1": "spaces_v1@06190d",
     "refine_v1": "refine_v1@fc9e8e",
     "setbacks_v1": "setbacks_v1@90b243",
-    "circulation_v1": "circulation_v1@b90995",
+    "circulation_v1": "circulation_v1@6733a9",
     "furnish_v1": "furnish_v1@d1af40",
     "stairs_v1": "stairs_v1@96e800"
   },
@@ -42,7 +42,7 @@
       "unfurnished_major": 3,
       "furnish_short_m": 5.11,
       "geometry": "5b4bab1728cceac1e7574dbf6da79092fed4ae06dc21c20f16fb4340cdc9bd55",
-      "seconds": 0.77
+      "seconds": 0.8
     },
     {
       "id": "25x40-2bhk",
@@ -73,7 +73,7 @@
       "unfurnished_major": 0,
       "furnish_short_m": 0.2,
       "geometry": "8969f963664da9cbe2c4777e4adec81a7fec6303accbb6a5bbd8432f7381b960",
-      "seconds": 4.14
+      "seconds": 4.16
     },
     {
       "id": "30x30-2bhk",
@@ -105,7 +105,7 @@
       "unfurnished_major": 1,
       "furnish_short_m": 0.77,
       "geometry": "9308762c26870d42faed9638f4ec11cf179f2523d5719710f89d147bb2fd7618",
-      "seconds": 1.42
+      "seconds": 1.41
     },
     {
       "id": "30x40-2bhk",
@@ -134,7 +134,7 @@
       "unfurnished_major": 3,
       "furnish_short_m": 1.91,
       "geometry": "36ce910299970d78fd29b92ba708ef27279377138a5c7fd47b650df136c3ddff",
-      "seconds": 4.63
+      "seconds": 4.62
     },
     {
       "id": "30x40-3bhk",
@@ -199,38 +199,39 @@
       "furnishable": 12,
       "unfurnished_major": 0,
       "furnish_short_m": 0.69,
-      "geometry": "9f4880393e5cb7cfe5acdafdd902530aaa69c29ab0ca10d91055894559037e0d",
-      "seconds": 1.87
+      "geometry": "0e2ef50df519ae39ebfa883a29e7c29e1407838f3e7b5635fb1b02ba2517e09d",
+      "seconds": 1.88
     },
     {
       "id": "30x50-3bhk",
       "floors": 1,
-      "errors": 2,
-      "warnings": 7,
-      "major": 4,
-      "minor": 3,
+      "errors": 1,
+      "warnings": 12,
+      "major": 10,
+      "minor": 2,
       "by_check": {
-        "circulation": 3,
-        "furnish": 5,
-        "light": 1
+        "circulation": 6,
+        "furnish": 3,
+        "light": 2,
+        "sanitation": 2
       },
-      "zones_met": 2,
+      "zones_met": 1,
       "zones_wanted": 8,
-      "two_sided_air": 1,
+      "two_sided_air": 2,
       "air_rooms": 6,
-      "no_air": 1,
+      "no_air": 2,
       "baths_vented": 2,
       "baths": 2,
       "circulation_failed": 1,
       "circulation_scores": [
-        29.6
+        28.1
       ],
-      "furnished": 3,
+      "furnished": 4,
       "furnishable": 8,
-      "unfurnished_major": 3,
-      "furnish_short_m": 1.71,
-      "geometry": "f67e4642da081faec78d9b5b08062816d72b10a56f9cea22aa7f7826ff823dc5",
-      "seconds": 4.97
+      "unfurnished_major": 2,
+      "furnish_short_m": 1.14,
+      "geometry": "ba7547d0ef1d9020734ec8c34fb2f9782ce64ae826c3aac916cf474c507bb4dc",
+      "seconds": 4.96
     },
     {
       "id": "40x60-3bhk",
@@ -259,7 +260,7 @@
       "unfurnished_major": 0,
       "furnish_short_m": 0.19,
       "geometry": "c4006dac8a5cb2af1330125310aa596dacd685c86c8a71d347876f4b6670388c",
-      "seconds": 2.16
+      "seconds": 2.23
     },
     {
       "id": "50x80-4bhk",
@@ -289,7 +290,7 @@
       "unfurnished_major": 0,
       "furnish_short_m": 0.47,
       "geometry": "d748ffa3f6bd3de32d2670fc3a1e6c562eeaa8a17d2216514062aa6a11547b03",
-      "seconds": 2.71
+      "seconds": 2.77
     },
     {
       "id": "model-30x40-3bhk",
@@ -318,7 +319,7 @@
       "unfurnished_major": 0,
       "furnish_short_m": 0.0,
       "geometry": "b5de753df42d12640222dc2f48574c8b0b6e5af96750a9944dae956a12e36985",
-      "seconds": 1.4
+      "seconds": 1.42
     },
     {
       "id": "model-30x50-3bhk",
@@ -347,7 +348,7 @@
       "unfurnished_major": 0,
       "furnish_short_m": 0.0,
       "geometry": "7055bb66bc1ed369efdae24baeb26e4095db7e06d36559f06d57e5645ce49dac",
-      "seconds": 3.0
+      "seconds": 3.03
     },
     {
       "id": "model-40x60-joint-family",
@@ -377,7 +378,7 @@
       "unfurnished_major": 0,
       "furnish_short_m": 0.14,
       "geometry": "f683cbcb16b0b34112ad8d5c86812aa686945d3d29d60dcf0f5cf9986cbe866b",
-      "seconds": 3.7
+      "seconds": 3.73
     },
     {
       "id": "live-whitefield-30x40-3bhk",
@@ -406,7 +407,7 @@
       "unfurnished_major": 0,
       "furnish_short_m": 0.0,
       "geometry": "aba9b03e0c41eb54329b366296f8de4cbe7102899b19e1da70d44f890ca42fd3",
-      "seconds": 1.43
+      "seconds": 1.47
     },
     {
       "id": "live-jpnagar-40x60-4bhk",
@@ -435,7 +436,7 @@
       "unfurnished_major": 0,
       "furnish_short_m": 0.0,
       "geometry": "4b7e66954a2dc41473c4f7c3e8dd0510973d3fe086a50d90bf69aeeb5a0f4e5a",
-      "seconds": 3.96
+      "seconds": 3.93
     }
   ]
 }

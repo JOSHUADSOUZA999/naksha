@@ -217,6 +217,13 @@ def _walls_and_openings(refined: RefinedFloor, layout: Layout, px) -> list[str]:
                 f'<line x1="{ax:.1f}" y1="{ay:.1f}" x2="{bx:.1f}" y2="{by:.1f}" '
                 f'stroke="#3f6f8f" stroke-width="1.4" stroke-dasharray="2 2"/>'
             )
+        elif opening.kind is OpeningKind.OPEN:
+            # No wall at all: a faint dotted line where one room becomes the other, the
+            # way a plan marks a change of use across an open floor.
+            arcs.append(
+                f'<line x1="{ax:.1f}" y1="{ay:.1f}" x2="{bx:.1f}" y2="{by:.1f}" '
+                f'stroke="#c4c4c4" stroke-width="1" stroke-dasharray="1 4"/>'
+            )
         elif opening.kind is OpeningKind.VEHICLE:
             # The car bay's opening: no leaf and no glass, so a dashed line across the gap
             # — the convention for an opening with nothing in it.

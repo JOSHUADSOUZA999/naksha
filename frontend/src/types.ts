@@ -55,7 +55,7 @@ export interface Wall {
  *  carried its own coordinates could drift away from the wall it is a hole in. */
 export interface Opening {
   wall_id: string;
-  kind: "door" | "entrance" | "window" | "vehicle" | "ventilator";
+  kind: "door" | "entrance" | "window" | "vehicle" | "ventilator" | "open";
   offset_m: number;
   width_m: number;
   height_m: number | null;

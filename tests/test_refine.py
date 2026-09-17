@@ -716,7 +716,9 @@ class TestTheSpineIsConnectedBeforeAnythingElse:
             pytest.skip("upper storeys are entered off the stair, tested in ⑦")
         graph: dict[str, set[str]] = {}
         for opening in floor.openings:
-            if opening.kind is OpeningKind.DOOR and set(opening.connects) <= through:
+            # An open wall is a passage as much as a door is: a hall open to its dining
+            # room is reached through that opening.
+            if opening.kind in (OpeningKind.DOOR, OpeningKind.OPEN) and set(opening.connects) <= through:
                 a, b = opening.connects
                 graph.setdefault(a, set()).add(b)
                 graph.setdefault(b, set()).add(a)

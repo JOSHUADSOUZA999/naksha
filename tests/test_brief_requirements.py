@@ -33,7 +33,7 @@ def _row(*rooms):
 
 class TestTheModelIsToldHowToSayIt:
     def test_the_prompt_teaches_near(self):
-        prompt = load_prompt("program_v2")
+        prompt = load_prompt("program_v3")
         assert "near" in prompt.text and "foyer" in prompt.text
 
     def test_the_limit_is_data(self):
@@ -124,3 +124,21 @@ class TestStageSevenWalksIt:
         assert source.index('len(report.by_check("brief"))') < source.index(
             'graded["circulation", Grade.MAJOR] + graded["other", Grade.MAJOR]'
         )
+
+
+class TestTheModelCannotAskForTheImpossible:
+    def test_a_car_bay_near_the_foyer_is_dropped_at_the_merge(self):
+        """The live model asked for one beside the parents' bedroom. A bay has no door into
+        the house, so no walk could ever meet it; the parents' request survives."""
+        from app.ir.plan import ProgramDraft, RoomRequest
+        from app.llm.program import _merge
+
+        draft = ProgramDraft(
+            rooms=[RoomRequest(id="foyer", kind=SpaceKind.FOYER),
+                   RoomRequest(id="bed1", kind=SpaceKind.BEDROOM),
+                   RoomRequest(id="park1", kind=SpaceKind.CAR_PARKING)],
+            adjacencies=[AdjacencySpec(a="bed1", b="foyer", relation=Relation.NEAR, hard=True),
+                         AdjacencySpec(a="park1", b="foyer", relation=Relation.NEAR, hard=True)],
+        )
+        near = [(e.a, e.b) for e in _merge(draft).adjacencies if e.relation is Relation.NEAR]
+        assert near == [("bed1", "foyer")]

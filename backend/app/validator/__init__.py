@@ -90,6 +90,13 @@ def _light(program: Program, floor: RefinedFloor) -> list[Finding]:
     fraction = windows["area_fraction"]
     habitable = set(windows["habitable_kinds"])
     findings: list[Finding] = []
+    # A room open to another is one space and takes its light through either part.
+    partners: dict[str, set[str]] = {}
+    for opening in floor.openings:
+        if opening.kind is OpeningKind.OPEN and len(opening.connects) == 2:
+            a, b = opening.connects
+            partners.setdefault(a, set()).add(b)
+            partners.setdefault(b, set()).add(a)
 
     for room in program.rooms:
         if not room.needs_exterior_wall or room.id not in floor.clear:
@@ -103,6 +110,15 @@ def _light(program: Program, floor: RefinedFloor) -> list[Finding]:
         glazed = floor.window_area_sq_m(room.id)
         if area <= 0 or glazed >= area * fraction - 1e-6:
             continue
+        space = partners.get(room.id, set()) | {room.id}
+        if len(space) > 1:
+            # Short on its own, judged with the room it is open to: one space, lit through
+            # either part. Only ever a rescue — a room glazed to the fraction by itself is
+            # not failed for the dining room beside it.
+            area = sum(floor.clear_area_sq_m(r) or 0.0 for r in space)
+            glazed = sum(floor.window_area_sq_m(r) for r in space)
+            if glazed >= area * fraction - 1e-6:
+                continue
 
         if glazed <= 0 and room.kind.value in habitable:
             # **A room people live in with no window at all is refused.** Glazed short of
@@ -586,9 +602,34 @@ def _furnish(layout: Layout, program: Program, floor: RefinedFloor) -> list[Find
     major_m = rules["grading"]["major_shortfall_m"]
     tolerance_m = rules["grading"]["tolerance_m"]
     findings: list[Finding] = []
+    # Rooms open to each other are one space and judged as one: a 2.5 m hall beside a
+    # 2.2 m dining room with no wall between is a 4.8 m room, not two strips.
+    from app.solver.score import _open_pairs
+
+    open_rooms: set[str] = set()
+    for a_id, b_id, short_m in _open_pairs(layout, program):
+        open_rooms |= {a_id, b_id}
+        if short_m <= tolerance_m:
+            continue
+        major = short_m > major_m
+        findings.append(
+            Finding(
+                check="furnish",
+                severity=Severity.WARNING,
+                grade=Grade.MAJOR if major else Grade.MINOR,
+                rule="furnish.open",
+                message=(
+                    f"{a_id} and {b_id}, open to each other, are {length_text(short_m)} short "
+                    f"of room for both sets of furniture side by side"
+                ),
+                rooms=sorted([a_id, b_id]),
+                why="One space still has to hold what each part of it is for.",
+                fix=f"Deepen the {a_id} and {b_id} together, or give one of them more of the width.",
+            )
+        )
     for spec in program.rooms:
         rect = floor.clear.get(spec.id)
-        if rect is None or not spec.usable_sizes_m:
+        if rect is None or not spec.usable_sizes_m or spec.id in open_rooms:
             continue
         width, depth = rect[2] - rect[0], rect[3] - rect[1]
         short_m = spec.furnishing_shortfall_m(width, depth)

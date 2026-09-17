@@ -82,6 +82,10 @@ def build(layout: Layout, program: Program, floor: RefinedFloor) -> CirculationG
             kind = EdgeKind.SERVICE_CONNECTION if service else EdgeKind.DIRECT_DOOR
             edges.append(CirculationEdge(a=a, b=b, kind=kind, **where))
             doored.add(wall.id)
+        elif opening.kind is OpeningKind.OPEN and len(opening.connects) == 2:
+            a, b = opening.connects
+            edges.append(CirculationEdge(a=a, b=b, kind=EdgeKind.OPEN_CONNECTION, **where))
+            doored.add(wall.id)
         elif opening.kind is OpeningKind.ENTRANCE:
             edges.append(
                 CirculationEdge(

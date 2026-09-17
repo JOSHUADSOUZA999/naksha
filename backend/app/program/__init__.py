@@ -440,7 +440,9 @@ def _wire(
     # stage ⑤ cannot satisfy and would outvote things that matter more.
     if dining in room_ids:
         edges.append(
-            AdjacencySpec(a=hall, b=dining, relation=Relation.CONNECTED, hard=False)
+            # Open, not a door: one living and dining space, the way most new Indian
+            # houses are planned. Behind a door the two came out as strips side by side.
+            AdjacencySpec(a=hall, b=dining, relation=Relation.OPEN, hard=False)
         )
 
     _OFF_THE_KITCHEN = {SpaceKind.UTILITY, SpaceKind.STORE}

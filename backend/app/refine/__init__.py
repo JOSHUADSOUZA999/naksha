@@ -166,6 +166,19 @@ def _doors(
     openings: list[Opening] = []
 
     between = {frozenset(w.rooms): w for w in walls if w.kind is WallKind.INTERIOR}
+    # Open first: a wall that is not built takes no door, and nothing else may claim it.
+    for edge in program.adjacencies:
+        if edge.relation is not Relation.OPEN:
+            continue
+        wall = between.get(frozenset({edge.a, edge.b}))
+        if wall is None:
+            continue
+        openings.append(
+            Opening(
+                wall_id=wall.id, kind=OpeningKind.OPEN, offset_m=wall.length_m / 2,
+                width_m=wall.length_m, connects=[edge.a, edge.b],
+            )
+        )
     for edge in program.adjacencies:
         if edge.relation is not Relation.CONNECTED:
             continue
@@ -999,7 +1012,7 @@ def _connect(
     reached = {origin}
     graph: dict[str, set[str]] = {}
     for opening in openings:
-        if opening.kind is OpeningKind.DOOR and len(opening.connects) == 2:
+        if opening.kind in (OpeningKind.DOOR, OpeningKind.OPEN) and len(opening.connects) == 2:
             a, b = opening.connects
             graph.setdefault(a, set()).add(b)
             graph.setdefault(b, set()).add(a)

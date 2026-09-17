@@ -22,6 +22,7 @@ from typing import Any
 from app.config import Settings, get_settings
 from app.ir.envelope import Envelope
 from app.ir.models import Brief
+from app.ir.enums import Relation
 from app.ir.plan import Program, ProgramDraft
 from app.llm.client import Prompt, load_prompt
 from app.llm.errors import SchemaRetriesExhausted
@@ -34,7 +35,7 @@ from app.llm.providers import (
 from app.llm.trace import trace_span
 from app.program import apply_site_choices, expand, spec_for
 
-PROMPT_VERSION = "program_v2"
+PROMPT_VERSION = "program_v3"
 
 
 def build_program(
@@ -169,7 +170,16 @@ def _merge(draft: ProgramDraft) -> Program:
         )
         for request in draft.rooms
     ]
-    return Program(rooms=rooms, adjacencies=draft.adjacencies)
+    # `near` is a walk, and nobody walks to a room with no door into the house. The live
+    # model asked for a car bay near the foyer beside the parents' bedroom; a porch is
+    # entered from the street, so that request could never be met and would only be
+    # reported. Dropped here rather than trusted to the prompt alone.
+    walked = {room.id for room in rooms if room.needs_door}
+    adjacencies = [
+        edge for edge in draft.adjacencies
+        if edge.relation is not Relation.NEAR or {edge.a, edge.b} <= walked
+    ]
+    return Program(rooms=rooms, adjacencies=adjacencies)
 
 
 def _correction(exc: ProviderOutputInvalid) -> str:

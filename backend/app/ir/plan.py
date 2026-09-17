@@ -311,3 +311,31 @@ class ProgramDraft(BaseModel):
 
     rooms: list[RoomRequest] = Field(min_length=1)
     adjacencies: list[AdjacencySpec] = Field(default_factory=list)
+
+
+def open_pair_shortfall_m(
+    sizes_a: list[tuple[float, float]],
+    sizes_b: list[tuple[float, float]],
+    across_m: float,
+    along_m: float,
+) -> float:
+    """How far two rooms open to each other are from holding both rooms' furniture.
+
+    `across_m` is both rooms' clear depth away from the open wall added together, with
+    the wall that is not built; `along_m` is the length of wall they share. The two sets
+    of furniture may sit side by side across the space or one behind the other along it —
+    a sofa zone, then a table zone — and each may be turned either way. Only side by side
+    was tried first, and it called a 15'10" x 17'6" living and dining room half a metre
+    short of a sofa and a table for six. 0 when either room has nothing to fit.
+    """
+    if not sizes_a or not sizes_b:
+        return 0.0
+    best = float("inf")
+    for a_short, a_long in sizes_a:
+        for b_short, b_long in sizes_b:
+            for xa, ya in ((a_short, a_long), (a_long, a_short)):
+                for xb, yb in ((b_short, b_long), (b_long, b_short)):
+                    side_by_side = max(0.0, xa + xb - across_m, ya - along_m, yb - along_m)
+                    in_line = max(0.0, ya + yb - along_m, xa - across_m, xb - across_m)
+                    best = min(best, side_by_side, in_line)
+    return best

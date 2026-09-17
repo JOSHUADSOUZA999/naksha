@@ -265,6 +265,7 @@ export function FloorPlan({
           const isWindow = op.kind === "window";
           const isVehicle = op.kind === "vehicle";
           const isVentilator = op.kind === "ventilator";
+          const isOpen = op.kind === "open";
           const room = op.connects.length ? layout.rooms.find(
             (r) => r.room_id === op.connects[op.connects.length - 1]) : undefined;
 
@@ -310,6 +311,10 @@ export function FloorPlan({
                 // A ventilator: the window's colour, dotted — the SVG renderer's mark.
                 <Line points={[a.x, a.y, b.x, b.y]} stroke="#3f6f8f" strokeWidth={1.4}
                       dash={[2, 2]} />
+              ) : isOpen ? (
+                // No wall: a faint dotted line where one room becomes the other.
+                <Line points={[a.x, a.y, b.x, b.y]} stroke="#c4c4c4" strokeWidth={1}
+                      dash={[1, 4]} />
               ) : isVehicle ? (
                 // The car bay's opening: no leaf and no glass, just the gap, dashed — the
                 // same convention the SVG renderer uses.

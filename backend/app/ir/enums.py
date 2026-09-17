@@ -170,6 +170,10 @@ class Relation(StrEnum):
     # entrance" — a parent's bedroom a few steps from the front door, not necessarily
     # sharing its wall, and never a door nobody asked for.
     NEAR = "near"
+    # One space in two rectangles: they share a wall and no wall is built in it. The living
+    # and dining room of most new Indian houses, which a slicing tree otherwise cuts into
+    # two strips side by side.
+    OPEN = "open"
 
 
 class WallKind(StrEnum):
@@ -202,6 +206,8 @@ class OpeningKind(StrEnum):
     # `WINDOW`, because the bye-laws hold it to an area of its own rather than a tenth of
     # the floor, and because it is built differently: above head height, so nobody sees in.
     VENTILATOR = "ventilator"
+    # No wall at all between two rooms that are one space: the whole shared wall, open.
+    OPEN = "open"
 
 
 class FixtureKind(StrEnum):

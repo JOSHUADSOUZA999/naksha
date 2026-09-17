@@ -1081,6 +1081,55 @@ JP Nagar through the live model: the parents' bedroom a 7.6 m walk from the foye
 corridor → bedroom, no brief finding; ground floor 0 critical, 4 major; first floor clean.
 No benchmark plan has a `near` edge, so none changed.
 
+### Tandem parking, measured and not kept
+
+Phase 7 began from a diagnosis that was wrong. JP Nagar's two bays took 7.8 m of a 10.2 m
+frontage, and the hall, kitchen and dining room behind them were strips, so tandem
+parking — two cars in line in one 3 x 12 m bay, one gate on the short side — looked like
+the fix. Measured on the three two-bay programmes, side by side against tandem:
+
+| programme | major | minor | zones | furnished |
+|---|---|---|---|---|
+| live JP Nagar 4BHK | 2 → 5 | 2 → 3 | 4 → 3 | 13 → 13 |
+| model joint family | 2 → 7 | 4 → 7 | 2 → 4 | 11 → 9 |
+| JP Nagar, the viewer's | 4 → 8 | 5 → 4 | 5 → 1 | 10 → 11 |
+
+Every added major was circulation: beside a 12 m bay the house becomes a long band entered
+through its kitchen and stair. The strips were never the parking's doing — they are three
+rooms sharing one band of the slicing tree — so tandem was reverted, and phase 8's open
+living and dining space is the answer to them.
+
+### Living and dining as one space
+
+Phase 8. The strips JP Nagar's tandem experiment could not fix are three rooms sharing
+one band of a slicing tree: a hall 8'3" wide beside a dining room 7'3" wide, each 17'6"
+deep. An architect does not wall those apart. `Relation.OPEN` keeps them two rectangles —
+no tree changes — and everything after reads one space:
+
+- ⑥ builds no wall: an `OpeningKind.OPEN` the length of the shared wall, drawn as a faint
+  dotted line. ⑥'s own walk, the circulation engine (`OPEN_CONNECTION`, already in its
+  vocabulary) and the solver's near-walk all pass through it.
+- **Furnished as one.** `open_pair_shortfall_m` fits both rooms' arrangements in the pair,
+  side by side across the open wall or one behind the other along it. Side by side alone
+  called a 15'10" x 17'6" living and dining room half a metre short of a sofa and a table.
+- **Lit as one, as a rescue only.** A hall with no window of its own, open to a glazed
+  dining room, is not refused; a room glazed to the fraction by itself is never failed for
+  the room beside it — judging the pair only failed a glazed hall.
+- The offline expansion writes hall **open** to dining; `program_v3` tells the model to,
+  unless the brief asks for a separate dining room. `_merge` now drops a `near` edge to a
+  room with no door into the house: the live model asked for a car bay near the foyer.
+
+Measured with every hall–dining edge opened, against the same code with them closed:
+errors 21 → 20, minor 55 → 54, two-sided air 36 → 37, furnished 104 → 105, shortfall
+13.1 → 12.5 m, zones 36 → 35, majors 44 → 50 — all six on the 30x50, refused before and
+after, which chose a different failing plan. The recorded model programmes still say
+`connected`, so only offline cases changed in the baseline.
+
+Live, the model's programme differs run to run. One JP Nagar run gave the ground floor 4
+majors with the parents' room 7.6 m from the door; the next added a store, put the kitchen
+between the hall and dining room so the open wall could not be built, and scored 8 majors
+with the parents' room at 8.7 m. Both first floors were clean.
+
 ---
 
 ## Corrections to things I got wrong

@@ -160,6 +160,17 @@ def score(layout: Layout, program: Program) -> tuple[int, float, list[str]]:
             unbuildable += 1
         reasons.append(reason)
 
+    # Rooms open to each other are furnished as one space, below; not one strip at a time.
+    open_pairs = _open_pairs(layout, program)
+    open_rooms = {room for pair in open_pairs for room in pair[:2]}
+    for a_id, b_id, short_m in open_pairs:
+        if short_m > _furnish_tolerance():
+            fail(
+                min(FURNISH_CAP, FURNISH_PER_M * short_m),
+                f"{a_id} and {b_id}, open to each other, are {length_text(short_m)} short "
+                f"of the furniture they are for",
+            )
+
     for placed in layout.rooms:
         spec = specs.get(placed.room_id)
         if spec is None:
@@ -229,13 +240,22 @@ def score(layout: Layout, program: Program) -> tuple[int, float, list[str]]:
         # **Legal is not usable.** A 1.9 x 4.7 m kitchen clears every minimum and holds
         # no working aisle. Stage ⑦ reports it; pricing it here is what lets the search
         # avoid it, since ⑦ only ever chooses among plans the search already made.
-        short_m = spec.furnishing_shortfall_m(*clear_sides(placed, layout))
+        short_m = (
+            0.0 if placed.room_id in open_rooms
+            else spec.furnishing_shortfall_m(*clear_sides(placed, layout))
+        )
         if short_m > _furnish_tolerance():
             fail(
                 min(FURNISH_CAP, FURNISH_PER_M * short_m),
                 f"{spec.id} is {length_text(short_m)} short of the furniture it is for",
             )
-        if spec.needs_exterior_wall and not _on_the_boundary(placed, layout):
+        if spec.needs_exterior_wall and not _on_the_boundary(placed, layout) and not any(
+            # Open to a room that has one: one space, lit through either part.
+            placed.room_id in pair[:2] and _on_the_boundary(
+                layout.by_id(pair[1] if pair[0] == placed.room_id else pair[0]), layout
+            )
+            for pair in open_pairs
+        ):
             fail(
                 STRUCTURAL,
                 f"{spec.id} has no external wall, so no window",
@@ -463,6 +483,38 @@ def _centre_distance(a, b) -> float:
     return abs(ax - bx) + abs(ay - by)
 
 
+def _open_pairs(layout: Layout, program: Program) -> list[tuple[str, str, float]]:
+    """`(a, b, shortfall)` for every `OPEN` edge whose rooms share a wall."""
+    from app.ir.plan import open_pair_shortfall_m
+
+    placed = {room.room_id: room for room in layout.rooms}
+    specs = {room.id: room for room in program.rooms}
+    _, inner = wall_allowance()
+    out = []
+    for edge in program.adjacencies:
+        if edge.relation is not Relation.OPEN:
+            continue
+        a, b = placed.get(edge.a), placed.get(edge.b)
+        if a is None or b is None or not a.touches(b):
+            continue
+        wa, da = clear_sides(a, layout)
+        wb, db = clear_sides(b, layout)
+        side_by_side_in_x = (
+            abs(a.x_max_m - b.x_min_m) <= TOLERANCE_M or abs(b.x_max_m - a.x_min_m) <= TOLERANCE_M
+        )
+        if side_by_side_in_x:
+            across = wa + wb + 2 * inner
+            along = min(a.y_max_m, b.y_max_m) - max(a.y_min_m, b.y_min_m) - 2 * inner
+        else:
+            across = da + db + 2 * inner
+            along = min(a.x_max_m, b.x_max_m) - max(a.x_min_m, b.x_min_m) - 2 * inner
+        short = open_pair_shortfall_m(
+            specs[edge.a].usable_sizes_m, specs[edge.b].usable_sizes_m, across, along
+        )
+        out.append((edge.a, edge.b, short))
+    return out
+
+
 def _programme_walk(layout: Layout, program: Program, start: str, end: str) -> float:
     """The shortest proper walk from `start` to `end` the tiling allows, before doors.
 
@@ -478,7 +530,7 @@ def _programme_walk(layout: Layout, program: Program, start: str, end: str) -> f
     specs = {room.id: room for room in program.rooms}
     connected = {
         frozenset((edge.a, edge.b)) for edge in program.adjacencies
-        if edge.relation is Relation.CONNECTED
+        if edge.relation in (Relation.CONNECTED, Relation.OPEN)
     }
     if start not in placed or end not in placed:
         return float("inf")
