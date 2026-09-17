@@ -98,6 +98,20 @@ class TestTheTreeCanMeetIt:
                                                  if abs(p.y_min_m - placed["hall"].y_min_m) < 1e-6)
 
 
+    def test_the_rooms_open_to_the_hall_follow_it(self):
+        """Placed anywhere in the row, JP Nagar's dining room landed with the kitchen
+        between it and the hall, and the open living space could not be built."""
+        rooms = [spec_for(SpaceKind.HALL, "hall"), spec_for(SpaceKind.CORRIDOR, "corridor"),
+                 spec_for(SpaceKind.BEDROOM, "parents"), spec_for(SpaceKind.DINING, "dining"),
+                 spec_for(SpaceKind.KITCHEN, "kitchen"), spec_for(SpaceKind.STORE, "store")]
+        weights = {r.id: r.target_area_sq_m for r in rooms}
+        for seed in range(10):
+            tree = slicing.near_spine_tree(rooms, random.Random(seed), weights, Facing.EAST,
+                                           {"parents"}, {"dining"})
+            placed = {p.room_id: p for p in slicing.place(tree, 0, 0, 12, 10)}
+            assert placed["hall"].touches(placed["dining"]), seed
+
+
 class TestStageSevenWalksIt:
     def test_an_unmet_request_is_a_major_finding(self):
 

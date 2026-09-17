@@ -108,7 +108,7 @@ uv venv --python 3.12 && source .venv/bin/activate
 uv pip install -e ".[dev]"
 cp .env.example .env          # set one key, or NAKSHA_INTENT_PROVIDER=claude_code
 
-pytest                        # 858 tests, no network, no key, and independent
+pytest                        # 859 tests, no network, no key, and independent
                               # of whatever is in your .env — see conftest
 pytest -m live                # real model; needs credentials
 pytest -m benchmark           # the 14-plan regression set, ~40 s — run after any

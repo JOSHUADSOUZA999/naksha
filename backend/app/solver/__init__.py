@@ -223,6 +223,12 @@ def shortlist_for(
         if edge.relation is Relation.NEAR and edge.a in here and edge.b in here
         and any(room.id == edge.b and room.kind is SpaceKind.FOYER for room in rooms)
     }
+    halls = {room.id for room in rooms if room.kind is SpaceKind.HALL}
+    beside_hall = {
+        other for edge in program.adjacencies if edge.relation is Relation.OPEN
+        for this, other in ((edge.a, edge.b), (edge.b, edge.a))
+        if this in halls and other in here
+    }
     near_count = NEAR_FIRST_CANDIDATES if near_ids and wants_road_first else 0
     near_first_indices: set[int] = set()
     total = candidates + road_count + spine_count + zone_count + shaft_count + near_count
@@ -265,7 +271,9 @@ def shortlist_for(
         else:
             tree = slicing.road_first_tree(
                 rooms, rng, weights, road,
-                house_tree=lambda body, r, w: slicing.near_spine_tree(body, r, w, road, near_ids),
+                house_tree=lambda body, r, w: slicing.near_spine_tree(
+                    body, r, w, road, near_ids, beside_hall
+                ),
             )
             near_first_indices.add(index)
         placed = slicing.place(tree, *bounds)

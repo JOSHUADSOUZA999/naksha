@@ -1130,6 +1130,17 @@ majors with the parents' room 7.6 m from the door; the next added a store, put t
 between the hall and dining room so the open wall could not be built, and scored 8 majors
 with the parents' room at 8.7 m. Both first floors were clean.
 
+**Correction:** the commit said the model marked that open edge soft. It marked it hard.
+The cause was a conflict, reproduced offline: 17 of 40 candidates kept hall and dining
+together and every one of them put the parents at the back, and the judge rightly ranks the
+brief first. `near_spine_tree` placed the dining room anywhere in the hall's row; it now
+follows the hall (`beside_hall`, from `OPEN` edges), and that programme went from 8 majors
+to 6 with the space open and the parents' room still by the door. Ordering the rest of the
+row by graph distance from the hall — kitchen, then its store and utility — was tried and
+went back to 8: the row grew too long to dimension. The six left are the programme's: its
+only ground-floor bathroom is the parents' en-suite, so visitors cross their bedroom, and
+the store and utility sit across the corridor from the kitchen.
+
 ---
 
 ## Corrections to things I got wrong

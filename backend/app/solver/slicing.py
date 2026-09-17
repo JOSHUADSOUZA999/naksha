@@ -356,6 +356,7 @@ def near_spine_tree(
     weights: dict[str, float],
     road: Facing,
     near: set[str],
+    beside_hall: set[str] = frozenset(),
 ) -> Node:
     """A corridor running back from the road, with the rooms a brief wants near the
     entrance first on it.
@@ -367,13 +368,19 @@ def near_spine_tree(
     from the road, the hall takes the road end of one row and the rooms the brief named
     take the road end of the other, so the walk is front door, hall, corridor, bedroom,
     in a few steps. A house tree for `road_first_tree`, in its own group.
+
+    **The rooms open to the hall come straight after it.** Placed anywhere in the row, the
+    dining room on JP Nagar landed with the kitchen between it and the hall: the brief's
+    request was met and the living space was cut in two, since every candidate that kept
+    them together put the parents at the back.
     """
     spine = [room for room in rooms if room.kind is SpaceKind.CORRIDOR]
     rest = [room for room in rooms if room.kind is not SpaceKind.CORRIDOR]
     if not spine or len(rest) < 2 or road is None:
         return random_tree(rooms, rng, weights)
     front_a = [room for room in rest if room.kind is SpaceKind.HALL]
-    front_b = [room for room in rest if room.id in near]
+    front_a += [room for room in rest if room.id in beside_hall and room not in front_a]
+    front_b = [room for room in rest if room.id in near and room not in front_a]
     others = [room for room in rest if room not in front_a and room not in front_b]
     rng.shuffle(others)
     split = max(0, min(len(others), len(others) // 2 + rng.randint(-1, 1)))
