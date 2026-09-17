@@ -72,8 +72,9 @@ in the near-entrance trees; plus the viewer's grade badge
 and ⑥ placing furniture by search rather than greedily (bedrooms missing a bed or wardrobe
 7 → 3 of 41). Measured and not kept: **7** tandem parking (worse on all three two-bay programmes). Not
 started: **3** planning grid, the rest of **4** zoning, **6** wet stacking, **9** site, **10**
-architectural scoring. `program_v4` (a guest WC when the ground floor's only bathroom is
-an en-suite) is written and held back until a live run confirms it. Every weight
+architectural scoring. A guest-WC prompt (`program_v4`) was measured and not kept: it
+cleared visitors crossing the parents' bedroom and missed the parents' near-entrance
+request in 2 of 5 seeds. Every weight
 tried and every trade: `DECISIONS.md`, "Legal is not usable", "The stair is a shape a step
 dictates", "A brief's near the entrance is a constraint".
 

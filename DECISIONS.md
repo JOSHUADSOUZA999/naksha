@@ -1166,8 +1166,17 @@ A group that buys nothing measurable is not kept.
 
 **A guest WC is a programme decision.** JP Nagar's only ground-floor bathroom is the
 parents' en-suite, so visitors cross their bedroom. `program_v4`, which adds a visitors' WC
-whenever that happens, was written and could not be checked: the live call failed on the
-subscription's rate limit. It is not committed until a live run shows the model writing it.
+whenever that happens, was written and measured once the rate limit lifted. The live model
+wrote the WC. Its programme against v3's, both replayed at five seeds:
+
+| programme | majors | visitors cross a bedroom | the parents' "near the entrance" missed |
+|---|---|---|---|
+| v3 | 26 | 4 of 5 | 0 of 5 |
+| v4, guest WC | 32 | 0 of 5 | 2 of 5 |
+
+The WC removes the defect it was for and costs the floor the space that kept the parents'
+room by the door. The owner's request ranks first, so v4 is not kept. The next attempt
+belongs in layout, not the programme: a WC that shares a slot the way the utility does.
 
 ---
 
