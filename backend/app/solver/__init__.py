@@ -92,7 +92,6 @@ SHAFT_FIRST_CANDIDATES = 300
 # back from the road. Only for a programme with such a request, and after every other
 # group, so no programme without one changes.
 NEAR_FIRST_CANDIDATES = 300
-
 # Tuned candidates to collect before choosing. Was 3, and 3 is too few now that the
 # shortlist interleaves two groups: the first three successes came from whichever
 # group led, so the other never got compared. Six is enough for both to land and still
@@ -229,6 +228,21 @@ def shortlist_for(
         for this, other in ((edge.a, edge.b), (edge.b, edge.a))
         if this in halls and other in here
     }
+    served = _served_by_kitchen(program, rooms)
+    kinds_here = {room.id: room.kind for room in rooms}
+    links: dict[str, set[str]] = {}
+    for edge in program.adjacencies:
+        if edge.relation in (Relation.CONNECTED, Relation.OPEN) and edge.a in here and edge.b in here:
+            links.setdefault(edge.a, set()).add(edge.b)
+            links.setdefault(edge.b, set()).add(edge.a)
+    # The kitchen the living space connects to follows it too, now that its service rooms
+    # share its slot and it lengthens the row by one room, not three.
+    living = halls | beside_hall
+    kitchens = [
+        room_id for room_id, kind in sorted(kinds_here.items())
+        if kind is SpaceKind.KITCHEN and links.get(room_id, set()) & living
+    ]
+    beside_hall = beside_hall | set(kitchens[:1])
     near_count = NEAR_FIRST_CANDIDATES if near_ids and wants_road_first else 0
     near_first_indices: set[int] = set()
     total = candidates + road_count + spine_count + zone_count + shaft_count + near_count
@@ -272,7 +286,7 @@ def shortlist_for(
             tree = slicing.road_first_tree(
                 rooms, rng, weights, road,
                 house_tree=lambda body, r, w: slicing.near_spine_tree(
-                    body, r, w, road, near_ids, beside_hall
+                    body, r, w, road, near_ids, beside_hall, served
                 ),
             )
             near_first_indices.add(index)
@@ -360,6 +374,26 @@ def shortlist_for(
         near_first[:TUNE_SHORTLIST],
     )
     return shortlist
+
+
+def _served_by_kitchen(program: Program, rooms: list) -> dict[str, list[str]]:
+    """The store and utility the programme connects to a kitchen and to nothing else —
+    the rooms a service zone tucks into the kitchen's slot."""
+    here = {room.id for room in rooms}
+    kinds = {room.id: room.kind for room in rooms}
+    links: dict[str, set[str]] = {}
+    for edge in program.adjacencies:
+        if edge.relation in (Relation.CONNECTED, Relation.OPEN) and edge.a in here and edge.b in here:
+            links.setdefault(edge.a, set()).add(edge.b)
+            links.setdefault(edge.b, set()).add(edge.a)
+    served: dict[str, list[str]] = {}
+    for room_id, kind in sorted(kinds.items()):
+        partners = links.get(room_id, set())
+        if kind in (SpaceKind.UTILITY, SpaceKind.STORE) and len(partners) == 1:
+            (host,) = partners
+            if kinds.get(host) is SpaceKind.KITCHEN:
+                served.setdefault(host, []).append(room_id)
+    return served
 
 
 def deeper(

@@ -156,3 +156,32 @@ class TestTheModelCannotAskForTheImpossible:
         )
         near = [(e.a, e.b) for e in _merge(draft).adjacencies if e.relation is Relation.NEAR]
         assert near == [("bed1", "foyer")]
+
+
+class TestTheServiceRoomsShareTheKitchensSlot:
+    def test_the_utility_opens_off_the_kitchen_which_keeps_the_dining_room(self):
+        """Across the corridor from the kitchen, JP Nagar's utility was two majors; after
+        it in the row, the row grew too long to dimension."""
+        rooms = [spec_for(SpaceKind.HALL, "hall"), spec_for(SpaceKind.CORRIDOR, "corridor"),
+                 spec_for(SpaceKind.BEDROOM, "parents"), spec_for(SpaceKind.DINING, "dining"),
+                 spec_for(SpaceKind.KITCHEN, "kitchen"), spec_for(SpaceKind.UTILITY, "utility"),
+                 spec_for(SpaceKind.BATHROOM, "bath")]
+        weights = {r.id: r.target_area_sq_m for r in rooms}
+        for seed in range(10):
+            tree = slicing.near_spine_tree(rooms, random.Random(seed), weights, Facing.EAST,
+                                           {"parents"}, {"dining", "kitchen"}, {"kitchen": ["utility"]})
+            placed = {p.room_id: p for p in slicing.place(tree, 0, 0, 14, 10)}
+            assert placed["kitchen"].touches(placed["utility"]), seed
+            assert placed["kitchen"].touches(placed["dining"]), seed
+            assert placed["utility"].touches(placed["corridor"]), seed
+
+    def test_only_rooms_the_kitchen_alone_serves_are_tucked(self):
+        from app.solver import _served_by_kitchen
+
+        rooms = [spec_for(SpaceKind.KITCHEN, "kitchen"), spec_for(SpaceKind.UTILITY, "utility"),
+                 spec_for(SpaceKind.STORE, "store"), spec_for(SpaceKind.CORRIDOR, "corridor")]
+        program = Program(rooms=rooms, adjacencies=[
+            AdjacencySpec(a="kitchen", b="utility", relation=Relation.CONNECTED),
+            AdjacencySpec(a="corridor", b="store", relation=Relation.CONNECTED),
+        ])
+        assert _served_by_kitchen(program, rooms) == {"kitchen": ["utility"]}

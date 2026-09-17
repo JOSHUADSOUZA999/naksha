@@ -357,6 +357,7 @@ def near_spine_tree(
     road: Facing,
     near: set[str],
     beside_hall: set[str] = frozenset(),
+    served: dict[str, list[str]] | None = None,
 ) -> Node:
     """A corridor running back from the road, with the rooms a brief wants near the
     entrance first on it.
@@ -373,13 +374,27 @@ def near_spine_tree(
     dining room on JP Nagar landed with the kitchen between it and the hall: the brief's
     request was met and the living space was cut in two, since every candidate that kept
     them together put the parents at the back.
+    **A kitchen's store and utility sit behind it, in its own slot.** Given places of
+    their own in the row they landed across the corridor from the kitchen, two majors on
+    JP Nagar; ordered after it, the row grew too long to dimension. In the kitchen's slot,
+    split front to back, the row is no longer. The kitchen takes the outside wall and the
+    service rooms the corridor side: tried the other way, the utility got the window and
+    the kitchen, which needs it more, had none.
     """
     spine = [room for room in rooms if room.kind is SpaceKind.CORRIDOR]
     rest = [room for room in rooms if room.kind is not SpaceKind.CORRIDOR]
     if not spine or len(rest) < 2 or road is None:
         return random_tree(rooms, rng, weights)
+    served = served or {}
+    tucked = {room_id for ids in served.values() for room_id in ids}
+    by_id = {room.id: room for room in rest}
+    rest = [room for room in rest if room.id not in tucked]
     front_a = [room for room in rest if room.kind is SpaceKind.HALL]
-    front_a += [room for room in rest if room.id in beside_hall and room not in front_a]
+    # Dining before kitchen: the kitchen joins the dining room, the dining room the hall.
+    front_a += sorted(
+        (room for room in rest if room.id in beside_hall and room not in front_a),
+        key=lambda room: room.kind is SpaceKind.KITCHEN,
+    )
     front_b = [room for room in rest if room.id in near and room not in front_a]
     others = [room for room in rest if room not in front_a and room not in front_b]
     rng.shuffle(others)
@@ -395,15 +410,31 @@ def near_spine_tree(
     # on an east or north road, its first on a west or south one.
     road_end_last = road in (Facing.EAST, Facing.NORTH)
 
-    def row(group: list[RoomSpec]) -> Node:
+    def cell(room: RoomSpec, corridor_after: bool) -> Node:
+        """The room, with whatever it serves tucked behind it, away from the corridor."""
+        behind = [by_id[i] for i in served.get(room.id, []) if i in by_id]
+        leaf: Node = Leaf(room, weights[room.id])
+        if not behind:
+            return leaf
+        back: Node = Leaf(behind[0], weights[behind[0].id])
+        for extra in behind[1:]:
+            back = Cut(vertical=east_west, left=back, right=Leaf(extra, weights[extra.id]))
+        # Across the row: `place` gives the right child the north or east part, which is
+        # the corridor's side for the row before it.
+        if corridor_after:
+            return Cut(vertical=not east_west, left=leaf, right=back)
+        return Cut(vertical=not east_west, left=back, right=leaf)
+
+    def row(group: list[RoomSpec], corridor_after: bool) -> Node:
         ordered = list(reversed(group)) if road_end_last else group
-        node: Node = Leaf(ordered[0], weights[ordered[0].id])
+        node: Node = cell(ordered[0], corridor_after)
         for room in ordered[1:]:
-            node = Cut(vertical=east_west, left=node, right=Leaf(room, weights[room.id]))
+            node = Cut(vertical=east_west, left=node, right=cell(room, corridor_after))
         return node
 
-    sides = [row(row_a), row(row_b)]
-    rng.shuffle(sides)
+    a_first = rng.random() < 0.5
+    first, second = (row_a, row_b) if a_first else (row_b, row_a)
+    sides = [row(first, corridor_after=True), row(second, corridor_after=False)]
     corridor: Node = Leaf(spine[0], weights[spine[0].id])
     for extra in spine[1:]:
         corridor = Cut(vertical=east_west, left=corridor, right=Leaf(extra, weights[extra.id]))

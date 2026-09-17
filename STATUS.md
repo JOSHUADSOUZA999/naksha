@@ -12,7 +12,7 @@ Read in this order, then run the commands below:
 
 ```bash
 cd naksha
-.venv/bin/pytest -q                                  # 859 tests, no network, no key
+.venv/bin/pytest -q                                  # 861 tests, no network, no key
 .venv/bin/pytest -m benchmark                        # the 14-plan regression set, ~40 s
 
 # The whole pipeline, to a drawing on disk: ①②③④⑤⑥⑦
@@ -51,7 +51,7 @@ strict vastu` · `20x30 2bhk in Bengaluru` (tight) · `30x40 north facing corner
 
 Where the build actually is.
 
-**Last updated:** 2026-09-17 · 859 tests passing, offline, no key
+**Last updated:** 2026-09-17 · 861 tests passing, offline, no key
 
 > **naksha draws floor plans.** Text in, a dimensioned drawing out: walls with
 > thickness, doors with swings, windows sized to the bye-laws, a ventilator in every
@@ -67,11 +67,13 @@ Where the build actually is.
 
 The per-plot table below predates these. Done: **1** furniture shapes rooms, **2** the stair
 as a fixed element, **5** brief requirements as constraints, **8** living and dining open
-as one space; plus the viewer's grade badge
+as one space, and the start of **4** zoning — a kitchen's utility and store in its slot
+in the near-entrance trees; plus the viewer's grade badge
 and ⑥ placing furniture by search rather than greedily (bedrooms missing a bed or wardrobe
 7 → 3 of 41). Measured and not kept: **7** tandem parking (worse on all three two-bay programmes). Not
-started: **3** planning grid, **4** zoning, **6** wet stacking, **9** site, **10**
-architectural scoring. Every weight
+started: **3** planning grid, the rest of **4** zoning, **6** wet stacking, **9** site, **10**
+architectural scoring. `program_v4` (a guest WC when the ground floor's only bathroom is
+an en-suite) is written and held back until a live run confirms it. Every weight
 tried and every trade: `DECISIONS.md`, "Legal is not usable", "The stair is a shape a step
 dictates", "A brief's near the entrance is a constraint".
 

@@ -1141,6 +1141,34 @@ went back to 8: the row grew too long to dimension. The six left are the program
 only ground-floor bathroom is the parents' en-suite, so visitors cross their bedroom, and
 the store and utility sit across the corridor from the kitchen.
 
+### The service zone: a kitchen's utility and store in its own slot
+
+Phase 4, started from JP Nagar's remaining majors: the utility across the corridor from
+the kitchen, and the dining room with the hall between it and the kitchen. Measured on that
+programme, replayed offline, one change at a time:
+
+| change | ground floor majors | first floor majors |
+|---|---|---|
+| before (dining beside the hall) | 6 | 0 |
+| utility tucked into the kitchen's slot, kitchen on the corridor | 5 | 1 |
+| + the kitchen follows the dining room in the hall's row | 5 | 0 |
+| + kitchen on the outside wall, utility on the corridor side | 5 | 0 |
+
+The third and fourth rows count the same; the fourth is kept because the kitchen, which
+cooks, has the window and the utility has none, not the other way round. `_served_by_kitchen`
+tucks only rooms the programme connects to the kitchen and to nothing else — the model put
+JP Nagar's store off the corridor, which is a fair choice for a general store, so it stays.
+
+**Tried as its own group of corridor-first trees for every programme, and removed.** Over
+the 14 benchmark plans one plan changed, one room fewer furnished and one more with air
+from two sides: few benchmark programmes connect a utility or store to the kitchen alone.
+A group that buys nothing measurable is not kept.
+
+**A guest WC is a programme decision.** JP Nagar's only ground-floor bathroom is the
+parents' en-suite, so visitors cross their bedroom. `program_v4`, which adds a visitors' WC
+whenever that happens, was written and could not be checked: the live call failed on the
+subscription's rate limit. It is not committed until a live run shows the model writing it.
+
 ---
 
 ## Corrections to things I got wrong
